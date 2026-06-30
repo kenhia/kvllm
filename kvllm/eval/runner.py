@@ -50,17 +50,50 @@ def _gpu_used_mib() -> int | None:
         return None
 
 
-def _wait_healthy(port: int, timeout_s: int = 900) -> float | None:
-    """Block until /v1/models answers. Returns seconds-to-ready, or None on timeout."""
+def _wait_healthy(
+    proc: subprocess.Popen, port: int, timeout_s: int = 900
+) -> float | None:
+    """Block until /v1/models answers. Returns seconds-to-ready, or None if the serve process
+    dies (fast fail) or we hit the timeout."""
     url = f"http://localhost:{port}/v1/models"
     t0 = time.time()
     while time.time() - t0 < timeout_s:
+        if (
+            proc.poll() is not None
+        ):  # serve process exited (e.g. OOM) — stop waiting now
+            return None
         try:
             with urllib.request.urlopen(url, timeout=2):
                 return time.time() - t0
         except Exception:
             time.sleep(2)
     return None
+
+
+# Patterns whose last match in the serve log best explains a failed start.
+_ERROR_PATTERNS = (
+    "OutOfMemoryError",
+    "out of memory",
+    "No available memory for the cache",
+    "ValueError",
+    "RuntimeError",
+    "Error",
+)
+
+
+def _serve_error(log_path: str) -> str:
+    """Pull a concise failure reason out of the serve log (best-effort)."""
+    try:
+        lines = open(log_path).read().splitlines()
+    except OSError:
+        return ""
+    for pat in _ERROR_PATTERNS:
+        hits = [ln for ln in lines if pat in ln]
+        if hits:
+            # strip the vLLM "(EngineCore pid=...) ERROR ... [core.py:NN] " prefix if present
+            msg = hits[-1].split("] ", 1)[-1].strip()
+            return msg[:280]
+    return ""
 
 
 def _measure_tps(client: OpenAI, model: str) -> float | None:
@@ -173,9 +206,10 @@ def evaluate(model_key: str, *, port: int, only_suite: str | None, today: str) -
         "hf_repo": entry.get("hf_repo"),
         "operational": {},
         "suites": {},
+        "notes": "",
     }
     try:
-        cold = _wait_healthy(port)
+        cold = _wait_healthy(proc, port)
         served = cold is not None
         scorecard["operational"] = {
             "served": served,
@@ -183,10 +217,12 @@ def evaluate(model_key: str, *, port: int, only_suite: str | None, today: str) -
             "gpu_used_mib": _gpu_used_mib() if served else None,
         }
         if not served:
+            reason = _serve_error(log.name)
             scorecard["operational"]["error"] = (
-                f"did not become healthy; see {log.name}"
+                reason or f"did not become healthy; see {log.name}"
             )
-            print(f"[serve] FAILED to become healthy — see {log.name}")
+            scorecard["notes"] = reason
+            print(f"[serve] FAILED to serve — {reason or 'see ' + log.name}")
         else:
             print(
                 f"[serve] ready in {cold:.0f}s, GPU {scorecard['operational']['gpu_used_mib']} MiB"

@@ -92,15 +92,30 @@ def build_serve_argv(
     return argv
 
 
-def _cmd_list(_args: argparse.Namespace) -> int:
+def _cmd_list(args: argparse.Namespace) -> int:
     registry = load_registry()
+    show_all = getattr(args, "all", False)
     width = max(len(k) for k in registry)
+    hidden = 0
     for key, entry in registry.items():
+        verdict = entry.get("eval_verdict")
+        # Models the eval proved don't run/fit here are hidden unless --all.
+        if verdict == "skip" and not show_all:
+            hidden += 1
+            continue
         caps = ",".join(entry.get("capabilities", []))
         vram = entry.get("est_vram_gb")
         vram_s = f"~{vram}GB" if vram is not None else "?"
         flags = []
-        if entry.get("tested"):
+        if verdict:
+            flags.append(
+                {
+                    "worth trying": "✓worth-trying",
+                    "has issues": "⚠has-issues",
+                    "skip": "✗skip",
+                }.get(verdict, verdict)
+            )
+        elif entry.get("tested"):
             flags.append("tested")
         if entry.get("gated"):
             flags.append("gated")
@@ -108,6 +123,10 @@ def _cmd_list(_args: argparse.Namespace) -> int:
             flags.append(entry["quantization"])
         flag_s = f" [{', '.join(flags)}]" if flags else ""
         print(f"{key:<{width}}  {vram_s:>7}  {caps}{flag_s}")
+    if hidden:
+        print(
+            f"\n({hidden} hidden — eval verdict 'skip' (won't fit/run on kai). `list --all` to show.)"
+        )
     return 0
 
 
@@ -125,6 +144,9 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "est_vram_gb",
         "capabilities",
         "tested",
+        "eval_verdict",
+        "eval_date",
+        "eval_notes",
         "notes",
     ):
         if field in entry:
@@ -145,7 +167,11 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kvllm.registry", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("list", help="list registered models").set_defaults(func=_cmd_list)
+    p_list = sub.add_parser("list", help="list registered models (hides eval-skipped)")
+    p_list.add_argument(
+        "-a", "--all", action="store_true", help="include models the eval skipped"
+    )
+    p_list.set_defaults(func=_cmd_list)
     p_show = sub.add_parser("show", help="show one model's config + serve command")
     p_show.add_argument("key")
     p_show.set_defaults(func=_cmd_show)

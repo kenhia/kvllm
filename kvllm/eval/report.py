@@ -179,6 +179,8 @@ def update_registry(card: dict) -> Path | None:
     entry["tested"] = bool(card["operational"].get("served"))
     entry["eval_verdict"] = card["verdict"]
     entry["eval_date"] = card["date"]
+    if card.get("notes"):
+        entry["eval_notes"] = card["notes"]
     REGISTRY.write_text(tomlkit.dumps(doc))
     return REGISTRY
 
