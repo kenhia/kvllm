@@ -87,6 +87,8 @@ def build_serve_argv(
         argv += ["--reasoning-parser", entry["reasoning_parser"]]
     if entry.get("quantization"):
         argv += ["--quantization", entry["quantization"]]
+    if entry.get("trust_remote_code"):
+        argv += ["--trust-remote-code"]
     return argv
 
 
@@ -117,6 +119,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "tool_parser",
         "reasoning_parser",
         "quantization",
+        "trust_remote_code",
         "max_model_len",
         "gated",
         "est_vram_gb",

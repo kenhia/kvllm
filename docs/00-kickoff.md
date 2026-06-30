@@ -70,6 +70,12 @@ minus the KServe load/unload bits — vLLM is one-model-per-process).
 with `just service-*` recipes (install/enable/switch/status/logs) and a clean stop-to-free-the-GPU
 path. Verified start→serve + crash→respawn. See [`docs/03-deployment.md`](03-deployment.md).
 
+**Sprint 5 — Model collection research (✅ shipped 2026-06-30; korg #99).** Cited survey of free
+models for coding + agentic control + vision that fit a 5090, in
+[`docs/model-research/`](model-research/README.md); confirmed **Qwen3.6** is real (open `-27B` /
+`-35B-A3B`, new `qwen3_5*` arch — verify on sm_120) and added 5 models to the registry. _Original
+framing below:_
+
 **Wed — Model collection research (korg #99).** Which free models for coding + agentic control fit a 5090
 (7B–32B, quantized), tool-calling quality, multimodal options. Download + prep for the 4-day
 weekend. (This is research-heavy; could use the deep-research harness.)
