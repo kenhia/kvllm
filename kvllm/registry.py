@@ -89,6 +89,8 @@ def build_serve_argv(
         argv += ["--quantization", entry["quantization"]]
     if entry.get("trust_remote_code"):
         argv += ["--trust-remote-code"]
+    if entry.get("enforce_eager"):
+        argv += ["--enforce-eager"]  # skip CUDA-graph capture (saves VRAM; slower)
     return argv
 
 
@@ -139,6 +141,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "reasoning_parser",
         "quantization",
         "trust_remote_code",
+        "enforce_eager",
         "max_model_len",
         "gated",
         "est_vram_gb",

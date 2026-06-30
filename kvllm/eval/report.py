@@ -181,6 +181,8 @@ def update_registry(card: dict) -> Path | None:
     entry["eval_date"] = card["date"]
     if card.get("notes"):
         entry["eval_notes"] = card["notes"]
+    elif "eval_notes" in entry:
+        del entry["eval_notes"]  # clear a stale failure note when the model now passes
     REGISTRY.write_text(tomlkit.dumps(doc))
     return REGISTRY
 

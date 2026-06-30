@@ -25,6 +25,7 @@ from kvllm.registry import build_serve_argv, load_registry
 
 SERVICE = "kvllm"
 TOOL_PASS_THRESHOLD = 0.8
+MIN_TOKENS_PER_SEC = 10.0  # below this, a model "works" but is too slow to be practical
 
 
 def _systemctl(*args: str) -> subprocess.CompletedProcess:
@@ -162,17 +163,19 @@ def _run_suite(client: OpenAI, model: str, cases) -> dict:
     }
 
 
-def _verdict(served: bool, suites: dict) -> str:
+def _verdict(served: bool, suites: dict, tps: float | None = None) -> str:
     if not served:
         return "skip"
-    if not suites:
-        return "worth trying"  # operational-only pass
     rates = [s["pass_rate"] for s in suites.values()]
-    if all(r >= TOOL_PASS_THRESHOLD for r in rates):
-        return "worth trying"
-    if any(r >= TOOL_PASS_THRESHOLD for r in rates):
+    base = (
+        "worth trying"
+        if (not suites or all(r >= TOOL_PASS_THRESHOLD for r in rates))
+        else "has issues"
+    )
+    # A model that serves + passes but crawls is "has issues" in practice, not "worth trying".
+    if base == "worth trying" and tps is not None and tps < MIN_TOKENS_PER_SEC:
         return "has issues"
-    return "has issues"
+    return base
 
 
 def evaluate(model_key: str, *, port: int, only_suite: str | None, today: str) -> dict:
@@ -228,7 +231,10 @@ def evaluate(model_key: str, *, port: int, only_suite: str | None, today: str) -
                 f"[serve] ready in {cold:.0f}s, GPU {scorecard['operational']['gpu_used_mib']} MiB"
             )
             client = OpenAI(base_url=f"http://localhost:{port}/v1", api_key="EMPTY")
-            scorecard["operational"]["tokens_per_sec"] = _measure_tps(client, model_key)
+            tps = _measure_tps(client, model_key)
+            scorecard["operational"]["tokens_per_sec"] = tps
+            if tps is not None and tps < MIN_TOKENS_PER_SEC:
+                scorecard["notes"] = f"works but impractically slow on kai: {tps} tok/s"
             for cap, cases in to_run.items():
                 print(f"[suite] {cap} ({len(cases)} cases)")
                 scorecard["suites"][cap] = _run_suite(client, model_key, cases)
@@ -248,7 +254,9 @@ def evaluate(model_key: str, *, port: int, only_suite: str | None, today: str) -
             _systemctl("start", SERVICE)
 
     scorecard["verdict"] = _verdict(
-        scorecard["operational"].get("served", False), scorecard["suites"]
+        scorecard["operational"].get("served", False),
+        scorecard["suites"],
+        scorecard["operational"].get("tokens_per_sec"),
     )
     return scorecard
 
