@@ -17,4 +17,4 @@ TRT-LLM) and the roadmap.
 
 | Sprint | Title | Status |
 |---|---|---|
-| 01 | Core setup (vLLM serving + tools + LangChain) | planned |
+| [01](sprint-01-core-setup.md) | Core setup (vLLM serving + tools + LangChain) | shipped 2026-06-30 |
