@@ -65,10 +65,10 @@ reached it from a LangChain `ChatOpenAI`/`ChatTrtLlm`. Exit met: `chat.invoke(..
 the contract it satisfies (same OpenAI `/v1` as `trt-llm-langchain/docs/03-backend-contract.md`,
 minus the KServe load/unload bits — vLLM is one-model-per-process).
 
-**Sprint 3 — Availability (korg #98; Ken's idea).** Now that we serve **natively, not via Docker**
-(Sprint 1 decision), add infra so kvllm survives a `kai` reboot without a manual start: a minimal
-local deploy + **systemd** unit for the vLLM server (`Restart=on-failure`, default model from the
-registry, clean stop/switch path). Natural pair for the deferred helper app (it'd drive this unit).
+**Sprint 3 — Availability (✅ shipped 2026-06-30; korg #98; Ken's idea).** A **systemd user service**
+(linger is on → starts at boot, no sudo) serves the default registry model, `Restart=on-failure`,
+with `just service-*` recipes (install/enable/switch/status/logs) and a clean stop-to-free-the-GPU
+path. Verified start→serve + crash→respawn. See [`docs/03-deployment.md`](03-deployment.md).
 
 **Wed — Model collection research (korg #99).** Which free models for coding + agentic control fit a 5090
 (7B–32B, quantized), tool-calling quality, multimodal options. Download + prep for the 4-day

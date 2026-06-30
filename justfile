@@ -54,6 +54,40 @@ smoke-deepseek:
 # Run the two exit-criteria smoke tests (qwen2.5-7b-instruct must be running)
 smoke: smoke-tools smoke-langchain
 
+# --- Service (systemd user unit; see docs/03-deployment.md) ---
+
+# Install/refresh the systemd user unit (renders deploy/kvllm.service.in)
+service-install:
+    bash deploy/install.sh
+
+# Enable + start now, and at boot (linger is on)
+service-enable:
+    systemctl --user enable --now kvllm
+
+# Stop + disable auto-start at boot (frees the GPU)
+service-disable:
+    systemctl --user disable --now kvllm
+
+start:
+    systemctl --user start kvllm
+stop:
+    systemctl --user stop kvllm
+restart:
+    systemctl --user restart kvllm
+
+# Switch the served model: write the key into deploy/kvllm.env and restart
+service-switch key:
+    uv run python -m kvllm.registry show {{key}} > /dev/null   # validate key first
+    sed -i -E 's/^KVLLM_MODEL_KEY=.*/KVLLM_MODEL_KEY={{key}}/' deploy/kvllm.env
+    systemctl --user restart kvllm
+    @echo "switched to {{key}}; run 'just healthy' to wait for /v1"
+
+service-status:
+    systemctl --user status kvllm --no-pager || true
+
+service-logs:
+    journalctl --user -u kvllm -f
+
 # Lint + format-check
 lint:
     uv run --group dev ruff check .

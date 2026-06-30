@@ -25,9 +25,11 @@ vLLM holds **one model per process**; switch models by stopping one `serve` and 
 - [`docs/00-kickoff.md`](docs/00-kickoff.md) — why vLLM, priorities, environment, roadmap.
 - [`docs/01-backend-contract.md`](docs/01-backend-contract.md) — the OpenAI `/v1` surface clients depend on.
 - [`docs/02-quantization.md`](docs/02-quantization.md) — AWQ/GPTQ/FP8 and what fits 32 GB.
+- [`docs/03-deployment.md`](docs/03-deployment.md) — systemd service: keep kvllm up across reboots.
 - [`models.toml`](models.toml) — the model registry.
 - Progress: [`sprints/`](sprints/).
 
-> Status: Sprints 1–2 shipped 2026-06-30 — vLLM 0.24.0 on sm_120 (tool calling + LangChain
-> verified, DeepSeek-R1 distill), plus a model registry + serve recipes + `/v1` contract. Next:
-> Sprint 3 (availability — systemd auto-start).
+> Status: Sprints 1–3 shipped 2026-06-30 — vLLM 0.24.0 on sm_120 (tool calling + LangChain
+> verified, DeepSeek-R1 distill), a model registry + serve recipes + `/v1` contract, and a systemd
+> user service for reboot-survival. The model server can run as `kvllm.service`
+> ([`docs/03-deployment.md`](docs/03-deployment.md)).

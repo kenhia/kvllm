@@ -19,3 +19,4 @@ TRT-LLM) and the roadmap.
 |---|---|---|
 | [01](sprint-01-core-setup.md) | Core setup (vLLM serving + tools + LangChain) | shipped 2026-06-30 |
 | [02](sprint-02-serving-ergonomics.md) | Serving ergonomics (registry + recipes + quant notes + contract) | shipped 2026-06-30 |
+| [03](sprint-03-availability.md) | Availability (systemd user service + auto-restart) | shipped 2026-06-30 |
