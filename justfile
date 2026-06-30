@@ -111,6 +111,17 @@ helper-status:
 helper-logs:
     journalctl --user -u kvllm-helper -f
 
+# --- Eval (kvllm.eval; see docs/model-research/evals/) ---
+
+# Evaluate a registered model on kai: serve it, run the suites matching its capabilities,
+# write a scorecard + rebuild the leaderboard + update models.toml. Orchestrates the service.
+eval key *flags:
+    uv run --group eval python -m kvllm.eval {{key}} --today "$(date +%F)" {{flags}}
+
+# Open the HTML leaderboard
+eval-board:
+    @echo "docs/model-research/evals/leaderboard.html"
+
 # Lint + format-check
 lint:
     uv run --group dev ruff check .

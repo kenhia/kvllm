@@ -23,3 +23,4 @@ TRT-LLM) and the roadmap.
 | [04](sprint-04-helper-app.md) | Helper app (web control panel — switch models from the LAN) | shipped 2026-06-30 |
 | [05](sprint-05-model-research.md) | Model collection research (survey + registry download set) | shipped 2026-06-30 |
 | [06](sprint-06-helper-skills.md) | Helper skills (/model-research + /model-scout) | shipped 2026-06-30 |
+| [07](sprint-07-eval-harness.md) | Eval harness (operational gate + tool-use suite + leaderboard) | shipped 2026-06-30 |

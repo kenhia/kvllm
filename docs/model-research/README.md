@@ -46,4 +46,6 @@ profile above:
   diffing against [`.scout-state.json`](.scout-state.json); proposes candidates → feed them to
   `/model-research`.
 
-Neither flips `tested=true` — that needs a real serve on `kai` (the eval harness, when it lands).
+Neither flips `tested=true` — that needs a real serve on `kai` via the **eval harness**
+([`evals/`](evals/README.md), `just eval <key>`), which scores a model and stamps the verdict into
+`models.toml`.
