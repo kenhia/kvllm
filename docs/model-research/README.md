@@ -35,5 +35,15 @@ See [`../../models.toml`](../../models.toml). As of 2026-06-30 it holds: `qwen2.
 |---|---|---|
 | 2026-06-30 | [2026-06-30-survey.md](2026-06-30-survey.md) | Broad sweep: coding, agentic, vision; Qwen3.6 verification |
 
-> Planned: `/model-research <name>` writes `<date>-<model>.md` here; `/model-scout` diffs new releases
-> against a state file and proposes candidates. Both read the serving profile above.
+## Skills
+
+Two project skills (in [`.claude/skills/`](../../.claude/skills/)) automate this and read the serving
+profile above:
+
+- **`/model-research <name|hf-repo>`** — deep-dive one model against our constraints (primary-source
+  verified) and write a `<date>-<model>.md` pass here; proposes a `models.toml` row.
+- **`/model-scout [focus]`** — scan release surfaces for new models worth trying since the last run,
+  diffing against [`.scout-state.json`](.scout-state.json); proposes candidates → feed them to
+  `/model-research`.
+
+Neither flips `tested=true` — that needs a real serve on `kai` (the eval harness, when it lands).
