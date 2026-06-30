@@ -10,14 +10,24 @@ and plan. Progress in [`sprints/`](sprints/).
 ## Quick start
 
 ```sh
-just serve            # serve Qwen2.5-7B-Instruct (tool calling) on http://localhost:8000/v1
-just healthy          # wait until /v1 answers
-just smoke            # tool-calling + LangChain exit-criteria smoke tests
+just models-list                    # what's in the registry (models.toml)
+just serve qwen2.5-7b-instruct      # serve a model by key on http://localhost:8000/v1
+just healthy                        # wait until /v1 answers
+just smoke                          # tool-calling + LangChain exit-criteria smoke tests
 ```
 
-Point any OpenAI client at it: `base_url="http://localhost:8000/v1"`, `api_key="EMPTY"`. vLLM
-holds **one model per process**; switch models by stopping and starting `just serve`.
+`just serve` with no arg serves the default (`qwen2.5-7b-instruct`). Point any OpenAI client at it
+with `base_url="http://localhost:8000/v1"`, `api_key="EMPTY"`, and `model="<the registry key>"`.
+vLLM holds **one model per process**; switch models by stopping one `serve` and starting another.
 
-> Status: Sprint 1 (core setup) shipped 2026-06-30 — vLLM 0.24.0 serving on sm_120, tool calling
-> and LangChain reach verified, plus a DeepSeek-R1 distill. See
-> [`sprints/sprint-01-core-setup.md`](sprints/sprint-01-core-setup.md).
+## Docs
+
+- [`docs/00-kickoff.md`](docs/00-kickoff.md) — why vLLM, priorities, environment, roadmap.
+- [`docs/01-backend-contract.md`](docs/01-backend-contract.md) — the OpenAI `/v1` surface clients depend on.
+- [`docs/02-quantization.md`](docs/02-quantization.md) — AWQ/GPTQ/FP8 and what fits 32 GB.
+- [`models.toml`](models.toml) — the model registry.
+- Progress: [`sprints/`](sprints/).
+
+> Status: Sprints 1–2 shipped 2026-06-30 — vLLM 0.24.0 on sm_120 (tool calling + LangChain
+> verified, DeepSeek-R1 distill), plus a model registry + serve recipes + `/v1` contract. Next:
+> Sprint 3 (availability — systemd auto-start).

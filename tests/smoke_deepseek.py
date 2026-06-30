@@ -3,7 +3,7 @@ TRT-LLM registry). Verifies a chat completion with separated reasoning, then pro
 calling — R1 distills are reasoning-first and tool calling is known-weaker, so this reports
 rather than asserts on the tool path.
 
-    KVLLM_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
+    KVLLM_MODEL=deepseek-r1-distill-qwen-7b \
       uv run --group test python tests/smoke_deepseek.py
 """
 
@@ -15,7 +15,7 @@ import sys
 from openai import OpenAI
 
 BASE_URL = os.environ.get("KVLLM_BASE_URL", "http://localhost:8000/v1")
-MODEL = os.environ.get("KVLLM_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
+MODEL = os.environ.get("KVLLM_MODEL", "deepseek-r1-distill-qwen-7b")
 
 client = OpenAI(base_url=BASE_URL, api_key="EMPTY")
 

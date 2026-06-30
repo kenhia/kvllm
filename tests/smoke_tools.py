@@ -16,7 +16,7 @@ import sys
 from openai import OpenAI
 
 BASE_URL = os.environ.get("KVLLM_BASE_URL", "http://localhost:8000/v1")
-MODEL = os.environ.get("KVLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+MODEL = os.environ.get("KVLLM_MODEL", "qwen2.5-7b-instruct")
 
 client = OpenAI(base_url=BASE_URL, api_key="EMPTY")
 

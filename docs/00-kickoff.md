@@ -51,25 +51,30 @@ already-built models.
 ## Plan (casual sprints; this is the rough roadmap)
 
 Workflow = same casual cadence as `trt-llm-langchain`: per-sprint narrative in `sprints/`,
-reference/setup in `docs/`, cross-project work items in **korg** (create a `kvllm` korg project —
-there isn't one yet; explore is id 15, trt-llm-langchain is id 16).
+reference/setup in `docs/`, cross-project work items in **korg** (project `kvllm` = id **19**;
+explore is id 15, trt-llm-langchain is id 16).
 
-**Sprint 1 — Core setup (target: Mon/Tue).** _The first risk to retire is a clean vLLM install on
-sm_120._ Get vLLM serving on the 5090, expose `/v1`, verify **tool calling**, and reach it from a
-LangChain `ChatOpenAI`/`ChatTrtLlm`. Exit: `chat.invoke(...)` and `bind_tools(...)` work against a
-locally-served model. **Stretch (Ken asked):** add a model **not** already in the TRT-LLM registry
-(a small DeepSeek distill is a good candidate — hits priority 2 + the "try DeepSeek" wish).
+**Sprint 1 — Core setup (✅ shipped 2026-06-30; korg #96).** _The first risk to retire is a clean
+vLLM install on sm_120._ Got vLLM serving on the 5090, exposed `/v1`, verified **tool calling**, and
+reached it from a LangChain `ChatOpenAI`/`ChatTrtLlm`. Exit met: `chat.invoke(...)` and
+`bind_tools(...)` work. Stretch met: DeepSeek-R1-Distill-Qwen-7B (not in the TRT registry). Decided
+**`uv`, not Docker** — `uv add vllm` pulls a cu130 torch that drives sm_120 directly.
 
-**Sprint 2 — Serving ergonomics.** A registry of models + simple serve recipes (`just serve
-<model>`), config, and notes on quant formats (AWQ/GPTQ/FP8) that fit 32 GB. Document the
-contract it satisfies (same OpenAI `/v1` as `trt-llm-langchain/docs/03-backend-contract.md`, minus
-the KServe load/unload bits — vLLM is one-model-per-process).
+**Sprint 2 — Serving ergonomics (active; korg #97).** A registry of models + simple serve recipes
+(`just serve <model>`), config, and notes on quant formats (AWQ/GPTQ/FP8) that fit 32 GB. Document
+the contract it satisfies (same OpenAI `/v1` as `trt-llm-langchain/docs/03-backend-contract.md`,
+minus the KServe load/unload bits — vLLM is one-model-per-process).
 
-**Wed — Model collection research.** Which free models for coding + agentic control fit a 5090
+**Sprint 3 — Availability (korg #98; Ken's idea).** Now that we serve **natively, not via Docker**
+(Sprint 1 decision), add infra so kvllm survives a `kai` reboot without a manual start: a minimal
+local deploy + **systemd** unit for the vLLM server (`Restart=on-failure`, default model from the
+registry, clean stop/switch path). Natural pair for the deferred helper app (it'd drive this unit).
+
+**Wed — Model collection research (korg #99).** Which free models for coding + agentic control fit a 5090
 (7B–32B, quantized), tool-calling quality, multimodal options. Download + prep for the 4-day
 weekend. (This is research-heavy; could use the deep-research harness.)
 
-**Deferred / "nice to have" (Ken's idea):** a **helper app** — shows status + a model registry and
+**Deferred / "nice to have" (Ken's idea; korg #100):** a **helper app** — shows status + a model registry and
 lets you "restart and load model X". This is the single-GPU model-switching story for vLLM (vLLM
 holds one model per process; switching = stop/start, or vLLM "sleep mode"). Defer until after core
 setup; it's a natural small LangChain-adjacent toy.
