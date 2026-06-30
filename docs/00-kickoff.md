@@ -74,10 +74,11 @@ path. Verified start→serve + crash→respawn. See [`docs/03-deployment.md`](03
 (7B–32B, quantized), tool-calling quality, multimodal options. Download + prep for the 4-day
 weekend. (This is research-heavy; could use the deep-research harness.)
 
-**Deferred / "nice to have" (Ken's idea; korg #100):** a **helper app** — shows status + a model registry and
-lets you "restart and load model X". This is the single-GPU model-switching story for vLLM (vLLM
-holds one model per process; switching = stop/start, or vLLM "sleep mode"). Defer until after core
-setup; it's a natural small LangChain-adjacent toy.
+**Sprint 4 — Helper app (✅ shipped 2026-06-30; korg #100; pulled forward, ahead of schedule).** A
+FastAPI + vanilla-JS web control panel (`kvllm-helper.service`, LAN-accessible) that shows status +
+the registry and lets you **restart and load model X from a browser** (incl. Windows machines).
+Token-gated control. The single-GPU model-switching story, one click. See
+[`docs/04-helper-app.md`](04-helper-app.md).
 
 ## Recommended technical approach (to derisk Sprint 1)
 

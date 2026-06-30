@@ -26,6 +26,7 @@ vLLM holds **one model per process**; switch models by stopping one `serve` and 
 - [`docs/01-backend-contract.md`](docs/01-backend-contract.md) — the OpenAI `/v1` surface clients depend on.
 - [`docs/02-quantization.md`](docs/02-quantization.md) — AWQ/GPTQ/FP8 and what fits 32 GB.
 - [`docs/03-deployment.md`](docs/03-deployment.md) — systemd service: keep kvllm up across reboots.
+- [`docs/04-helper-app.md`](docs/04-helper-app.md) — web control panel: switch models from the LAN.
 - [`models.toml`](models.toml) — the model registry.
 - Progress: [`sprints/`](sprints/).
 

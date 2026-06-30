@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kvllm</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #0f1115; color: #e6e6e6; }
+  header { padding: 16px 20px; border-bottom: 1px solid #232733; background: #151823; }
+  h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 10px; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 20px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: #666; }
+  .dot.ok { background: #36c46a; } .dot.busy { background: #e0a93b; } .dot.off { background: #c9484b; }
+  .status { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 14px 0 6px; }
+  .status b { color: #9aa4b2; font-weight: 500; }
+  .bar { height: 8px; background: #232733; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .bar > i { display: block; height: 100%; background: #4577d4; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #232733; }
+  th { color: #9aa4b2; font-weight: 500; font-size: 13px; }
+  tr.live td { background: #16241a; }
+  .tag { font-size: 12px; color: #9aa4b2; }
+  button { font: inherit; background: #2a3142; color: #e6e6e6; border: 1px solid #3a4255; border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+  button:hover { background: #333c50; } button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: #2f5fc0; border-color: #3a6fd0; }
+  .controls { margin-top: 18px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input { font: inherit; background: #0f1115; color: #e6e6e6; border: 1px solid #3a4255; border-radius: 6px; padding: 5px 10px; }
+  .muted { color: #7b8494; font-size: 13px; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #2a3142; border: 1px solid #3a4255; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header><div class="wrap" style="padding:0"><h1><span id="hdot" class="dot"></span> kvllm <span class="tag" id="host"></span></h1></div></header>
+<div class="wrap">
+  <div class="status">
+    <b>serving</b><span id="served">…</span>
+    <b>service</b><span id="svc">…</span>
+    <b>GPU</b><span id="gpu">…<div class="bar"><i id="gpubar" style="width:0"></i></div></span>
+  </div>
+
+  <table>
+    <thead><tr><th>model</th><th>VRAM</th><th>capabilities</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div class="controls">
+    <button id="stop">Stop</button>
+    <button id="restart">Restart</button>
+    <span style="flex:1"></span>
+    <input id="token" type="password" placeholder="control token" size="18" />
+    <span class="muted" id="ctlnote"></span>
+  </div>
+  <p class="muted">Switching restarts the server and loads the new weights (~20–40s). Status auto-refreshes.</p>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let MODELS = {}, pending = null;
+
+function token() { return $("token").value.trim(); }
+$("token").value = localStorage.getItem("kvllm_token") || "";
+$("token").addEventListener("change", () => localStorage.setItem("kvllm_token", token()));
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2500); }
+
+async function post(path, body) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-KVLLM-Token": token() },
+    body: body ? JSON.stringify(body) : null,
+  });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || r.status); }
+  return r.json();
+}
+
+async function loadModels() {
+  const d = await (await fetch("/api/models")).json();
+  MODELS = d.models;
+  const rows = $("rows");
+  rows.innerHTML = "";
+  for (const [key, m] of Object.entries(MODELS)) {
+    const tr = document.createElement("tr");
+    tr.dataset.key = key;
+    const vram = m.est_vram_gb ? `~${m.est_vram_gb}G` : "?";
+    const caps = (m.capabilities || []).join(", ");
+    tr.innerHTML = `<td>${key}${m.gated ? ' <span class="tag">gated</span>' : ""}</td>
+      <td>${vram}</td><td class="tag">${caps}</td>
+      <td><button data-load="${key}">Load</button></td>`;
+    rows.appendChild(tr);
+  }
+  rows.querySelectorAll("[data-load]").forEach((b) =>
+    b.addEventListener("click", () => switchModel(b.dataset.load))
+  );
+}
+
+async function switchModel(key) {
+  if (!token()) { toast("enter the control token first"); return; }
+  if (!confirm(`Restart and load ${key}?`)) return;
+  try { await post("/api/switch", { key }); pending = key; toast(`switching to ${key}…`); refresh(); }
+  catch (e) { toast("switch failed: " + e.message); }
+}
+
+async function service(action) {
+  if (!token()) { toast("enter the control token first"); return; }
+  try { await post(`/api/service/${action}`, null); toast(action + "ed"); refresh(); }
+  catch (e) { toast(action + " failed: " + e.message); }
+}
+$("stop").addEventListener("click", () => service("stop"));
+$("restart").addEventListener("click", () => service("restart"));
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/api/status")).json(); }
+  catch { $("hdot").className = "dot off"; return; }
+
+  const served = s.served_model;
+  if (pending && served === pending) pending = null;  // arrived
+  const busy = pending || s.service_active === "activating";
+
+  $("hdot").className = "dot " + (s.v1_ready && !busy ? "ok" : busy ? "busy" : "off");
+  $("served").textContent = busy
+    ? `loading ${pending || "…"} …`
+    : (served || "(not serving)");
+  $("svc").textContent = `${s.service_active} · ${s.service_enabled} at boot`;
+
+  if (s.gpu) {
+    const pct = Math.round((s.gpu.used_mib / s.gpu.total_mib) * 100);
+    $("gpu").firstChild.textContent = `${(s.gpu.used_mib/1024).toFixed(1)} / ${(s.gpu.total_mib/1024).toFixed(0)} GB  `;
+    $("gpubar").style.width = pct + "%";
+  }
+
+  $("ctlnote").textContent = s.control_enabled ? "" : "control disabled (no token set on server)";
+  document.querySelectorAll("#rows tr").forEach((tr) =>
+    tr.classList.toggle("live", tr.dataset.key === served)
+  );
+  $("host").textContent = location.host;
+}
+
+loadModels().then(refresh);
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

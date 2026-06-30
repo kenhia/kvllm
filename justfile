@@ -88,6 +88,29 @@ service-status:
 service-logs:
     journalctl --user -u kvllm -f
 
+# --- Helper web app (kvllm-helper.service; see docs/04-helper-app.md) ---
+
+# Run the helper in the foreground (dev; reads deploy/kvllm.env for port/token)
+helper-dev:
+    uv run --group helper uvicorn kvllm.helper:app --host 0.0.0.0 --port "${KVLLM_HELPER_PORT:-8800}" --reload
+
+# Enable + start the helper now and at boot
+helper-enable:
+    systemctl --user enable --now kvllm-helper
+
+# Stop + disable the helper
+helper-disable:
+    systemctl --user disable --now kvllm-helper
+
+helper-restart:
+    systemctl --user restart kvllm-helper
+
+helper-status:
+    systemctl --user status kvllm-helper --no-pager || true
+
+helper-logs:
+    journalctl --user -u kvllm-helper -f
+
 # Lint + format-check
 lint:
     uv run --group dev ruff check .
