@@ -144,3 +144,17 @@ def test_manifest_shape():
     assert by["a2-disk-growth"].setup and "serve.log" in by["a2-disk-growth"].setup
     assert by["a7-port-conflict"].setup and "8800" in by["a7-port-conflict"].setup
     assert by["a4-cron-typo"].setup and "cron.d/certs" in by["a4-cron-typo"].setup
+
+
+def test_flood_stats():
+    from types import SimpleNamespace as NS
+
+    from evals.agentic import flood_stats
+
+    msgs = [
+        NS(role="user"),
+        NS(role="assistant", tool_calls=[NS(function="bash")] * 40),
+        NS(role="assistant", tool_calls=[NS(function="bash")] * 2),
+    ]
+    assert flood_stats(msgs) == (40, 42)
+    assert flood_stats([NS(role="assistant", tool_calls=None)]) == (0, 0)

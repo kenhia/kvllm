@@ -333,6 +333,19 @@ def final_report(state: TaskState) -> str:
     return ""
 
 
+def flood_stats(messages) -> tuple[int, int]:
+    """(max tool calls in one assistant message, total assistant tool calls). A huge single-
+    message call count with no text = degenerate repetition (qwen2.5-7b emitted 135 identical
+    `history | grep` calls on a8) — worth naming in the scorecard instead of 'no answer'."""
+    per_msg, total = 0, 0
+    for m in messages:
+        if getattr(m, "role", None) == "assistant":
+            n = len(getattr(m, "tool_calls", None) or [])
+            per_msg = max(per_msg, n)
+            total += n
+    return per_msg, total
+
+
 # --- inspect wiring -------------------------------------------------------------------------
 
 _AGENT = react(prompt="", tools=[bash(timeout=BASH_TIMEOUT_S)], attempts=1)
@@ -358,6 +371,8 @@ def agentic_scorer():
         meta = state.metadata
         report = final_report(state)
         mech, missing = mechanical_score(meta, report)
+        burst, total_calls = flood_stats(state.messages)
+        flooded = not report.strip() and burst >= 30
 
         judge_model = load_config()["judge"]["model"]
         grader = get_model(judge_model)
@@ -388,6 +403,11 @@ def agentic_scorer():
         detail += f"; judge {parsed['score']:.0f}/10 — {parsed['rationale']}"
         if fabricated:
             detail = "FABRICATION → 0. " + detail
+        if flooded:
+            detail = (
+                f"DEGENERATE TOOL-CALL FLOOD ({burst} calls in one message, no text). "
+                + detail
+            )
         return Score(
             value=round(total, 3),
             answer=report[:200],
@@ -398,6 +418,8 @@ def agentic_scorer():
                 "judge_score": parsed["score"],
                 "judge_model": judge_model,
                 "fabricated": fabricated,
+                "flooded": flooded,
+                "tool_calls": total_calls,
                 "violations": parsed["violations"],
                 "raw_frac": round(total, 3),  # composite/scorecard partial-credit path
                 "submitted": bool(

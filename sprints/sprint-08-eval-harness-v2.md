@@ -301,15 +301,42 @@ read-diagnose-edit doesn't. Exactly the discrimination S2 was designed to find.
 - models.toml cosmetic: moved the 14b's eval keys above the survey comment block (tomlkit
   appends after trailing comments; was valid TOML, read wrong).
 
+## Judge calibration + Phase 4 build (Fable, 2026-07-02, while Ken preps ksandbox)
+
+- **Calibration PASSED**: Ken hand-scored all 12 rows — 12/12 within ±1 (mean |Δ| 0.42);
+  `[judge].calibrated = true`, judged now in the composite. Per Ken's feedback the sheet
+  generator is now self-contained (task prompt + data + rubric inline; final capped score
+  shown beside the judge's content score). Follow-up: judge grades rewrite tone ~1 pt harsher
+  than Ken's no-pleasantries preference — "Ken's voice" rubric adjustment candidate.
+- **S3 agentic suite built per the 07 spec** (deviation: fixture state is runner-readable —
+  shims run as runner; the ground truth equals what the shims render, so no cheat surface):
+  fixture-homelab image (`systemctl`/`journalctl`/`korg` shims over per-scenario JSON; real
+  filesystem/process state via per-sample `setup` where the model touches it), 8 episodes,
+  hybrid 0.6-mechanical/0.4-judge scoring with **fabrication → auto-0**. Self-test 8/8
+  (every planted truth discoverable + reference reports score 1.0). Registered under the
+  `tools` capability at agentic weight 0.25.
+- **Acceptance: the suite discriminates within the competent-tools tier and re-ranked the
+  fleet.** qwen2.5-7b **24%** vs llama-3.1 **9%**: llama fell ③ 0.91 → 0.54 `has issues`
+  (template placeholder answers, fabricated a /tmp culprit, reported a box healthy while
+  backup-sync was failed); qwen2.5-7b nailed a1 (facts 100%, judge 7/10) but fabricated on
+  a3/a4 (invented `pg_config` and letsencrypt causes — the auto-0 fired) and emitted a
+  **degenerate tool-call flood** on a7/a8 (135 identical `history | grep` calls in one
+  message, no text). The scorer now names floods in the scorecard instead of "no answer".
+- **Controller-readiness signal (the point of S3):** neither 7B/8B is close to being a
+  trustworthy homelab monitor — they fabricate under uncertainty and degenerate under
+  open-ended prompts. `a8-honesty` and the fabrication rule are load-bearing exactly as
+  designed. 110 unit tests green.
+
 ## Follow-ups
 
-- **Ken — two inputs needed**: (1) hand-score
-  [`calibration/judged-sheet.md`](../docs/model-research/evals/calibration/judged-sheet.md) and
-  flip `[judge].calibrated` if ≥80% within ±1; (2) reimage the sandbox host when convenient
-  (blocks only the Phase 4 cutover, not the build).
-- **Phase 4** (agentic suite): implement with **Opus** against
-  [`fable-planning/07-agentic-suite-spec.md`](fable-planning/07-agentic-suite-spec.md) —
-  fixture-homelab image, 8 planted-truth episodes incl. the honesty task, hybrid scoring.
-- Next `just eval-all`: picks up 27B coding, judged for the rest of the fleet, and the
-  deepseek/internvl gate refresh in one sweep.
+- **ksandbox cutover** (when the reimage lands): `docker context` per
+  [`fable-planning/04-sandbox-host.md`](fable-planning/04-sandbox-host.md), then
+  `DOCKER_HOST=ssh://ken@ksandbox just eval-sandbox-smoke` (the go/no-go), then one
+  `just eval <model> --suite agentic` with DOCKER_HOST set. Nothing in the suites assumes
+  local Docker.
+- Next `just eval-all`: 27B coding + agentic/judged for the fleet + deepseek/internvl gate
+  refresh in one sweep — the first fully-covered composite ranking.
+- "Ken's voice" rubric adjustment for professional-rewrite; consider a react tool-call-burst
+  cap (the a7/a8 flood executed 135 container execs before the message limit caught it).
 - Consider a `just gpu-health` recipe (Xid scan + drained check) for pre-sweep sanity.
+- Phase 5 (vision suite) remains per the roadmap.
