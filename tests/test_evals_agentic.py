@@ -133,9 +133,9 @@ def test_mechanical_a8_all_clear():
 
 
 def test_manifest_shape():
-    assert len(ATASKS) == 8
+    assert len(ATASKS) == 9
     names = {t.name for t in ATASKS}
-    assert len(names) == 8
+    assert len(names) == 9
     for t in ATASKS:
         assert t.scenario and t.question and t.rubric and t.auto_zero
         assert t.fact_groups or t.special, t.name
@@ -158,3 +158,55 @@ def test_flood_stats():
     ]
     assert flood_stats(msgs) == (40, 42)
     assert flood_stats([NS(role="assistant", tool_calls=None)]) == (0, 0)
+
+
+# --- sprint_plan (a9) ----------------------------------------------------------------
+
+
+def test_sprint_plan_perfect():
+    from evals.agentic import sprint_plan_score
+
+    r = "Backup reliability sprint. ...\nsprint: #201, #202, #203"
+    assert sprint_plan_score(r) == (1.0, [])
+
+
+def test_sprint_plan_missing_line():
+    from evals.agentic import sprint_plan_score
+
+    s_, missing = sprint_plan_score("I'd do the backup stuff first.")
+    assert s_ == 0.0 and "closing line" in missing[0]
+
+
+def test_sprint_plan_schedules_blocked_and_done():
+    from evals.agentic import sprint_plan_score
+
+    s_, missing = sprint_plan_score("sprint: 201, 205, 206")
+    assert s_ < 1.0
+    joined = " ".join(missing)
+    assert "205" in joined and "206" in joined
+
+
+def test_sprint_plan_cluster_underrepresented():
+    from evals.agentic import sprint_plan_score
+
+    s_, missing = sprint_plan_score("sprint: 204, 201, 206")
+    assert any("cluster" in m for m in missing)
+
+
+def test_sprint_plan_too_many_items():
+    from evals.agentic import sprint_plan_score
+
+    s_, missing = sprint_plan_score("sprint: 201 202 203 204 205 206")
+    assert any("3-5" in m for m in missing)
+
+
+def test_sprint_plan_nonexistent_item():
+    from evals.agentic import sprint_plan_score
+
+    s_, missing = sprint_plan_score("sprint: 201, 202, 299")
+    assert any("nonexistent" in m for m in missing)
+
+
+def test_mechanical_a9_dispatch():
+    s_, _ = mechanical_score(_meta("a9-sprint-plan"), "sprint: 201 202 203")
+    assert s_ == 1.0

@@ -26,7 +26,12 @@ EVALS = REPO / "docs" / "model-research" / "evals"
 REGISTRY = REPO / "models.toml"
 CONFIG = REPO / "eval-config.toml"
 
-VERDICT_EMOJI = {"worth trying": "✅", "has issues": "⚠️", "skip": "❌"}
+VERDICT_EMOJI = {
+    "worth trying": "✅",
+    "has issues": "⚠️",
+    "skip": "❌",
+    "baseline": "🌐",
+}
 
 MIN_DECODE_TOK_S = 10.0  # config [speed].floor_tok_s default; kept as a module fallback
 
@@ -218,6 +223,47 @@ def suite_from_log(log_path: str | Path, version: int) -> dict:
     return result
 
 
+def usage_from_log(log_path: str | Path, model_str: str) -> tuple[dict, dict]:
+    """(model-under-test usage, judge/other usage) from one Inspect log's stats — token counts
+    keyed {input, output, cache_read, cache_write}. Cost comparison needs the subject model's
+    spend; everything else in the log (the judge) is harness overhead, tracked separately."""
+    from inspect_ai.log import read_eval_log
+
+    log = read_eval_log(str(log_path), header_only=True)
+    subject = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+    other = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+    for model, mu in (log.stats.model_usage or {}).items():
+        bucket = subject if model == model_str else other
+        bucket["input"] += mu.input_tokens or 0
+        bucket["output"] += mu.output_tokens or 0
+        bucket["cache_read"] += mu.input_tokens_cache_read or 0
+        bucket["cache_write"] += mu.input_tokens_cache_write or 0
+    return subject, other
+
+
+def add_usage(total: dict, part: dict) -> dict:
+    for k, v in part.items():
+        total[k] = total.get(k, 0) + v
+    return total
+
+
+def estimate_cost(usage: dict, provider: str, cfg: dict | None = None) -> float | None:
+    """Estimated USD for `usage` at [pricing.<provider>] rates (per MTok; cache read 0.1×,
+    cache write 1.25× input). None when the provider isn't priced (local models)."""
+    cfg = cfg or load_config()
+    price = cfg.get("pricing", {}).get(provider)
+    if not price:
+        return None
+    in_rate, out_rate = price["input"], price["output"]
+    usd = (
+        usage.get("input", 0) * in_rate
+        + usage.get("output", 0) * out_rate
+        + usage.get("cache_read", 0) * 0.1 * in_rate
+        + usage.get("cache_write", 0) * 1.25 * in_rate
+    ) / 1_000_000
+    return round(usd, 4)
+
+
 def merge_prior_suites(model: str, fresh: dict) -> dict:
     """Fold suites from the model's most-recent prior scorecard under the freshly-run ones, so a
     `--suite X` run doesn't drop the model's other suites from its card (and off the leaderboard,
@@ -270,6 +316,20 @@ def write_scorecard(card: dict) -> list[Path]:
     ]
     if op.get("error"):
         lines.append(f"- error: {op['error']}")
+    if card.get("usage"):
+        u = card["usage"]
+        cost = card.get("est_cost_usd")
+        lines.append(
+            f"- tokens: {u.get('input', 0):,} in / {u.get('output', 0):,} out"
+            + (f" · est cost ${cost:.2f}" if cost is not None else "")
+        )
+    if card.get("judge_usage"):
+        ju = card["judge_usage"]
+        jc = card.get("judge_cost_usd")
+        lines.append(
+            f"- judge overhead: {ju.get('input', 0):,} in / {ju.get('output', 0):,} out"
+            + (f" · ${jc:.2f}" if jc is not None else "")
+        )
     for cap, s in card["suites"].items():
         lines += [
             "",
@@ -352,6 +412,7 @@ def _row(card: dict, current_versions: dict[str, int] | None, cfg: dict) -> dict
         "tok_s": op.get("decode_tok_s", op.get("tokens_per_sec")),
         "ttft_s": op.get("ttft_s"),
         "cold_s": op.get("cold_start_s"),
+        "est_cost_usd": card.get("est_cost_usd"),
         "suites": suites,
     }
 
@@ -432,6 +493,7 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
         "tok/s",
         "TTFT s",
         "cold s",
+        "est $/run",
         "date",
     ]
     md = [
@@ -456,6 +518,7 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
             str(r["tok_s"] or "—"),
             str(r["ttft_s"] or "—"),
             str(r["cold_s"] or "—"),
+            f"${r['est_cost_usd']:.2f}" if r.get("est_cost_usd") is not None else "—",
             r["date"],
         ]
         md.append("| " + " | ".join(cells) + " |")
@@ -481,6 +544,7 @@ def _html(rows: list[dict], suite_keys: list[str], any_stale: bool, cfg: dict) -
         "tok/s",
         "TTFT s",
         "cold s",
+        "est $/run",
         "date",
     ]
     th = "".join(f"<th>{html.escape(h)}</th>" for h in head)
@@ -502,6 +566,7 @@ def _html(rows: list[dict], suite_keys: list[str], any_stale: bool, cfg: dict) -
             f"<td>{r['tok_s'] or '—'}</td>",
             f"<td>{r['ttft_s'] or '—'}</td>",
             f"<td>{r['cold_s'] or '—'}</td>",
+            f"<td>{'$' + format(r['est_cost_usd'], '.2f') if r.get('est_cost_usd') is not None else '—'}</td>",
             f"<td>{html.escape(r['date'])}</td>",
         ]
         trs.append("<tr>" + "".join(tds) + "</tr>")
@@ -542,7 +607,9 @@ def update_registry(card: dict) -> Path | None:
     entry = models.get(card["model"])
     if entry is None:
         return None
-    entry["tested"] = bool(card["operational"].get("served"))
+    if not card.get("baseline"):
+        # `tested` means "served on kai" — never true for API baselines
+        entry["tested"] = bool(card["operational"].get("served"))
     entry["eval_verdict"] = card["verdict"]
     entry["eval_date"] = card["date"]
     if card.get("notes"):
@@ -560,6 +627,8 @@ def refresh_verdicts(current_versions: dict[str, int] | None = None) -> list[str
     cfg = load_config()
     changed = []
     for card in _latest_scorecards():
+        if card.get("baseline"):
+            continue  # baselines keep the "baseline" verdict — kai thresholds don't apply
         op = card.get("operational", {})
         new = verdict(
             op.get("served", False),

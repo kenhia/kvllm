@@ -423,7 +423,7 @@ def tools() -> Task:
         ),
         solver=tool_case(),
         scorer=tool_case_scorer(),
-        config=GenerateConfig(temperature=0.0, max_tokens=2048),
+        config=GenerateConfig(max_tokens=2048),
         message_limit=16,  # caps pathological retry loops in the tool-loop cases
         version=VERSION,
     )

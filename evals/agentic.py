@@ -32,7 +32,9 @@ from inspect_ai.util import apply_limits, message_limit
 
 from evals.judged import JUDGE_PROMPT, parse_judge_json
 
-VERSION = 1
+VERSION = (
+    2  # v2 adds a9-sprint-plan (work selection / short-burst planning — Ken's #1 ask)
+)
 
 ASSETS = Path(__file__).resolve().parent / "agentic_assets"
 COMPOSE = str(ASSETS / "compose.yaml")
@@ -225,6 +227,35 @@ ATASKS: list[ATask] = [
         ],
     ),
     ATask(
+        name="a9-sprint-plan",
+        scenario="a9",
+        question=(
+            "Ken has ~2 focused days this week for project fixlab. Using the korg CLI, review "
+            "the open work items and propose a short sprint: pick 3-5 items that belong "
+            "together, in priority order, with one sentence each on why — and say what you "
+            "deliberately left out and why. End your report with exactly one line:\n"
+            "sprint: <wi numbers in priority order>"
+        ),
+        special="sprint_plan",
+        rubric=(
+            "The coherent 2-day sprint is the backup-reliability cluster: #201 (fix the "
+            "failing sync — highest operational risk), #202 (alerting so failures aren't "
+            "silent), #203 (restore procedure) — they compound each other. #204 (router "
+            "firmware) is ready but thematically unrelated (acceptable as a filler pick, not "
+            "at the top). #205 is blocked on a vendor and #206 is already done — a good plan "
+            "excludes both and says so. Grade: grouping coherence (theme, not grab-bag), "
+            "prioritization (201 first or near-first), justifications, and explicit "
+            "exclusions. A plan is a decision, not a list — deduct for hedging."
+        ),
+        auto_zero="Invents work items, or schedules the blocked #205 / completed #206.",
+        facts=[
+            "cluster: 201 sync fix, 202 alerting, 203 restore doc",
+            "204 off-theme filler",
+            "205 blocked (vendor)",
+            "206 done-but-open",
+        ],
+    ),
+    ATask(
         name="a8-honesty",
         scenario="a8",
         question=(
@@ -296,6 +327,36 @@ def triage_score(report: str) -> tuple[float, list[str]]:
     return (3 - len(missing)) / 3, missing
 
 
+SPRINT_CLUSTER = {201, 202, 203}
+SPRINT_EXCLUDE = {205: "blocked on vendor", 206: "already done"}
+SPRINT_VALID = {201, 202, 203, 204}
+
+
+def sprint_plan_score(report: str) -> tuple[float, list[str]]:
+    """Mechanical layer for a9: parse the mandated 'sprint: <ids>' closing line and check the
+    selection — 3-5 real items, ≥2 of the backup cluster, none of the blocked/done items.
+    Four equal-weight slots; the judge grades reasoning/prioritization on top."""
+    m = re.findall(r"^\s*(?:[-*]\s*)?sprint\s*:\s*(.*)$", report, re.I | re.M)
+    if not m:
+        return 0.0, ["missing the mandated 'sprint: <wi numbers>' closing line"]
+    picked = [int(n) for n in re.findall(r"2\d\d", m[-1])]
+    missing = []
+    if not all(n in SPRINT_VALID | set(SPRINT_EXCLUDE) for n in picked):
+        missing.append(
+            f"nonexistent work items picked: {sorted(set(picked) - SPRINT_VALID - set(SPRINT_EXCLUDE))}"
+        )
+    if not (3 <= len(set(picked)) <= 5):
+        missing.append(f"expected 3-5 items, picked {len(set(picked))}")
+    if len(SPRINT_CLUSTER & set(picked)) < 2:
+        missing.append(
+            f"cluster {sorted(SPRINT_CLUSTER)} underrepresented: {sorted(set(picked) & SPRINT_CLUSTER)}"
+        )
+    bad = [f"#{n} ({why})" for n, why in SPRINT_EXCLUDE.items() if n in picked]
+    if bad:
+        missing.append(f"scheduled excluded items: {', '.join(bad)}")
+    return (4 - len(missing)) / 4, missing
+
+
 def wi_mentions_score(report: str) -> tuple[float, list[str]]:
     """>=2 distinct real WI numbers cited in the report."""
     distinct = set(re.findall(r"10[1-6]", report))
@@ -311,6 +372,8 @@ def mechanical_score(meta: dict, report: str) -> tuple[float, list[str]]:
     special = meta.get("special")
     if special == "triage5":
         return triage_score(report)
+    if special == "sprint_plan":
+        return sprint_plan_score(report)
     if special == "wi_mentions":
         wscore, wmiss = wi_mentions_score(report)
         n = len(meta.get("fact_groups") or []) or 1
@@ -449,7 +512,6 @@ def agentic() -> Task:
         solver=agentic_agent(),
         scorer=agentic_scorer(),
         sandbox=("docker", COMPOSE),
-        config=GenerateConfig(temperature=0.0),
         time_limit=TIME_LIMIT_S,
         version=VERSION,
     )

@@ -60,21 +60,34 @@ def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
     }
 
 
-def _run_suites(model_name: str, base_url: str, to_run: dict, log_root: Path) -> dict:
-    """Run each suite against the served model in its OWN log subdir (log_root/<cap>), so
-    suites never share an eval_set manifest — a code run today can't disturb this morning's
-    tools logs, and `--force` can wipe one suite without the others."""
+def _run_suites(
+    model: str,
+    to_run: dict,
+    log_root: Path,
+    *,
+    local: bool,
+    base_url: str | None = None,
+) -> tuple[dict, dict, dict]:
+    """Run each suite against `model` (a full Inspect model string) in its OWN log subdir
+    (log_root/<cap>) so suites never share an eval_set manifest. Returns (suite results,
+    subject-model usage, judge/other usage). temperature=0.0 is applied only to LOCAL models —
+    frontier baselines run at provider defaults (Sonnet 5 rejects non-default sampling)."""
     from inspect_ai import eval_set
 
-    os.environ["KVLLM_BASE_URL"] = base_url
-    os.environ.setdefault("KVLLM_API_KEY", "EMPTY")
-    model = f"openai-api/kvllm/{model_name}"
+    if local:
+        os.environ["KVLLM_BASE_URL"] = base_url or "http://localhost:8000/v1"
+        os.environ.setdefault("KVLLM_API_KEY", "EMPTY")
 
     results: dict[str, dict] = {}
+    usage: dict = {}
+    judge_usage: dict = {}
     for cap, (factory, version) in to_run.items():
         sdir = log_root / cap
         print(f"[suite] {cap} via inspect eval_set → {sdir}")
-        _success, logs = eval_set(tasks=[factory()], model=model, log_dir=str(sdir))
+        kwargs = {"temperature": 0.0} if local else {}
+        _success, logs = eval_set(
+            tasks=[factory()], model=model, log_dir=str(sdir), **kwargs
+        )
         log = next(
             (lg for lg in logs if lg.eval.task == cap), logs[0] if logs else None
         )
@@ -89,13 +102,16 @@ def _run_suites(model_name: str, base_url: str, to_run: dict, log_root: Path) ->
             }
             continue
         results[cap] = score.suite_from_log(log.location, version)
+        subject, other = score.usage_from_log(log.location, model)
+        score.add_usage(usage, subject)
+        score.add_usage(judge_usage, other)
         s = results[cap]
         print(f"[suite] {cap}: {s['passed']}/{s['total']} ({s['pass_rate']:.0%})")
         for c in s["cases"]:
             print(
                 f"    {'PASS' if c['passed'] else 'FAIL'}  {c['name']}: {c['detail']}"
             )
-    return results
+    return results, usage, judge_usage
 
 
 def evaluate(
@@ -131,10 +147,37 @@ def evaluate(
         "notes": "",
     }
 
+    if entry.get("provider"):
+        # Frontier baseline: no serving, no gate — straight to the suites via the API.
+        card["baseline"] = True
+        card["provider"] = entry["provider"]
+        card["operational"]["served"] = True
+        card["suites"], usage, judge_usage = _run_suites(
+            entry["provider"], to_run, log_root, local=False
+        )
+        card["usage"], card["judge_usage"] = usage, judge_usage
+        card["est_cost_usd"] = score.estimate_cost(usage, entry["provider"])
+        card["judge_cost_usd"] = score.estimate_cost(
+            judge_usage, score.load_config()["judge"]["model"]
+        )
+        card["suites"] = score.merge_prior_suites(key, card["suites"])
+        card["verdict"] = "baseline"
+        return card
+
     if endpoint:
         card["operational"]["served"] = True
         card["operational"] |= evalctl.measure_speed(endpoint, served_name)
-        card["suites"] = _run_suites(served_name, endpoint, to_run, log_root)
+        card["suites"], usage, judge_usage = _run_suites(
+            f"openai-api/kvllm/{served_name}",
+            to_run,
+            log_root,
+            local=True,
+            base_url=endpoint,
+        )
+        card["usage"], card["judge_usage"] = usage, judge_usage
+        card["judge_cost_usd"] = score.estimate_cost(
+            judge_usage, score.load_config()["judge"]["model"]
+        )
     else:
         with evalctl.serving(key, entry, port=port) as (proc, serve_log):
             cold = evalctl.wait_healthy(proc, port)
@@ -172,7 +215,17 @@ def evaluate(
                     card["notes"] = (
                         card["notes"] or ""
                     ) + " context probe failed at 75% of max_model_len"
-                card["suites"] = _run_suites(key, base_url, to_run, log_root)
+                card["suites"], usage, judge_usage = _run_suites(
+                    f"openai-api/kvllm/{key}",
+                    to_run,
+                    log_root,
+                    local=True,
+                    base_url=base_url,
+                )
+                card["usage"], card["judge_usage"] = usage, judge_usage
+                card["judge_cost_usd"] = score.estimate_cost(
+                    judge_usage, score.load_config()["judge"]["model"]
+                )
 
     # Fold in suites this run didn't cover (e.g. `--suite code` keeps prior tools results),
     # so the model's card — and its one leaderboard row — stays complete.
@@ -200,6 +253,9 @@ def _select_models(args, registry: dict, suites: dict) -> list[str]:
         sys.exit("error: name model keys or pass --all")
     selected = []
     for key, entry in registry.items():
+        if entry.get("provider"):
+            print(f"[skip] {key}: API baseline — run explicitly (`just eval {key}`)")
+            continue  # sweeps shouldn't silently spend API dollars
         needed = {
             cap: ver for cap, (_, ver) in _suites_for(entry, args.suite, suites).items()
         }
@@ -281,8 +337,10 @@ def main(argv: list[str] | None = None) -> int:
     current_versions = {cap: v[1] for cap, v in suites.items()}
 
     # Service is managed once per sweep, not per model: rapid stop/serve/kill/restart
-    # cycling is what wedged the GPU (GSP hang, Xid 119) on 2026-07-02.
-    manage_service = not args.endpoint and evalctl.service_active()
+    # cycling is what wedged the GPU (GSP hang, Xid 119) on 2026-07-02. API baselines
+    # don't touch the GPU — a baselines-only run leaves the service alone.
+    any_local = any(not registry[k].get("provider") for k in selected)
+    manage_service = any_local and not args.endpoint and evalctl.service_active()
     if manage_service:
         evalctl.stop_service()
 

@@ -23,7 +23,6 @@ from pathlib import Path
 from inspect_ai import Task, task
 from inspect_ai.agent import as_solver, react
 from inspect_ai.dataset import MemoryDataset, Sample
-from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.tool import bash
@@ -275,7 +274,6 @@ def coding() -> Task:
         solver=coding_agent(),
         scorer=coding_scorer(),
         sandbox=("docker", COMPOSE),
-        config=GenerateConfig(temperature=0.0),
         time_limit=TIME_LIMIT_S,
         version=VERSION,
     )

@@ -60,6 +60,10 @@ DISCOVER: dict[str, tuple[list[list[str]], list[str]]] = {
         [["systemctl", "list-units", "--failed"], ["journalctl", "-p", "err"]],
         ["0 loaded units listed", "-- No entries --"],
     ),
+    "a9-sprint-plan": (
+        [["korg", "list", "--project", "fixlab"], ["korg", "show", "205"]],
+        ["201", "204", "backorder"],
+    ),
 }
 
 REFERENCE_REPORTS = {
@@ -71,6 +75,7 @@ REFERENCE_REPORTS = {
     "a6-wi-status-report": "backup-sync failed (rsync). Actions: fix backup, run #103, finish #106.",
     "a7-port-conflict": "Bind to :8800 fails (address already in use) — stray python http.server holds the port.",
     "a8-honesty": "Checked services, logs and disk: everything is fine — no failed units, no errors.",
+    "a9-sprint-plan": "Backup-reliability sprint: fix the sync, add alerting, write the restore doc. Excluding #205 (blocked) and #206 (done).\nsprint: #201, #202, #203",
 }
 
 

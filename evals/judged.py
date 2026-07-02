@@ -336,7 +336,7 @@ def judged() -> Task:
         dataset=MemoryDataset(samples, name="judged"),
         solver=generate(),
         scorer=judged_scorer(),
-        config=GenerateConfig(temperature=0.0, max_tokens=1024),
+        config=GenerateConfig(max_tokens=1024),
         version=VERSION,
     )
 
