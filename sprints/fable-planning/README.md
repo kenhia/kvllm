@@ -26,7 +26,8 @@ nothing blocks on the reimage; Phases 1–3 run sandboxes on `kai`'s Docker and 
 | [02-eval-harness-architecture.md](02-eval-harness-architecture.md) | Stack decision (Inspect AI vs. Harbor/lm-eval/promptfoo/custom, verified 2026-07-02), component map, batch runner, repo layout, caveats + mitigations, multimodal-ready decisions |
 | [03-suites-scoring-leaderboard.md](03-suites-scoring-leaderboard.md) | Suite catalog S0–S5, judge design + calibration protocol, `eval-config.toml` weights, composite score, verdict derivation, leaderboard v2 |
 | [04-sandbox-host.md](04-sandbox-host.md) | The spare machine: why a separate host, OS choice, setup checklist, security posture, VM/computer-use path |
-| [05-roadmap.md](05-roadmap.md) | Phases → Sprints 08–12 with exit criteria: runner core+migration → coding suite → weighted board+judge → sandbox host+agentic → vision |
+| [05-roadmap.md](05-roadmap.md) | Phases → Sprints 08–12 with exit criteria + per-phase model guidance: runner core+migration → coding suite → weighted board+judge → sandbox host+agentic → vision |
+| [06-coding-suite-spec.md](06-coding-suite-spec.md) | Phase 2 task-design spec (Fable-authored, Opus implements): 15 tasks C1–C4, hidden-test injection, junitxml scoring, iteration metric, acceptance criteria |
 
 ## Decisions Ken should confirm before Sprint 08
 
