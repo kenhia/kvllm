@@ -187,6 +187,40 @@ def serving(key: str, entry: dict, *, port: int):
         wait_gpu_drained()
 
 
+def context_probe(base_url: str, model: str, max_model_len: int) -> bool | None:
+    """Deferred gate check from fable-planning/03 §S0: a prompt at ~75% of the served context
+    window must complete without error (catches KV-cache/rope/serving bugs that only bite under
+    context pressure). Returns True/False, or None if the probe couldn't run."""
+    from openai import OpenAI
+
+    # ~75% of the window in tokens; "lorem N." words ≈ 3-4 tokens each is too fuzzy — use a
+    # repeated short word (≈1 token + space) and leave generous headroom for chat template.
+    target_tokens = int(max_model_len * 0.75)
+    filler = "data " * max(target_tokens - 200, 100)
+    client = OpenAI(base_url=base_url, api_key="EMPTY", timeout=300)
+    try:
+        r = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"{filler}\nReply with exactly the word: ok",
+                }
+            ],
+            max_tokens=8,
+            temperature=0.0,
+        )
+        return bool(r.choices and r.choices[0].message is not None)
+    except Exception as e:
+        msg = str(e).lower()
+        # a context-length rejection is a real failure; transport errors are "couldn't run"
+        if "context" in msg or "length" in msg or "token" in msg:
+            print(f"[gate] context probe FAILED: {str(e)[:160]}")
+            return False
+        print(f"[gate] context probe couldn't run: {str(e)[:120]}")
+        return None
+
+
 def measure_speed(base_url: str, model: str, runs: int = 3) -> dict:
     """Streamed speed probe: median TTFT and decode tok/s over `runs` completions.
     Returns {} if measurement fails (a gate detail, not a crash)."""

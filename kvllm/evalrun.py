@@ -31,23 +31,29 @@ LOG_ROOT = REPO / "eval-logs"
 
 
 def _suites():
-    """Capability tag → (task factory, version). Imported lazily to keep inspect off the
-    CLI-arg-error path. Extend as suites land (fable-planning/03)."""
+    """Suite name → (task factory, version, required registry capability). Imported lazily to
+    keep inspect off the CLI-arg-error path. A suite runs on a model iff the model's registry
+    `capabilities` contain the required cap (`judged` rides on plain `chat` — every model)."""
     from evals.coding import VERSION as CODING_VERSION
     from evals.coding import coding
+    from evals.judged import VERSION as JUDGED_VERSION
+    from evals.judged import judged
     from evals.tools import VERSION as TOOLS_VERSION
     from evals.tools import tools
 
     return {
-        "tools": (tools, TOOLS_VERSION),
-        "code": (coding, CODING_VERSION),
+        "tools": (tools, TOOLS_VERSION, "tools"),
+        "code": (coding, CODING_VERSION, "code"),
+        "judged": (judged, JUDGED_VERSION, "chat"),
     }
 
 
 def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
     caps = entry.get("capabilities", [])
     return {
-        cap: suites[cap] for cap in caps if cap in suites and (not only or cap == only)
+        name: (factory, version)
+        for name, (factory, version, req_cap) in suites.items()
+        if req_cap in caps and (not only or only == name)
     }
 
 
@@ -149,11 +155,20 @@ def evaluate(
                 )
                 base_url = f"http://localhost:{port}/v1"
                 card["operational"] |= evalctl.measure_speed(base_url, key)
+                ctx_ok = evalctl.context_probe(
+                    base_url, key, int(entry.get("max_model_len", 8192))
+                )
+                if ctx_ok is not None:
+                    card["operational"]["ctx_probe_ok"] = ctx_ok
                 decode = card["operational"].get("decode_tok_s")
                 if decode is not None and decode < score.MIN_DECODE_TOK_S:
                     card["notes"] = (
                         f"works but impractically slow on kai: {decode} tok/s decode"
                     )
+                if ctx_ok is False:
+                    card["notes"] = (
+                        card["notes"] or ""
+                    ) + " context probe failed at 75% of max_model_len"
                 card["suites"] = _run_suites(key, base_url, to_run, log_root)
 
     # Fold in suites this run didn't cover (e.g. `--suite code` keeps prior tools results),
@@ -163,8 +178,12 @@ def evaluate(
         card["operational"].get("served", False),
         card["suites"],
         card["operational"].get("decode_tok_s"),
-        current_versions={cap: ver for cap, (_, ver) in suites.items()},
+        current_versions={cap: v[1] for cap, v in suites.items()},
     )
+    if card["operational"].get("ctx_probe_ok") is False and card["verdict"] == (
+        "worth trying"
+    ):
+        card["verdict"] = "has issues"  # breaks under context pressure
     return card
 
 
@@ -186,10 +205,16 @@ def _select_models(args, registry: dict, suites: dict) -> list[str]:
             print(f"[skip] {key}: prior gate verdict 'skip' (--retry-skips to retest)")
             continue
         if not args.force and score.scorecard_current(key, needed):
-            print(
-                f"[skip] {key}: already scored on current suite versions (--force to rerun)"
-            )
-            continue
+            # Suites are current — but a v1-gate card (no decode split) still needs a
+            # schema-2 gate refresh (deepseek/internvl carry blended v1 numbers).
+            if prior and "decode_tok_s" not in prior.get("operational", {}):
+                print(f"[gate-refresh] {key}: v1 gate data — re-measuring")
+            else:
+                print(
+                    f"[skip] {key}: already scored on current suite versions "
+                    "(--force to rerun)"
+                )
+                continue
         selected.append(key)
     return selected
 
@@ -234,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.rebuild_board:
         suites = _suites()
-        versions = {cap: ver for cap, (_, ver) in suites.items()}
+        versions = {cap: v[1] for cap, v in suites.items()}
         for change in score.refresh_verdicts(versions):
             print("verdict:", change)
         paths = score.write_leaderboard(versions)
@@ -250,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
     if not selected:
         print("nothing to do — all selected models are current")
         return 0
-    current_versions = {cap: ver for cap, (_, ver) in suites.items()}
+    current_versions = {cap: v[1] for cap, v in suites.items()}
 
     # Service is managed once per sweep, not per model: rapid stop/serve/kill/restart
     # cycling is what wedged the GPU (GSP hang, Xid 119) on 2026-07-02.
