@@ -135,12 +135,33 @@ started ~2 s later while VRAM was still draining) hitting a Blackwell/GSP fragil
 
 Live verification of the hardened path is pending the reboot.
 
-## Follow-ups
+## Full-registry sweep + Phase 1 checkpoint (2026-07-02, post-reboot)
 
-- **Reboot kai** (GPU reset required — see incident above), then verify: service healthy,
-  `just eval qwen2.5-7b-instruct --force` end-to-end on the hardened orchestration.
-- Run `just eval-all` overnight (needs `HF_TOKEN` for `llama-3.1-8b-instruct`; the rest are
-  ungated). Then the Phase 1 Fable checkpoint: do old verdicts hold, does tools v2 discriminate?
+Reboot cleared the GPU (hard power-off needed — the wedged `rmmod` blocked clean shutdown; zero
+Xids since). Hardened orchestration verified twice, then `just eval-all` swept the 6 stale/untested
+models unattended, restored the service, and passed the health check. Checkpoint findings:
+
+- **Suite discrimination: good.** Spread is 27%–100%, and the sub-100% models fail *different,
+  diagnostic* cases: `llama-3.1-8b` 10/11 (calls a tool on the no-tool case),
+  `qwen2.5-14b-awq` 10/11 (won't parallelize), `qwen2.5-coder` 3/11 (```xml-fenced calls the
+  hermes parser can't extract — v1-consistent, case-for-case).
+- **v1 verdict overturned with data — `qwen3.6-27b-awq` is fine here: 45.5 decode tok/s**
+  (TTFT 0.07 s), 11/11 tools → `worth trying`. v1's 2.5 tok/s is unreproducible post-reboot; the
+  6-30 measurement was taken right after its CUDA-graph OOM, i.e. plausibly on an
+  already-degraded GPU (same failure region as the wedge incident). Still serving
+  `enforce_eager` — worth re-trying capture now (follow-up).
+- **New gate catch: `qwen3-8b-fp8` → skip.** DeepGEMM FP8 kernel assert on sm_120
+  (`Unknown SF transformation`) at engine init. The "FP8 native-fast on Blackwell" survey note
+  didn't survive contact with this kernel path.
+- Two harness bugs found by the sweep + fixed with tests: `measure_speed` missed reasoning-model
+  streams (thinking-only deltas → no timing; now falls back to chunk-arrival timing, and warns
+  instead of silently writing no speed — which had let the 27B dodge the speed-cap verdict),
+  and `serve_error` surfaced re-raise wrapper lines instead of the root cause (now skips
+  wrappers/`raise` lines; fp8's registry note carries the real DeepGEMM assert).
+
+Registry after the sweep: 7 of 10 `worth trying`, 1 `has issues`, 2 `skip` — all data-backed.
+
+## Follow-ups
 - **Phase 2** (coding suite): implement with **Opus** against
   [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md).
 - Context-pressure probe deferred from the gate (fable-planning/03 §S0) — add in Phase 3.

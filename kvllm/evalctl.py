@@ -81,6 +81,26 @@ _ERROR_PATTERNS = (
 )
 
 
+# Wrapper/summary lines that re-raise someone else's error — never the root cause.
+_ERROR_WRAPPERS = ("See root cause above", "initialization failed")
+
+
+def _root_cause(lines: list[str], pat: str) -> str | None:
+    """Best 'Pattern: message' line: skip re-raise wrappers and bare `raise X(` traceback
+    source lines, prefer exception-style lines over mere mentions. (qwen3-8b-fp8's DeepGEMM
+    assert was masked first by the APIServer summary, then by its `raise RuntimeError(`.)"""
+    hits = [
+        ln
+        for ln in lines
+        if pat in ln
+        and not any(w in ln for w in _ERROR_WRAPPERS)
+        and not ln.split("] ", 1)[-1].strip().startswith("raise ")
+    ]
+    exception_style = [ln for ln in hits if f"{pat}:" in ln or f"{pat} " in ln]
+    best = exception_style or hits
+    return best[-1] if best else None
+
+
 def serve_error(log_path: Path) -> str:
     """Pull a concise failure reason out of the serve log (best-effort)."""
     try:
@@ -88,11 +108,10 @@ def serve_error(log_path: Path) -> str:
     except OSError:
         return ""
     for pat in _ERROR_PATTERNS:
-        hits = [ln for ln in lines if pat in ln]
-        if hits:
+        line = _root_cause(lines, pat)
+        if line:
             # strip the vLLM "(EngineCore pid=...) ERROR ... [core.py:NN] " prefix
-            msg = hits[-1].split("] ", 1)[-1].strip()
-            return msg[:280]
+            return line.split("] ", 1)[-1].strip()[:280]
     return ""
 
 
@@ -177,10 +196,11 @@ def measure_speed(base_url: str, model: str, runs: int = 3) -> dict:
 
     client = OpenAI(base_url=base_url, api_key="EMPTY")
     ttfts, decodes = [], []
+    why = ""
     for _ in range(runs):
         try:
             t0 = time.time()
-            first = last = None
+            c_first = c_last = a_first = a_last = None  # content-bearing vs any chunk
             usage = None
             stream = client.chat.completions.create(
                 model=model,
@@ -195,21 +215,34 @@ def measure_speed(base_url: str, model: str, runs: int = 3) -> dict:
             for chunk in stream:
                 if getattr(chunk, "usage", None):
                     usage = chunk.usage
-                delta = chunk.choices[0].delta if chunk.choices else None
-                content = delta and (
-                    delta.content or getattr(delta, "reasoning_content", None)
-                )
-                if content:
-                    last = time.time()
-                    if first is None:
-                        first = last
+                if not chunk.choices:
+                    continue
+                now = time.time()
+                a_last, a_first = now, (a_first or now)
+                delta = chunk.choices[0].delta
+                # reasoning models stream thinking under a separate delta field whose
+                # name has moved between vLLM versions — check the known spellings
+                if delta and (
+                    delta.content
+                    or getattr(delta, "reasoning_content", None)
+                    or getattr(delta, "reasoning", None)
+                ):
+                    c_last, c_first = now, (c_first or now)
+            # prefer content-bearing timing; fall back to chunk arrival (first chunk
+            # lands at end of prefill, so it is still an honest TTFT)
+            first = c_first or a_first
+            last = c_last if c_first else a_last
             toks = getattr(usage, "completion_tokens", 0) or 0
             if first and last and last > first and toks > 1:
                 ttfts.append(first - t0)
                 decodes.append((toks - 1) / (last - first))
-        except Exception:
+            else:
+                why = f"chunks={a_first is not None} content={c_first is not None} tokens={toks}"
+        except Exception as e:
+            why = f"{type(e).__name__}: {e}"
             continue
     if not decodes:
+        print(f"[gate] WARNING: speed unmeasured ({why or 'no runs completed'})")
         return {}
     return {
         "ttft_s": round(statistics.median(ttfts), 2),
