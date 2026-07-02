@@ -98,9 +98,25 @@ def _run_suites(
         sdir = log_root / cap
         print(f"[suite] {cap} via inspect eval_set → {sdir}")
         kwargs = {"temperature": 0.0} if local else {}
-        _success, logs = eval_set(
-            tasks=[factory()], model=model, log_dir=str(sdir), **kwargs
-        )
+        try:
+            _success, logs = eval_set(
+                tasks=[factory()], model=model, log_dir=str(sdir), **kwargs
+            )
+        except Exception as e:
+            # Same-day logs from an older task manifest (suite version bump or task-config
+            # change since the last run) — eval_set refuses the log dir, and those logs'
+            # results are unusable anyway. Clear just this suite dir and retry once.
+            msg = str(e)
+            if (
+                "not associated with a task" not in msg
+                and "fresh log directory" not in msg
+            ):
+                raise
+            print(f"[suite] {cap}: stale logs from an older task manifest — clearing")
+            shutil.rmtree(sdir, ignore_errors=True)
+            _success, logs = eval_set(
+                tasks=[factory()], model=model, log_dir=str(sdir), **kwargs
+            )
         log = next(
             (lg for lg in logs if lg.eval.task == cap), logs[0] if logs else None
         )
