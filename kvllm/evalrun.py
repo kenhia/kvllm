@@ -6,7 +6,7 @@
       [--endpoint URL [--model-name NAME]]                          # eval a served /v1 directly
 
 Models run serially (vLLM = one model per GPU); everything inside a model runs through
-Inspect's eval_set, which retries and resumes via the per-model log dir (eval-logs/<key>/<date>).
+Inspect's eval_set, which retries and resumes via a per-suite log dir (eval-logs/<key>/<date>/<cap>).
 The model loop resumes too: models whose latest scorecard already covers every requested suite
 at its current version are skipped (--force reruns; gate-failed 'skip' models need --retry-skips).
 
@@ -51,8 +51,10 @@ def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
     }
 
 
-def _run_suites(model_name: str, base_url: str, to_run: dict, log_dir: Path) -> dict:
-    """Run the Inspect tasks against the served model; return scorecard suite dicts."""
+def _run_suites(model_name: str, base_url: str, to_run: dict, log_root: Path) -> dict:
+    """Run each suite against the served model in its OWN log subdir (log_root/<cap>), so
+    suites never share an eval_set manifest — a code run today can't disturb this morning's
+    tools logs, and `--force` can wipe one suite without the others."""
     from inspect_ai import eval_set
 
     os.environ["KVLLM_BASE_URL"] = base_url
@@ -60,12 +62,13 @@ def _run_suites(model_name: str, base_url: str, to_run: dict, log_dir: Path) -> 
     model = f"openai-api/kvllm/{model_name}"
 
     results: dict[str, dict] = {}
-    tasks = [factory() for factory, _ in to_run.values()]
-    print(f"[suites] {', '.join(to_run)} via inspect eval_set → {log_dir}")
-    success, logs = eval_set(tasks=tasks, model=model, log_dir=str(log_dir))
-    by_task = {log.eval.task: log for log in logs}
-    for cap, (_, version) in to_run.items():
-        log = by_task.get(cap)
+    for cap, (factory, version) in to_run.items():
+        sdir = log_root / cap
+        print(f"[suite] {cap} via inspect eval_set → {sdir}")
+        _success, logs = eval_set(tasks=[factory()], model=model, log_dir=str(sdir))
+        log = next(
+            (lg for lg in logs if lg.eval.task == cap), logs[0] if logs else None
+        )
         if log is None:
             results[cap] = {
                 "version": version,
@@ -100,11 +103,14 @@ def evaluate(
     suites = _suites()
     to_run = _suites_for(entry, only_suite, suites)
     served_name = model_name or key
-    log_dir = LOG_ROOT / key.replace("/", "_") / today
-    if force and log_dir.exists():
-        # eval_set resumes from completed logs in log_dir — a --force rerun must actually
-        # re-execute the suites, not replay this morning's cached results.
-        shutil.rmtree(log_dir)
+    log_root = LOG_ROOT / key.replace("/", "_") / today
+    if force:
+        # eval_set resumes from completed logs — a --force rerun must re-execute. Only clear
+        # the suites we're about to run, so `--force --suite code` keeps the tools transcript.
+        for cap in to_run:
+            sdir = log_root / cap
+            if sdir.exists():
+                shutil.rmtree(sdir)
 
     card: dict = {
         "schema": 2,
@@ -119,7 +125,7 @@ def evaluate(
     if endpoint:
         card["operational"]["served"] = True
         card["operational"] |= evalctl.measure_speed(endpoint, served_name)
-        card["suites"] = _run_suites(served_name, endpoint, to_run, log_dir)
+        card["suites"] = _run_suites(served_name, endpoint, to_run, log_root)
     else:
         with evalctl.serving(key, entry, port=port) as (proc, serve_log):
             cold = evalctl.wait_healthy(proc, port)
@@ -148,7 +154,7 @@ def evaluate(
                     card["notes"] = (
                         f"works but impractically slow on kai: {decode} tok/s decode"
                     )
-                card["suites"] = _run_suites(key, base_url, to_run, log_dir)
+                card["suites"] = _run_suites(key, base_url, to_run, log_root)
 
     # Fold in suites this run didn't cover (e.g. `--suite code` keeps prior tools results),
     # so the model's card — and its one leaderboard row — stays complete.
