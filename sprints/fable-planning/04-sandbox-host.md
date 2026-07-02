@@ -106,6 +106,20 @@ that.
       for convenience — keep at least `cleo` + `kai`), confirm no secrets/HF tokens land on the
       box, optional LAN-egress firewall.
 
+### Second disk (2026-07-02)
+
+The spare 1 TB NVMe is now the **container-state disk**: GPT + ext4 (`LABEL=sandbox-docker`),
+mounted at `/data` with fstab **bind mounts** carrying both `/var/lib/docker` *and*
+`/var/lib/containerd` — Docker 29 uses the containerd image store, so image layers live under
+containerd's root, not Docker's; moving only `/var/lib/docker` moves almost nothing. All fstab
+entries are UUID-based + `nofail` (the reboot test renumbered `nvme0n1`↔`nvme1n1`, so device
+paths would have broken). The old NTFS partition's contents (stale May-2025 copy of the Gratch
+vault + WoW backups, 804 MB) were archived to kai at
+`~/backups/ksandbox-nvme0n1-Source-2026-07-02.tar.gz` before the wipe.
+
+Boot-disk note for the Phase 4+ VM layer: `ubuntu-vg` has **~1.7 TB unallocated** (root LV is
+100 G of a 2 TB disk) — carve a dedicated LV for libvirt images there when the time comes.
+
 ### Cutover gotcha (found 2026-07-02, fixed)
 
 Inspect drives `docker compose` over ssh with one fresh connection per concurrent compose call.
