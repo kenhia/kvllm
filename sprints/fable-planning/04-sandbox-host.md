@@ -102,9 +102,12 @@ that.
       4–5 done: `docker context create sandbox`, images pre-built, smoke + both suite self-tests
       pass remotely. The harness selects the host via `[sandbox].docker_host` in eval-config.toml
       (DOCKER_HOST env overrides).
-- [ ] Item 6 hygiene follow-ups: trim `~/.ssh/authorized_keys` (Ken seeded it with all his keys
-      for convenience — keep at least `cleo` + `kai`), confirm no secrets/HF tokens land on the
-      box, optional LAN-egress firewall.
+- [x] authorized_keys trimmed to `ken@kai` + `kenhi@cleo` (2026-07-02; pre-trim backup at
+      `~/.ssh/authorized_keys.pre-trim` on ksandbox). Remaining item-6 hygiene: confirm no
+      secrets/HF tokens land on the box, optional LAN-egress firewall.
+- [x] Root LV grown 100G → 500G online (headless-installer quirk left it at 100G);
+      **~1.33T left unallocated in `ubuntu-vg`** on purpose — growing is online/instant,
+      shrinking isn't, and the Phase 4 VM layer wants its own LV from those free extents.
 
 ### Second disk (2026-07-02)
 

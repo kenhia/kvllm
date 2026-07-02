@@ -400,10 +400,9 @@ parallel-episode target. Cutover, in order:
 
 ## Follow-ups
 
-- **ksandbox hygiene** (04-sandbox-host item 6): trim `~/.ssh/authorized_keys` on ksandbox to
-  kai + cleo (currently kai + six `gh:kenhia` GitHub-import keys; cleo was unreachable at
-  cutover time so its key couldn't be identified — do this from cleo or with its pubkey in
-  hand). Optional: LAN-egress firewall.
+- ksandbox hygiene remaining (04-sandbox-host item 6): optional LAN-egress firewall; keep
+  secrets/HF tokens off the box. (authorized_keys trimmed to kai+cleo and root LV grown to
+  500G on 2026-07-02 — see 04 doc; ~1.33T left free in ubuntu-vg for the Phase 4 VM LV.)
 - Next `just eval-all`: 27B coding + agentic/judged for the fleet + deepseek/internvl gate
   refresh in one sweep — the first fully-covered composite ranking.
 - "Ken's voice" rubric adjustment for professional-rewrite; consider a react tool-call-burst
