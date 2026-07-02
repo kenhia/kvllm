@@ -161,8 +161,94 @@ models unattended, restored the service, and passed the health check. Checkpoint
 
 Registry after the sweep: 7 of 10 `worth trying`, 1 `has issues`, 2 `skip` — all data-backed.
 
+## What shipped — Phase 2: S2 coding suite (Opus, 2026-07-02)
+
+Implements [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md): a
+react agent codes in a Docker `/workspace` (bash tool), then a scorer injects hidden pytest tests
+the model never saw, runs them in the sandbox, and scores partial credit from junit XML — never
+from the model's claims.
+
+- **`evals/coding_assets/`**: `Dockerfile` (python:3.12-slim + pinned pytest, non-root) +
+  `compose.yaml` (`network_mode: none`, mem/cpu/pids caps); **15 tasks** — C1 single-function ×6,
+  C2 script/IO-contract ×4, C3 fix-a-seeded-repo ×3, C4 iterate-to-green ×2. Each: `prompt.md`,
+  `hidden/`, reference `solution/`, and (C2/C3/C4) `seed/`. Every seed verified to *fail* its
+  visible tests (planted bugs real); every reference solution verified to *pass* its hidden tests.
+- **`evals/coding.py`**: `coding()` task (per-tier message limits via `apply_limits`; time_limit
+  600 s; bash timeout 120 s), `react(attempts=1)` (C4 measures *self*-iteration), and
+  `coding_scorer` — post-episode hidden-test injection, ×0.9 hit-limit factor, and the `recovered`
+  iteration metric. `parse_junit` / `extract_coding_signals` are pure (unit-tested).
+- **Integration**: `code` registered in `kvllm.evalrun::_suites()`; `score.suite_from_log`
+  generalized for partial-credit (float) scores + per-suite `iteration_rate`;
+  `score.merge_prior_suites` folds prior suites forward so `--suite code` keeps a model's `tools`
+  row on the leaderboard; each suite now runs in its own log subdir (`…/<date>/<cap>`) so
+  cross-suite runs and `--force` don't collide.
+- **`just test-coding-suite`** (`evals/coding_selftest.py`): seeds each reference solution, runs
+  the real scorer, asserts `raw_frac == 1.0` ×15 **and** the sandbox has no network — all pass.
+- **Tests**: 20 pure-function unit tests (66 total; `just check` green).
+
+### Acceptance results (2026-07-02) — the suite discriminates, and a scoring artifact to resolve
+
+| model | code pass_rate | tools (merged) | note |
+|---|---|---|---|
+| qwen2.5-7b-instruct | **0.48** | 100% | uses bash, solves 4 tasks to 100% hidden (slugify, dedupe, merge-intervals, jsonmerge) |
+| qwen2.5-coder-7b-instruct | **0.05** | 27% | never calls a tool at all |
+
+**The suite works and discriminates ~10×.** Both drop to `has issues` (agentic coding < 80%) —
+honest: neither 7B is a competent coding *agent* here.
+
+**Flagged for the Fable end-of-phase review (transcripts left in `eval-logs/<model>/2026-07-02/code/`):**
+
+1. **qwen2.5-coder writes code in a ```python markdown block and never calls `bash` or
+   `submit`** — it treats the agent task like a chat question (transcript: correct slugify code,
+   in prose, zero tool calls). The "never trust the model's claims" trust rule paid off exactly
+   here: it *says* "implemented and tested", the workspace is empty, hidden tests score 0.
+2. **Neither 7B Qwen ever calls `submit()` (0/15 each)** — verified the submit instruction is
+   present in both the react system prompt (`AgentPrompt` defaults survive `prompt=""`) and the
+   task's user message, so this is model behavior, not a harness gap. Consequence: **every task is
+   `hit_limit=True` → ×0.9, and because "fully-solved" is counted as `score ≥ 0.999`, a task
+   qwen2.5-7b solved to 100% hidden shows as *not passed* (0/15 fully-solved despite pass_rate
+   0.48).** The ranking number (pass_rate) is honest; the "N/15 passed" integer is misleading.
+   **Recommend Phase 3 (scoring/weighted-composite) decide:** base the fully-solved count on
+   `raw_frac`, and/or skip ×0.9 when `raw_frac == 1.0`, and/or tune the submit prompt for these
+   models, and/or raise message limits. Left as-is now (spec mandates ×0.9-on-limit; scoring
+   refinement is Phase 3's charter).
+3. **`iteration_rate` did not populate** even though qwen2.5-7b ran the seeded visible tests on
+   C3/C4 (`test_runs` 5–6): `saw_failing_run` never fired, so the failure-detection heuristic on
+   bash tool output (`_output_indicates_failure`) needs validation against real pytest-failure
+   output in the sandbox. Phase 3 follow-up.
+
+## Decisions & discoveries (Phase 2)
+
+- **Verified 4 spec `VERIFY` items empirically before building** (mock model + Docker, no GPU):
+  `Sample.files` land in `/workspace` (WORKDIR), the network is off, sandbox
+  `write_file`/`read_file` round-trip for hidden-test injection, and `react()` works as a
+  top-level Task solver.
+- **Real harness bug caught in the first acceptance run + fixed with a test:**
+  `apply_limits(catch_errors=True)` *suppresses* the `LimitExceededError`, so
+  `return await react(...)` inside the `with` returned `None` on a caught limit → inspect did
+  `None.completed` and cancelled the whole run (first coder run errored, 0/8). Fix: assign inside
+  the `with`, return the in-place-mutated state after it. Verified with a never-submits mock model.
+- **Docker compose project names can't start with `_`** — the self-test's `@task` functions had
+  to be renamed off leading underscores (`inspect-_net_task-…` = "invalid reference format").
+- **Capability gate is load-bearing**: `--suite code` on `qwen2.5-7b-instruct` initially ran
+  *nothing* because its registry caps were `["chat","tools"]` (no `code`). Added `code` to it (it
+  does gold-standard tool calls and can write Python) as the coding-suite contrast — the capability
+  gate correctly refused to run the suite until the model was tagged for it.
+- **Minor (pre-existing, not fixed):** `tomlkit` write-back appends new `eval_*` keys after a
+  model entry's *trailing comment block*, so `qwen2.5-14b-instruct-awq`'s verdict now sits visually
+  below the survey comment. Still valid TOML (comments don't end a table; keys attach correctly —
+  verified) — cosmetic only.
+
+## Outcomes (Phase 2)
+
+`just check` green (66 tests). `just test-coding-suite` PASS (15/15 reference solutions at 1.0 +
+network-off). Both acceptance models scored end-to-end through the hardened orchestration (service
+restored + health-checked each time); leaderboard shows the new `code` column beside merged `tools`
+scores. Suite discriminates 0.05 vs 0.48. STOP per hand-off scope: no Phase 3, no eval-all, no reimage.
+
 ## Follow-ups
-- **Phase 2** (coding suite): implement with **Opus** against
-  [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md).
+- **Fable end-of-phase review**: read the 3 flagged items above (esp. #2, the submit/×0.9/passed
+  interaction) against the `code/` transcripts; decide the Phase 3 scoring refinements.
+- **Phase 3** (weighted composite + judge): owns the scoring-presentation fixes flagged above.
 - Context-pressure probe deferred from the gate (fable-planning/03 §S0) — add in Phase 3.
 - Consider a `just gpu-health` recipe (Xid scan + drained check) for pre-sweep sanity.
