@@ -10,7 +10,7 @@
 - decode tok/s: 105.5
 
 ## Suite: tools v2 — 11/11 (100%)
-_Transcript: `eval-logs/qwen2.5-7b-instruct/2026-07-02/2026-07-02T03-29-53-00-00_tools_nLnz7hmTbqafqvLJcspCG2.eval` (open with `inspect view`)._
+_Transcript: `eval-logs/qwen2.5-7b-instruct/2026-07-02/2026-07-02T05-26-25-00-00_tools_ftxqUVMBaTvtGR22Gdmb4Y.eval` (open with `inspect view`)._
 - ✅ `array_args` — run_command({'host': 'kubsdb', 'argv': ['df', '-h']})
 - ✅ `distractor_tool` — restart_service({'name': 'nginx'})
 - ✅ `enum_arg` — get_weather({'city': 'Tokyo', 'unit': 'fahrenheit'})

@@ -234,3 +234,17 @@ def test_update_registry_unknown_model_returns_none(tmp_path, monkeypatch):
     registry_path.write_text('[models."other-model"]\nhf_repo = "org/other"\n')
     monkeypatch.setattr(score, "REGISTRY", registry_path)
     assert score.update_registry(_card()) is None
+
+
+# --- log path normalization -----------------------------------------------------------
+
+
+def test_normalize_log_path_plain_and_file_uri():
+    p = score.REPO / "eval-logs" / "m" / "x.eval"
+    assert score._normalize_log_path(p) == "eval-logs/m/x.eval"
+    assert score._normalize_log_path(f"file://{p}") == "eval-logs/m/x.eval"
+    assert score._normalize_log_path(f"file:{p}") == "eval-logs/m/x.eval"
+
+
+def test_normalize_log_path_outside_repo_stays_absolute():
+    assert score._normalize_log_path("/tmp/elsewhere/x.eval") == "/tmp/elsewhere/x.eval"

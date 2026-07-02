@@ -52,6 +52,21 @@ def verdict(served: bool, suites: dict, decode_tok_s: float | None = None) -> st
 # --- inspect log → suite result ---------------------------------------------------------
 
 
+def _normalize_log_path(log_path: str | Path) -> str:
+    """Repo-relative form of an Inspect log location. eval_set returns cached-log
+    locations as file: URIs; fresh runs return plain paths — normalize both."""
+    loc = str(log_path)
+    if loc.startswith("file://"):
+        loc = loc[7:]
+    elif loc.startswith("file:"):
+        loc = loc[5:]
+    p = Path(loc).resolve()
+    try:
+        return str(p.relative_to(REPO))
+    except ValueError:  # log dir outside the repo — keep it absolute
+        return str(p)
+
+
 def suite_from_log(log_path: str | Path, version: int) -> dict:
     """Reduce one Inspect .eval log to the scorecard suite shape (per-case pass/detail)."""
     from inspect_ai.log import read_eval_log  # heavy import; only when aggregating
@@ -76,7 +91,7 @@ def suite_from_log(log_path: str | Path, version: int) -> dict:
         "total": n,
         "pass_rate": round(passed_n / n, 2) if n else 0.0,
         "cases": cases,
-        "log": str(Path(log_path).resolve().relative_to(REPO)),
+        "log": _normalize_log_path(log_path),
     }
     if log.status != "success":
         result["error"] = f"inspect run status: {log.status}"

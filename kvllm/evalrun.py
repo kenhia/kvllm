@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from datetime import date
 from pathlib import Path
@@ -89,11 +90,16 @@ def evaluate(
     today: str,
     endpoint: str | None,
     model_name: str | None,
+    force: bool = False,
 ) -> dict:
     suites = _suites()
     to_run = _suites_for(entry, only_suite, suites)
     served_name = model_name or key
     log_dir = LOG_ROOT / key.replace("/", "_") / today
+    if force and log_dir.exists():
+        # eval_set resumes from completed logs in log_dir — a --force rerun must actually
+        # re-execute the suites, not replay this morning's cached results.
+        shutil.rmtree(log_dir)
 
     card: dict = {
         "schema": 2,
@@ -235,6 +241,7 @@ def main(argv: list[str] | None = None) -> int:
                     today=args.date,
                     endpoint=args.endpoint,
                     model_name=args.model_name,
+                    force=args.force,
                 )
             except KeyboardInterrupt:
                 raise
