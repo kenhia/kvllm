@@ -60,6 +60,18 @@ def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
     }
 
 
+def _apply_sandbox_host() -> None:
+    """Point suite sandboxes at [sandbox].docker_host (fable-planning/04 — the ksandbox
+    cutover). An explicit DOCKER_HOST in the environment wins over config."""
+    if os.environ.get("DOCKER_HOST"):
+        print(f"[sandbox] DOCKER_HOST={os.environ['DOCKER_HOST']} (env)")
+        return
+    host = score.load_config().get("sandbox", {}).get("docker_host", "")
+    if host:
+        os.environ["DOCKER_HOST"] = host
+        print(f"[sandbox] DOCKER_HOST={host} (eval-config.toml)")
+
+
 def _run_suites(
     model: str,
     to_run: dict,
@@ -74,6 +86,7 @@ def _run_suites(
     frontier baselines run at provider defaults (Sonnet 5 rejects non-default sampling)."""
     from inspect_ai import eval_set
 
+    _apply_sandbox_host()
     if local:
         os.environ["KVLLM_BASE_URL"] = base_url or "http://localhost:8000/v1"
         os.environ.setdefault("KVLLM_API_KEY", "EMPTY")

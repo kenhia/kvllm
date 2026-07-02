@@ -95,7 +95,24 @@ that.
 
 ## Open items for Ken
 
-- [ ] Actual specs once it's plugged in (cores/RAM/disk decide episode concurrency; 32 GB+ RAM and
-      8+ cores would comfortably run 4–8 parallel episodes).
-- [ ] Hostname, and whether it joins whatever inventory/DNS convention the homelab uses.
-- [ ] Reimage timing — roadmap Phase 1–2 doesn't wait on it; Phase 3 prefers it; Phase 4 needs it.
+- [x] Actual specs: i5-13400F (16 threads), 32 GB RAM, ~83 GB free on / — comfortably runs the
+      full 15-sample coding fan-out.
+- [x] Hostname: `ksandbox` (192.168.1.112), passwordless ssh + sudo, Docker 29.6.1.
+- [x] Reimage done 2026-07-02; cutover landed the same day (see sprint-08 doc). Checklist items
+      4–5 done: `docker context create sandbox`, images pre-built, smoke + both suite self-tests
+      pass remotely. The harness selects the host via `[sandbox].docker_host` in eval-config.toml
+      (DOCKER_HOST env overrides).
+- [ ] Item 6 hygiene follow-ups: trim `~/.ssh/authorized_keys` (Ken seeded it with all his keys
+      for convenience — keep at least `cleo` + `kai`), confirm no secrets/HF tokens land on the
+      box, optional LAN-egress firewall.
+
+### Cutover gotcha (found 2026-07-02, fixed)
+
+Inspect drives `docker compose` over ssh with one fresh connection per concurrent compose call.
+The 15-sample coding suite storms sshd's `MaxStartups` (default 10) → `kex_exchange_identification:
+Connection reset by peer` → episodes die with "No services started". Fix (both halves):
+
+- **kai** `~/.ssh/config`: `ControlMaster auto` + `ControlPersist 10m` for `Host ksandbox` — all
+  docker CLI ssh invocations multiplex over one TCP connection.
+- **ksandbox** `/etc/ssh/sshd_config.d/50-eval-concurrency.conf`: `MaxSessions 64`,
+  `MaxStartups 64:30:128` (multiplexed channels count against MaxSessions, default 10).

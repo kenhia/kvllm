@@ -366,13 +366,44 @@ Per Ken's two asks: (1) a work-selection/planning eval, (2) Claude baselines wit
   Sonnet (77%) is model, not harness. a8-honesty still catches Sonnet fabricating specifics
   under an all-clear, and a5 catches both baselines putting the done-but-open WI in "ready".
 
+## ksandbox cutover (Fable, 2026-07-02 — Ken reimaged, Fable flipped the switch)
+
+Ken finished 04-sandbox-host checklist items 1–3 (Ubuntu 24.04 reimage, homelab-standard access,
+Docker 29.6.1); specs turned out i5-13400F / 16 threads / 32 GB — comfortably above the 4–8
+parallel-episode target. Cutover, in order:
+
+- `docker context create sandbox --docker host=ssh://ken@ksandbox` + hello-world: OK.
+- Remote `eval-sandbox-smoke`: **PASS in 7s** — `DOCKER_HOST=ssh://` works with Inspect despite
+  being unofficial (inspect_ai #540); the fallback plan (runner on the sandbox host) stays
+  unused.
+- Remote agentic self-test: **9/9**. Remote coding self-test: **FAIL**, and it was real — the
+  15-sample fan-out storms sshd with one fresh ssh connection per concurrent `docker compose`
+  call, tripping `MaxStartups` (default 10): `kex_exchange_identification: Connection reset by
+  peer` → "No services started". The 9-sample agentic suite had squeaked under the limit. Fixed
+  both halves: **ControlMaster/ControlPersist multiplexing** for `Host ksandbox` in kai's
+  `~/.ssh/config`, plus `MaxSessions 64` / `MaxStartups 64:30:128` in a sshd drop-in on
+  ksandbox (multiplexed channels count against MaxSessions, default 10). Coding self-test then
+  **15/15 + network-off probe**.
+- Harness wiring: `[sandbox].docker_host` in eval-config.toml (env `DOCKER_HOST` overrides,
+  empty = local Docker) — `_apply_sandbox_host()` in evalrun, unit-tested. No one has to
+  remember an env var; `just eval` prints which sandbox host it picked.
+- Proof run: `just eval qwen2.5-7b-instruct --suite agentic --force` — served on kai, all 9
+  episodes ran **concurrently** on ksandbox (zero sandbox CPU on kai), judge scored, scorecard +
+  board written, service restored. One sample hit a context-length 400 mid-episode and
+  eval_set's retry recovered it. Two sharp edges surfaced: same-day logs from an older task
+  manifest make eval_set refuse the log dir (`--force` clears exactly that suite dir — designed
+  remedy); and the first agentic-v2 local result is sobering — **28% (1/9)** vs Haiku 68% /
+  Sonnet 77%: a3 fabricated a causal chain (auto-zero), a7 degenerate-flooded 107 tool calls in
+  one message, a9 scheduled the blocked WI. Only a8-honesty passed (10/10). The v1-stale † on
+  the board was hiding most of this; the rest of the fleet gets refreshed in the overnight
+  sweep.
+
 ## Follow-ups
 
-- **ksandbox cutover** (when the reimage lands): `docker context` per
-  [`fable-planning/04-sandbox-host.md`](fable-planning/04-sandbox-host.md), then
-  `DOCKER_HOST=ssh://ken@ksandbox just eval-sandbox-smoke` (the go/no-go), then one
-  `just eval <model> --suite agentic` with DOCKER_HOST set. Nothing in the suites assumes
-  local Docker.
+- **ksandbox hygiene** (04-sandbox-host item 6): trim `~/.ssh/authorized_keys` on ksandbox to
+  kai + cleo (currently kai + six `gh:kenhia` GitHub-import keys; cleo was unreachable at
+  cutover time so its key couldn't be identified — do this from cleo or with its pubkey in
+  hand). Optional: LAN-egress firewall.
 - Next `just eval-all`: 27B coding + agentic/judged for the fleet + deepseek/internvl gate
   refresh in one sweep — the first fully-covered composite ranking.
 - "Ken's voice" rubric adjustment for professional-rewrite; consider a react tool-call-burst
