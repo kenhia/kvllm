@@ -146,3 +146,8 @@ test:
 
 # Lint + unit tests (fast — no live model needed)
 check: lint test
+
+# Self-test the agentic suite: planted truths must be discoverable + reference reports
+# must score 1.0 mechanically (needs Docker; no GPU/model/judge).
+test-agentic-suite:
+    uv run --group eval python -m evals.agentic_selftest

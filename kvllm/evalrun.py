@@ -34,6 +34,8 @@ def _suites():
     """Suite name → (task factory, version, required registry capability). Imported lazily to
     keep inspect off the CLI-arg-error path. A suite runs on a model iff the model's registry
     `capabilities` contain the required cap (`judged` rides on plain `chat` — every model)."""
+    from evals.agentic import VERSION as AGENTIC_VERSION
+    from evals.agentic import agentic
     from evals.coding import VERSION as CODING_VERSION
     from evals.coding import coding
     from evals.judged import VERSION as JUDGED_VERSION
@@ -44,6 +46,7 @@ def _suites():
     return {
         "tools": (tools, TOOLS_VERSION, "tools"),
         "code": (coding, CODING_VERSION, "code"),
+        "agentic": (agentic, AGENTIC_VERSION, "tools"),
         "judged": (judged, JUDGED_VERSION, "chat"),
     }
 

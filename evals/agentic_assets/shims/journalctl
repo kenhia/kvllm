@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""journalctl shim for the fixture homelab. Renders per-unit journal lines from the same
+scenario state as the systemctl shim. Supports: -u <unit> (repeatable), -p err/-p3 (error-ish
+lines only), --since (ignored — fixture logs are short), -n/--lines, -b, --no-pager."""
+
+import json
+import re
+import sys
+
+SCENARIOS = "/usr/share/hostinfo/scenarios.json"
+MARKER = "/workspace/.scenario"
+
+ERRISH = re.compile(r"error|failed|fatal|refused|not found|denied|killed", re.IGNORECASE)
+
+
+def load_units():
+    data = json.load(open(SCENARIOS))
+    try:
+        scen = open(MARKER).read().strip() or "base"
+    except OSError:
+        scen = "base"
+    seen, units = set(), {}
+    while scen and scen not in seen:
+        seen.add(scen)
+        node = data.get(scen, {})
+        for name, u in node.get("units", {}).items():
+            units.setdefault(name, u)
+        scen = node.get("inherit")
+    return units
+
+
+def main(argv):
+    units = load_units()
+    want, err_only, limit = [], False, None
+    args = argv[1:]
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-u" or a == "--unit":
+            i += 1
+            want.append(args[i] if args[i].endswith(".service") else args[i] + ".service")
+        elif a.startswith("--unit="):
+            u = a.split("=", 1)[1]
+            want.append(u if u.endswith(".service") else u + ".service")
+        elif a in ("-p", "--priority"):
+            i += 1
+            err_only = args[i] in ("err", "3", "warning", "4")
+        elif a.startswith("-p") and len(a) > 2:
+            err_only = a[2:] in ("err", "3", "warning", "4")
+        elif a in ("-n", "--lines"):
+            i += 1
+            limit = int(args[i])
+        elif a.startswith("--since") or a in ("-b", "--no-pager", "-x", "-e", "--user"):
+            if a == "--since" and i + 1 < len(args):
+                i += 1
+        i += 1
+
+    names = want or sorted(units)
+    lines = []
+    for n in names:
+        u = units.get(n)
+        if not u:
+            continue
+        for ln in u.get("journal", []):
+            if err_only and not ERRISH.search(ln):
+                continue
+            lines.append(ln)
+    lines.sort()  # fixture lines start with timestamps
+    if limit:
+        lines = lines[-limit:]
+    if not lines:
+        print("-- No entries --")
+        return 0
+    for ln in lines:
+        print(ln)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
