@@ -18,7 +18,7 @@ first. Pass: judge within ±1 of your score on >=80% of rows → set
 
 - judge: **4.0/10** — The answer has exactly 5 checks in correct format, but the content quality is poor. Only 1 check (df -h) directly diagnoses disk usage; the others focus on I/O monitoring and logs, which don't address root causes like large files, package caches, docker images, or deleted-but-open files. Missing du, inodes, and filesystem-level diagnostics.
 - violations: ['Poor coverage of actual disk usage diagnosis (only df -h is directly relevant)', 'Focuses on I/O monitoring rather than identifying what consumes space', 'Missing critical checks: du for large files, package manager caches, docker images, deleted-but-open files']
-- **Ken:** ___ /10
+- **Ken:** 4/10
 
 ## 2. `explain-config` — openai-api/kvllm/qwen2.5-7b-instruct
 
@@ -30,7 +30,7 @@ This `systemd` user unit starts the `kvllm` vLLM OpenAI-compatible server when t
 
 - judge: **5.0/10** — The answer correctly identifies the core function (vLLM server via uv run), correctly states Restart=on-failure behavior, and mentions the 900s timeout. However, it misinterprets the timeout as a restart limit ('won't restart more than 15 minutes after starting') rather than a startup deadline, and the network caveat is weak—the real caveat is the env file gating model choice or the long cold-start timeout for model loading.
 - violations: ['Mischaracterizes TimeoutStartSec=900 as a restart frequency limit rather than a startup deadline', 'Identifies network availability as the primary caveat instead of the env file dependency or cold-start timeout']
-- **Ken:** ___ /10
+- **Ken:** 6/10
 
 ## 3. `plan-migration` — openai-api/kvllm/qwen2.5-7b-instruct
 
@@ -70,7 +70,7 @@ This `systemd` user unit starts the `kvllm` vLLM OpenAI-compatible server when t
 
 - judge: **2.0/10** — The plan fatally violates the 5-minute downtime constraint. Steps 2-4 (dump, transfer, restore) occur while Machine A is still serving traffic, meaning the restore on Machine B happens offline and creates a stale copy. When cutover occurs in step 5, all data written to Machine A after the dump is lost. The rollback step exists but is poorly integrated—it only restores Machine A to the pre-migration state, not a live failback. A proper plan requires replication (logical or physical) running in parallel before cutover to minimize downtime to seconds, not the hours this approach would require.
 - violations: ['Plan violates 5-minute downtime constraint: dump/restore approach creates stale replica and loses data written during migration', 'No live replication strategy: backup-restore is offline and not suitable for minimal-downtime migration', 'Rollback step is weak: only restores Machine A to old state rather than enabling quick failback from Machine B', 'Ordering issue: testing happens after backup is stale, not after replication is synchronized']
-- **Ken:** ___ /10
+- **Ken:** 3/10
 
 ## 4. `professional-rewrite` — openai-api/kvllm/qwen2.5-7b-instruct
 
@@ -105,7 +105,7 @@ Best regards,
 
 - judge: **9.0/10** — All three factual complaints preserved with correct details (6am, status page, #48213), professional tone maintained, SLA expectation clearly stated, and concise structure. Minor deduction only for slightly verbose formatting that could be more direct.
 - violations: none
-- **Ken:** ___ /10
+- **Ken:** 8/10 - the "extra point" I deducted is pretty subjective; when there is a problem, I personally don't like to "soften" the message, especially as the lead-in (the "I hope this message finds you well.")
 
 ## 5. `strict-json` — openai-api/kvllm/qwen2.5-7b-instruct
 
@@ -117,7 +117,7 @@ Best regards,
 
 - judge: **10.0/10** — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - violations: none
-- **Ken:** ___ /10
+- **Ken:** 10/10
 
 ## 6. `summarize-incident` — openai-api/kvllm/qwen2.5-7b-instruct
 
@@ -131,7 +131,7 @@ Best regards,
 
 - judge: **7.0/10** — The answer correctly identifies all three elements (OOM crash, root cause, resolution with max_connections increase) and contains no fabricated facts. However, it lacks conciseness and specificity: it doesn't mention the backup failure as the immediate consequence of the crash, doesn't specify the connection limit values (100→200), and muddles the causality by treating the OOM as the sole root cause rather than clearly separating the two distinct problems (memory exhaustion vs. connection limits).
 - violations: none
-- **Ken:** ___ /10
+- **Ken:** 7/10
 
 ## 7. `constrained-list` — openai-api/kvllm/qwen2.5-coder-7b-instruct
 
@@ -147,7 +147,7 @@ Best regards,
 
 - judge: **8.0/10** — All 5 checks are present with proper formatting (1.-5., no extra numbering). Content is highly useful and covers key diagnostic areas: disk space overview (df), large files (find), I/O activity (iostat), log growth (logs), and directory analysis (du). Minor deduction because iostat monitors I/O performance rather than directly diagnosing disk usage causes, and deleted-but-open files (a common cause) are not explicitly covered. [mechanical: 1 item(s) over 8 words → cap 4/10]
 - violations: ['1 item(s) over 8 words']
-- **Ken:** ___ /10
+- **Ken:** 8/10
 
 ## 8. `explain-config` — openai-api/kvllm/qwen2.5-coder-7b-instruct
 
@@ -159,7 +159,7 @@ This systemd user unit is designed to start the `kvllm` service, which is an Ope
 
 - judge: **7.0/10** — The answer correctly identifies what runs (kvllm with KVLLM_MODEL_KEY from env file), correctly explains Restart=on-failure semantics (restarts only on failure), and identifies the 900s timeout as a caveat. However, the final caveat explanation is somewhat muddled and doesn't clearly articulate a practical operational concern—the point about transient failures is vague and doesn't directly address the cold-load timeout risk or env-file dependency that would be more actionable.
 - violations: none
-- **Ken:** ___ /10
+- **Ken:** 7/10
 
 ## 9. `plan-migration` — openai-api/kvllm/qwen2.5-coder-7b-instruct
 
@@ -190,7 +190,7 @@ Migrating a PostgreSQL database service from one machine (A) to another (B) whil
 
 - judge: **4.0/10** — The plan includes a rollback step and respects the 6-step limit, but fails to specify the actual downtime window or how the <5-minute constraint is achieved. Step 4 (traffic switch) lacks critical detail on the brief cutover phase needed to stay under 5 minutes, and the ordering is vague—it's unclear when Machine A is actually stopped or how long the switch takes. The plan reads more like general guidance than a concrete migration strategy with explicit timing.
 - violations: ['Downtime constraint not explicitly addressed: no clear specification of when/how the cutover happens or confirmation it stays under 5 minutes', 'Step 4 (traffic switch) is too vague and lacks the critical detail of stopping Machine A and the actual cutover duration', 'Rollback step (Step 5) is described generically without being tied to a specific point in the migration timeline']
-- **Ken:** ___ /10
+- **Ken:** 4/10
 
 ## 10. `professional-rewrite` — openai-api/kvllm/qwen2.5-coder-7b-instruct
 
@@ -218,7 +218,7 @@ Thank you for your attentio
 
 - judge: **9.0/10** — All three factual complaints are preserved with correct details (6am, status page, #48213), SLA expectation is retained, tone is professional and firm without hostility, and the message is concise. Minor deduction only for slight verbosity in places like the opening pleasantry and closing that could be tighter.
 - violations: none
-- **Ken:** ___ /10
+- **Ken:** 8/10 - same subjective as other model; suspect for both this models and the previous, a bit of training/guidance in "my voice" would clear up and raise score.
 
 ## 11. `strict-json` — openai-api/kvllm/qwen2.5-coder-7b-instruct
 
@@ -235,7 +235,7 @@ Thank you for your attentio
 
 - judge: **10.0/10** — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - violations: none
-- **Ken:** ___ /10
+- **Ken:** 10/10
 
 ## 12. `summarize-incident` — openai-api/kvllm/qwen2.5-coder-7b-instruct
 
@@ -249,5 +249,17 @@ Thank you for your attentio
 
 - judge: **4.0/10** — The answer correctly identifies the OOM kill and the connection limit issue, but critically confuses causality by stating the root cause was 'too many connections' when the actual root cause was the OOM condition. The connection failure was a secondary symptom that occurred after the restart. Additionally, the answer conflates two separate problems rather than presenting them as sequential events.
 - violations: ['Muddled causality: presents connection limit as root cause when OOM was the primary failure', 'Misses the sequential nature: OOM kill → restart → backup fails due to connections → fix connections']
-- **Ken:** ___ /10
+- **Ken:** 5/10
 
+
+---
+
+## Result (Fable, 2026-07-02)
+
+12/12 within ±1 (100% ≥ 80% required); mean |Δ| = 0.42. **PASS** —
+`[judge] calibrated = true` set in `eval-config.toml`; the judged suite now counts in the
+composite. Notes: the judge runs ~1 point harsher than Ken on professional-rewrite tone
+(Ken: no softening pleasantries — candidate for a "Ken's voice" rubric adjustment, logged as a
+follow-up); row 7 displays the judge's content score (8) — the suite's final score for that row
+was 4 after the mechanical length cap, which calibration deliberately excludes (caps are code,
+not judgment).

@@ -353,9 +353,12 @@ def write_calibration_sheet(log_paths: list[str], out_path: Path) -> Path:
     lines = [
         "# Judge calibration sheet",
         "",
-        "_Score each answer 0-10 yourself (last column) WITHOUT looking at the judge's score",
-        "first. Pass: judge within ±1 of your score on >=80% of rows → set",
-        "`[judge] calibrated = true` in eval-config.toml._",
+        "_Self-contained: each row carries the full task the model saw, its answer, the rubric,",
+        "and the judge's grade — score 0-10 yourself (last line) WITHOUT reading the judge's",
+        "score first. Pass: judge within ±1 of your score on >=80% of rows → set",
+        "`[judge] calibrated = true` in eval-config.toml. The judge score is the CONTENT grade;",
+        "where a mechanical cap applied, the suite's final (capped) score is shown too — caps",
+        "are code, not judgment, and are excluded from calibration._",
         "",
     ]
     n = 0
@@ -368,16 +371,32 @@ def write_calibration_sheet(log_paths: list[str], out_path: Path) -> Path:
                 continue
             n += 1
             meta = sc.metadata or {}
+            smeta = s.metadata or {}
+            judge10 = meta.get("judge_score")
+            final10 = round(float(sc.value) * 10, 1) if sc.value is not None else None
+            capped = (
+                f" (suite final after mechanical cap: {final10}/10)"
+                if judge10 is not None and final10 is not None and final10 < judge10
+                else ""
+            )
             lines += [
                 f"## {n}. `{s.id}` — {model}",
                 "",
-                "**Answer:**",
+                "**Task given to the model:**",
+                "",
+                "```",
+                (smeta.get("prompt") or s.input or "")[:2500],
+                "```",
+                "",
+                "**Model's answer:**",
                 "",
                 "```",
                 (s.output.completion or "")[:1500],
                 "```",
                 "",
-                f"- judge: **{meta.get('judge_score', '?')}/10** — {sc.explanation}",
+                f"**Rubric:** {smeta.get('rubric', '(see evals/judged.py)')}",
+                "",
+                f"- judge: **{judge10}/10**{capped} — {sc.explanation}",
                 f"- violations: {meta.get('violations') or 'none'}",
                 "- **Ken:** ___ /10",
                 "",
