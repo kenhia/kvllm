@@ -1,6 +1,6 @@
 # Eval — qwen2.5-7b-instruct (2026-07-02)
 
-**Verdict: ⚠️ has issues** · `Qwen/Qwen2.5-7B-Instruct`
+**Verdict: ✅ worth trying** · `Qwen/Qwen2.5-7B-Instruct`
 
 ## Operational
 - served: True

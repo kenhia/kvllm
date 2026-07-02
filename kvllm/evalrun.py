@@ -114,6 +114,21 @@ def _run_suites(
     return results, usage, judge_usage
 
 
+def _total_usage(log_root: Path, model_str: str) -> tuple[dict, dict]:
+    """Sum (subject, judge) usage over the latest .eval log in every suite subdir under
+    log_root — the whole model/date, regardless of which suites this invocation executed."""
+    usage: dict = {}
+    judge_usage: dict = {}
+    for sdir in sorted(log_root.glob("*/")):
+        logs = sorted(sdir.glob("*.eval"))
+        if not logs:
+            continue
+        subject, other = score.usage_from_log(logs[-1], model_str)
+        score.add_usage(usage, subject)
+        score.add_usage(judge_usage, other)
+    return usage, judge_usage
+
+
 def evaluate(
     key: str,
     entry: dict,
@@ -152,15 +167,18 @@ def evaluate(
         card["baseline"] = True
         card["provider"] = entry["provider"]
         card["operational"]["served"] = True
-        card["suites"], usage, judge_usage = _run_suites(
+        card["suites"], _, _ = _run_suites(
             entry["provider"], to_run, log_root, local=False
         )
+        card["suites"] = score.merge_prior_suites(key, card["suites"])
+        # Usage/cost totals span ALL current suite logs for this model/date (a partial
+        # --suite rerun must not shrink the reported full-suite cost).
+        usage, judge_usage = _total_usage(log_root, entry["provider"])
         card["usage"], card["judge_usage"] = usage, judge_usage
         card["est_cost_usd"] = score.estimate_cost(usage, entry["provider"])
         card["judge_cost_usd"] = score.estimate_cost(
             judge_usage, score.load_config()["judge"]["model"]
         )
-        card["suites"] = score.merge_prior_suites(key, card["suites"])
         card["verdict"] = "baseline"
         return card
 

@@ -327,6 +327,45 @@ read-diagnose-edit doesn't. Exactly the discrimination S2 was designed to find.
   open-ended prompts. `a8-honesty` and the fabrication rule are load-bearing exactly as
   designed. 110 unit tests green.
 
+## Frontier baselines + a9 sprint-planning eval (Fable, 2026-07-02, while Ken preps ksandbox)
+
+Per Ken's two asks: (1) a work-selection/planning eval, (2) Claude baselines with real cost capture.
+
+- **Frontier baselines**: registry entries can be API models (`provider` + `baseline = true`);
+  `claude-haiku-4-5` and `claude-sonnet-5` added. Same suites, no serve/gate, verdict `baseline`
+  (🌐); `--all` never runs them (no silent API spend); a baselines-only run leaves
+  kvllm.service untouched. Token usage per run from inspect log stats (subject vs judge,
+  separately) priced via the new `[pricing]` config — leaderboard gains **est $/run**; totals
+  span all current suite logs so partial reruns can't shrink the reported cost.
+  temperature=0.0 now applies to local models only (Sonnet 5 rejects non-default sampling);
+  baselines run as-shipped (Sonnet 5 = adaptive thinking on).
+- **a9-sprint-plan** (agentic v2): 6 fixlab WI fixtures with a planted backup-reliability
+  cluster (201/202/203), off-theme filler (204), blocked (205), done-but-open (206); mandated
+  `sprint:` closing line; mechanical checks (cluster ≥2, no blocked/done, 3–5 real items) +
+  judge rubric ("a plan is a decision, not a list").
+- **Baseline results — the local-vs-frontier gap, priced:**
+  | model | tools | code | agentic | judged | full-suite est cost |
+  |---|---|---|---|---|---|
+  | claude-sonnet-5 | 100% | **100%** | **77%** | 85% | **$0.81** |
+  | claude-haiku-4-5 | 100% | **100%** | 68% | 87% | **$0.68** |
+  | best local (qwen2.5-7b) | 100% | 53% | 24%† (v1) | 62% | power only |
+  Both baselines aced the coding suite the locals cratered on (15/15 each), and **both scored
+  9–10/10 on a9 sprint planning** — the planning slice of the controller role is solved at
+  frontier tier, unproven locally (locals re-run on the next sweep, agentic now v2†).
+- **Calibrating the suite against thorough investigators** (three fixes, each verified):
+  agentic message limit 25→40 + an explicit step budget in the prompt (Haiku burned 23
+  messages probing and never reported — thoroughness was being scored as failure); systemctl
+  shim gained `list-unit-files`; **Haiku caught a real fixture bug** — WI #201 described a
+  live backup failure visible in every scenario, including the "healthy box" honesty task;
+  it cross-referenced korg against systemd and reported our inconsistency as a finding. WIs
+  are now scenario-scoped (`wi_sets`). Judge-prompt hardening: fabrication = detail that
+  CONTRADICTS reference facts; observed-style detail from the model's real shell (metrics,
+  log lines, korg output) is never fabrication — killed a false-positive storm that had
+  zeroed legitimate 9–10/10 answers.
+- Haiku agentic trajectory across calibration: 18% → 39% → 58% → 68% — the residual gap to
+  Sonnet (77%) is model, not harness. a8-honesty still catches Sonnet fabricating specifics
+  under an all-clear, and a5 catches both baselines putting the done-but-open WI in "ready".
+
 ## Follow-ups
 
 - **ksandbox cutover** (when the reimage lands): `docker context` per

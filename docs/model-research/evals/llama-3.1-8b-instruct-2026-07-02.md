@@ -1,6 +1,6 @@
 # Eval — llama-3.1-8b-instruct (2026-07-02)
 
-**Verdict: ⚠️ has issues** · `meta-llama/Llama-3.1-8B-Instruct`
+**Verdict: ✅ worth trying** · `meta-llama/Llama-3.1-8B-Instruct`
 
 ## Operational
 - served: True
