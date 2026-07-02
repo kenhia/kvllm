@@ -108,10 +108,40 @@ verified end-to-end; leaderboard v2 renders all three formats with stale markers
 verdicts intact. Ready for: the overnight `just eval-all` sweep, and Phase 2 implementation
 against the spec.
 
+## Incident — GPU wedged after the Phase 1 eval (2026-07-02, ~03:30–05:00)
+
+The service restore after the orchestrated eval hung in CUDA-graph capture (healthy init = 5.8 s;
+this one spun at 100% GPU for 57 min with no log output, `/v1` never opened). Diagnosis chain:
+restart → hung again; SIGKILL by systemd → next start **crashed with
+`CUDA error: an illegal memory access`** (kernel log: **Xid 13** Out-Of-Range Address) →
+full NVIDIA module reload → *still* hung (py-spy: stuck in `profile_run/_dummy_run`), and the
+other model now hung too → kernel log **Xid 119: GSP RPC timeout** + **Xid 154: "GPU Reset
+Required"**. The GSP (on-card firmware CPU) wedged, which survives driver reloads; even `rmmod`
+then jammed against it. PCI FLR attempt also blocked. **Resolution: reboot** (everything
+auto-restores; linger + enabled units).
+
+Probable trigger: the eval's rapid kill→restart cycle (standalone vLLM SIGTERM'd, service
+started ~2 s later while VRAM was still draining) hitting a Blackwell/GSP fragility.
+
+**Hardening shipped in response:**
+- `evalrun` now manages the service **once per sweep** (stop before the first model, restore
+  after the last) instead of per model — minimum GPU teardown/startup cycles, and faster sweeps.
+- `evalctl.wait_gpu_drained()` — no serve ever starts until the previous one's VRAM is actually
+  released (was: fixed 2 s sleep).
+- SIGTERM grace 30 s → 60 s before SIGKILL (a SIGKILL'd CUDA proc is the suspected wedge vector).
+- The restored service is **health-checked** (`wait_port_healthy`, 300 s) and a loud warning +
+  nonzero exit on failure — tonight's hang went unnoticed for an hour because restore was
+  fire-and-forget.
+
+Live verification of the hardened path is pending the reboot.
+
 ## Follow-ups
 
+- **Reboot kai** (GPU reset required — see incident above), then verify: service healthy,
+  `just eval qwen2.5-7b-instruct --force` end-to-end on the hardened orchestration.
 - Run `just eval-all` overnight (needs `HF_TOKEN` for `llama-3.1-8b-instruct`; the rest are
   ungated). Then the Phase 1 Fable checkpoint: do old verdicts hold, does tools v2 discriminate?
 - **Phase 2** (coding suite): implement with **Opus** against
   [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md).
 - Context-pressure probe deferred from the gate (fable-planning/03 §S0) — add in Phase 3.
+- Consider a `just gpu-health` recipe (Xid scan + drained check) for pre-sweep sanity.

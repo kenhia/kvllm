@@ -96,16 +96,54 @@ def serve_error(log_path: Path) -> str:
     return ""
 
 
+def stop_service() -> None:
+    print(f"[orchestrate] stopping {SERVICE}.service to free the GPU")
+    _systemctl("stop", SERVICE)
+    time.sleep(2)
+
+
+def start_service() -> None:
+    print(f"[orchestrate] restoring {SERVICE}.service")
+    _systemctl("start", SERVICE)
+
+
+def wait_gpu_drained(threshold_mib: int = 2000, timeout_s: int = 90) -> bool:
+    """Block until GPU memory drops below threshold. Starting a new vLLM while the killed
+    one's memory is still being released can wedge the GPU — the 2026-07-02 incident on kai
+    ended in a hung GSP (Xid 119) and a reboot. Never skip this between serves."""
+    t0 = time.time()
+    while time.time() - t0 < timeout_s:
+        used = gpu_used_mib()
+        if used is None or used < threshold_mib:
+            return True
+        time.sleep(2)
+    print(
+        f"[orchestrate] WARNING: GPU still holds {gpu_used_mib()} MiB after {timeout_s}s"
+    )
+    return False
+
+
+def wait_port_healthy(port: int, timeout_s: int = 300) -> bool:
+    """Block until /v1/models on `port` answers (no process handle — e.g. the systemd
+    service). Fire-and-forget restores are how tonight's hang went unnoticed for an hour."""
+    url = f"http://localhost:{port}/v1/models"
+    t0 = time.time()
+    while time.time() - t0 < timeout_s:
+        try:
+            with urllib.request.urlopen(url, timeout=2):
+                return True
+        except Exception:
+            time.sleep(3)
+    return False
+
+
 @contextmanager
 def serving(key: str, entry: dict, *, port: int):
-    """Serve `key` standalone for the duration of the block, stopping/restoring
-    kvllm.service around it. Yields (proc, serve_log_path); the caller decides health."""
-    prior_active = service_active()
-    if prior_active:
-        print(f"[orchestrate] stopping {SERVICE}.service to free the GPU")
-        _systemctl("stop", SERVICE)
-        time.sleep(2)
-
+    """Serve `key` standalone for the duration of the block. Yields (proc, serve_log_path);
+    the caller decides health. Does NOT touch kvllm.service — the batch runner manages the
+    service once per sweep (stop before the first model, restore + health-check after the
+    last), so models swap with the minimum number of GPU teardown/startup cycles."""
+    wait_gpu_drained()  # never start a serve while the previous one's VRAM is draining
     SERVE_LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = SERVE_LOG_DIR / f"{key.replace('/', '_')}.log"
     argv = build_serve_argv(key, entry, port=str(port))
@@ -120,16 +158,14 @@ def serving(key: str, entry: dict, *, port: int):
         print("[serve] stopping model under test")
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            proc.wait(timeout=30)
+            proc.wait(timeout=60)
         except Exception:
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except Exception:
                 pass
         log.close()
-        if prior_active:
-            print(f"[orchestrate] restoring {SERVICE}.service")
-            _systemctl("start", SERVICE)
+        wait_gpu_drained()
 
 
 def measure_speed(base_url: str, model: str, runs: int = 3) -> dict:

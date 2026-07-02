@@ -216,29 +216,47 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     current_versions = {cap: ver for cap, (_, ver) in suites.items()}
 
+    # Service is managed once per sweep, not per model: rapid stop/serve/kill/restart
+    # cycling is what wedged the GPU (GSP hang, Xid 119) on 2026-07-02.
+    manage_service = not args.endpoint and evalctl.service_active()
+    if manage_service:
+        evalctl.stop_service()
+
     failures = 0
-    for i, key in enumerate(selected, 1):
-        print(f"\n=== [{i}/{len(selected)}] {key} ===")
-        try:
-            card = evaluate(
-                key,
-                registry[key],
-                port=args.port,
-                only_suite=args.suite,
-                today=args.date,
-                endpoint=args.endpoint,
-                model_name=args.model_name,
-            )
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:  # one broken model must not kill an overnight sweep
-            print(f"[error] {key}: {e}")
-            failures += 1
-            continue
-        print(f"=== {key}: {card['verdict'].upper()} ===")
-        if not args.no_write:
-            paths = score.write_all(card, current_versions)
-            print("wrote:", ", ".join(str(p) for p in paths))
+    try:
+        for i, key in enumerate(selected, 1):
+            print(f"\n=== [{i}/{len(selected)}] {key} ===")
+            try:
+                card = evaluate(
+                    key,
+                    registry[key],
+                    port=args.port,
+                    only_suite=args.suite,
+                    today=args.date,
+                    endpoint=args.endpoint,
+                    model_name=args.model_name,
+                )
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:  # one broken model must not kill an overnight sweep
+                print(f"[error] {key}: {e}")
+                failures += 1
+                continue
+            print(f"=== {key}: {card['verdict'].upper()} ===")
+            if not args.no_write:
+                paths = score.write_all(card, current_versions)
+                print("wrote:", ", ".join(str(p) for p in paths))
+    finally:
+        if manage_service:
+            evalctl.start_service()
+            if evalctl.wait_port_healthy(args.port):
+                print("[orchestrate] service restored and healthy")
+            else:
+                print(
+                    "[orchestrate] WARNING: restored service is NOT healthy — "
+                    f"check `journalctl --user -u kvllm` and nvidia-smi (port {args.port})"
+                )
+                failures += 1
     return 1 if failures else 0
 
 
