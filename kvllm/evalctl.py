@@ -1,0 +1,181 @@
+"""Eval controller — make a registry model servable and measure the operational gate.
+
+The controller half of the Sprint 7 runner, split out per fable-planning/02: it owns
+"stop kvllm.service → serve model K standalone → health-wait → restore" and the operational
+measurements (cold start, VRAM, TTFT, decode tok/s). It knows nothing about suites or scoring —
+kvllm.evalrun composes this with the Inspect tasks in evals/.
+
+Speed is measured properly now (v1 gate was one 128-token sample including prefill): streamed
+completions, TTFT recorded separately, decode tok/s = (tokens-1)/(t_last - t_first), median of 3.
+"""
+
+from __future__ import annotations
+
+import os
+import signal
+import statistics
+import subprocess
+import time
+import urllib.request
+from contextlib import contextmanager
+from pathlib import Path
+
+from kvllm.registry import build_serve_argv
+
+SERVICE = "kvllm"
+HEALTH_TIMEOUT_S = 900
+
+REPO = Path(__file__).resolve().parent.parent
+SERVE_LOG_DIR = REPO / "eval-logs" / "serve"
+
+
+def _systemctl(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["systemctl", "--user", *args], capture_output=True, text=True
+    )
+
+
+def service_active() -> bool:
+    return _systemctl("is-active", SERVICE).stdout.strip() == "active"
+
+
+def gpu_used_mib() -> int | None:
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout
+        return int(out.strip().split("\n")[0])
+    except Exception:
+        return None
+
+
+def wait_healthy(
+    proc: subprocess.Popen, port: int, timeout_s: int = HEALTH_TIMEOUT_S
+) -> float | None:
+    """Block until /v1/models answers. Returns seconds-to-ready, or None if the serve
+    process dies (fast fail) or the timeout passes."""
+    url = f"http://localhost:{port}/v1/models"
+    t0 = time.time()
+    while time.time() - t0 < timeout_s:
+        if proc.poll() is not None:  # serve process exited (e.g. OOM)
+            return None
+        try:
+            with urllib.request.urlopen(url, timeout=2):
+                return time.time() - t0
+        except Exception:
+            time.sleep(2)
+    return None
+
+
+# Patterns whose last match in the serve log best explains a failed start.
+_ERROR_PATTERNS = (
+    "OutOfMemoryError",
+    "out of memory",
+    "No available memory for the cache",
+    "ValueError",
+    "RuntimeError",
+    "Error",
+)
+
+
+def serve_error(log_path: Path) -> str:
+    """Pull a concise failure reason out of the serve log (best-effort)."""
+    try:
+        lines = log_path.read_text().splitlines()
+    except OSError:
+        return ""
+    for pat in _ERROR_PATTERNS:
+        hits = [ln for ln in lines if pat in ln]
+        if hits:
+            # strip the vLLM "(EngineCore pid=...) ERROR ... [core.py:NN] " prefix
+            msg = hits[-1].split("] ", 1)[-1].strip()
+            return msg[:280]
+    return ""
+
+
+@contextmanager
+def serving(key: str, entry: dict, *, port: int):
+    """Serve `key` standalone for the duration of the block, stopping/restoring
+    kvllm.service around it. Yields (proc, serve_log_path); the caller decides health."""
+    prior_active = service_active()
+    if prior_active:
+        print(f"[orchestrate] stopping {SERVICE}.service to free the GPU")
+        _systemctl("stop", SERVICE)
+        time.sleep(2)
+
+    SERVE_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = SERVE_LOG_DIR / f"{key.replace('/', '_')}.log"
+    argv = build_serve_argv(key, entry, port=str(port))
+    print(f"[serve] {' '.join(argv)}")
+    log = open(log_path, "w")
+    proc = subprocess.Popen(
+        argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+    )
+    try:
+        yield proc, log_path
+    finally:
+        print("[serve] stopping model under test")
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            proc.wait(timeout=30)
+        except Exception:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                pass
+        log.close()
+        if prior_active:
+            print(f"[orchestrate] restoring {SERVICE}.service")
+            _systemctl("start", SERVICE)
+
+
+def measure_speed(base_url: str, model: str, runs: int = 3) -> dict:
+    """Streamed speed probe: median TTFT and decode tok/s over `runs` completions.
+    Returns {} if measurement fails (a gate detail, not a crash)."""
+    from openai import (
+        OpenAI,  # via vLLM's dependency chain; avoid import at module load
+    )
+
+    client = OpenAI(base_url=base_url, api_key="EMPTY")
+    ttfts, decodes = [], []
+    for _ in range(runs):
+        try:
+            t0 = time.time()
+            first = last = None
+            usage = None
+            stream = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "user", "content": "Write a short paragraph about GPUs."}
+                ],
+                max_tokens=128,
+                temperature=0.0,
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            for chunk in stream:
+                if getattr(chunk, "usage", None):
+                    usage = chunk.usage
+                delta = chunk.choices[0].delta if chunk.choices else None
+                content = delta and (
+                    delta.content or getattr(delta, "reasoning_content", None)
+                )
+                if content:
+                    last = time.time()
+                    if first is None:
+                        first = last
+            toks = getattr(usage, "completion_tokens", 0) or 0
+            if first and last and last > first and toks > 1:
+                ttfts.append(first - t0)
+                decodes.append((toks - 1) / (last - first))
+        except Exception:
+            continue
+    if not decodes:
+        return {}
+    return {
+        "ttft_s": round(statistics.median(ttfts), 2),
+        "decode_tok_s": round(statistics.median(decodes), 1),
+    }

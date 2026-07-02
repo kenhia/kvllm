@@ -111,12 +111,20 @@ helper-status:
 helper-logs:
     journalctl --user -u kvllm-helper -f
 
-# --- Eval (kvllm.eval; see docs/model-research/evals/) ---
+# --- Eval (kvllm.evalrun + evals/; see docs/model-research/evals/ and sprints/fable-planning/) ---
 
-# Evaluate a registered model on kai: serve it, run the suites matching its capabilities,
-# write a scorecard + rebuild the leaderboard + update models.toml. Orchestrates the service.
+# Evaluate registered model(s): serve → operational gate → Inspect suites → scorecard +
+# leaderboard + models.toml. Orchestrates kvllm.service around each model.
 eval key *flags:
-    uv run --group eval python -m kvllm.eval {{key}} --today "$(date +%F)" {{flags}}
+    uv run --group eval python -m kvllm.evalrun {{key}} {{flags}}
+
+# Sweep the registry (resumable: skips models already scored on current suite versions)
+eval-all *flags:
+    uv run --group eval python -m kvllm.evalrun --all {{flags}}
+
+# Prove the Docker sandbox path works (mock model, no GPU). Set DOCKER_HOST to test remote.
+eval-sandbox-smoke:
+    uv run --group eval python evals/sandbox_smoke.py
 
 # Open the HTML leaderboard
 eval-board:
