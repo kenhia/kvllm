@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from datetime import date
 
 from openai import OpenAI
 
@@ -271,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--today",
         default=os.environ.get("KVLLM_EVAL_DATE", ""),
-        help="YYYY-MM-DD stamp for the scorecard (defaults to env or 'undated')",
+        help="YYYY-MM-DD stamp for the scorecard (defaults to env or today)",
     )
     p.add_argument(
         "--no-write",
@@ -280,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = p.parse_args(argv)
 
-    today = args.today or "undated"
+    today = args.today or date.today().isoformat()
     card = evaluate(args.model_key, port=args.port, only_suite=args.suite, today=today)
     print(f"\n=== {card['model']}: {card['verdict'].upper()} ===")
     for cap, s in card["suites"].items():

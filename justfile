@@ -126,3 +126,10 @@ eval-board:
 lint:
     uv run --group dev ruff check .
     uv run --group dev ruff format --check .
+
+# Run the unit test suite (pure functions only — no network / no vLLM)
+test:
+    uv run --group dev --group eval --group test pytest tests/ -q
+
+# Lint + unit tests (fast — no live model needed)
+check: lint test

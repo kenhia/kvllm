@@ -24,3 +24,4 @@ TRT-LLM) and the roadmap.
 | [05](sprint-05-model-research.md) | Model collection research (survey + registry download set) | shipped 2026-06-30 |
 | [06](sprint-06-helper-skills.md) | Helper skills (/model-research + /model-scout) | shipped 2026-06-30 |
 | [07](sprint-07-eval-harness.md) | Eval harness (operational gate + tool-use suite + leaderboard) | shipped 2026-06-30 |
+| [08](sprint-08-eval-harness-v2.md) | Eval harness v2 (Inspect AI, sandboxed agentic+coding, weighted leaderboard) | in progress — Phase 0 done 2026-07-02 |
