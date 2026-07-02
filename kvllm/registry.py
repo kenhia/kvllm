@@ -99,6 +99,9 @@ def build_serve_argv(
         argv += ["--trust-remote-code"]
     if entry.get("enforce_eager"):
         argv += ["--enforce-eager"]  # skip CUDA-graph capture (saves VRAM; slower)
+    # Escape hatch for model-specific vllm flags with no dedicated field
+    # (e.g. Devstral's --tokenizer-mode/--config-format/--load-format mistral).
+    argv += [str(a) for a in entry.get("extra_args", [])]
     return argv
 
 

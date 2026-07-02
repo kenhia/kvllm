@@ -145,15 +145,87 @@ hf_repo = "QuantTrio/Qwen3.6-35B-A3B-AWQ"
 tool_parser = "qwen3_xml"
 reasoning_parser = "qwen3"
 quantization = "awq"
-max_model_len = 32768
+max_model_len = 8192
+enforce_eager = true
 gated = false
 est_vram_gb = 31
 capabilities = ["chat", "code", "vision", "tools", "reasoning"]
 tested = false
-notes = "DOESN'T FIT 32 GB (eval OOM): MoE keeps all 35B resident + fp16 vision/attention ≈ 30 GB, CUDA-graph capture tips it over. The '~20 GB' AWQ guess ignored MoE total params + partial quant. Plus/Max SKUs are proprietary, not this."
+notes = "RETRY (2026-07-02, candidates doc): both research prongs rank this #1 in class — SWE-V 73.4, TB2 51.5, MMMU ~81.7. First attempt OOM'd at 32K ctx + CUDA graphs; retry uses the 27B's proven fit recipe (8K ctx + enforce_eager). Sweep with --retry-skips or run the key directly."
 eval_verdict = "skip"
 eval_date = "2026-06-30"
 eval_notes = "(EngineCore pid=1578434) torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.03 GiB. GPU 0 has a total capacity of 31.35 GiB of which 811.25 MiB is free. Including non-PyTorch memory, this process has 30.54 GiB memory in use. Of the allocated memory 29.75 GiB is alloc"
+
+# --- Candidates (2026-07-02) — three-prong selection: whichllm hardware-fit passes +
+# agentic/tool-use research + multimodal research. Rationale + sources in
+# docs/model-research/candidates-2026-07.md. Untested: `just eval-all` sweeps them.
+
+[models."glm-4.7-flash-awq"]
+hf_repo = "QuantTrio/GLM-4.7-Flash-AWQ"
+tool_parser = "glm47"
+reasoning_parser = "glm45"
+quantization = "awq"
+max_model_len = 32768
+gated = false
+est_vram_gb = 24
+capabilities = ["chat", "code", "tools", "reasoning"]
+tested = false
+notes = "Zhipu agentic-flash MoE, 31B/~3.6B active (Jan 2026). tau2-bench 79.5, SWE-V ~59; proven single-5090 deployments ~140-160 tok/s. Purpose-built for exactly our agentic suite."
+
+[models."devstral-small-2-24b"]
+hf_repo = "mistralai/Devstral-Small-2-24B-Instruct-2512"
+tool_parser = "mistral"
+max_model_len = 32768
+extra_args = ["--tokenizer-mode", "mistral", "--config-format", "mistral", "--load-format", "mistral"]
+gated = false
+est_vram_gb = 28
+capabilities = ["chat", "code", "tools"]
+tested = false
+notes = "Mistral's agentic-coding 24B (Dec 2025), SWE-V 68.0, dedicated TOOL_CALLS tokens. Official weights ship FP8 (~24 GB) — native fit for the 5090. Known-good on vLLM 0.24 (0.22.1 had a regression)."
+
+[models."gpt-oss-20b"]
+hf_repo = "openai/gpt-oss-20b"
+tool_parser = "openai"
+max_model_len = 32768
+gated = false
+est_vram_gb = 18
+capabilities = ["chat", "code", "tools", "reasoning"]
+tested = false
+notes = "OpenAI open MoE 21B/3.6Ba, native MXFP4 (~14 GB), first-class Blackwell support — 300-400 tok/s class on a 5090. tau-bench Retail 54.8 (decent, not leader); harmony response format — verify the 'openai' tool parser against our tools suite."
+
+[models."qwen3.5-9b"]
+hf_repo = "Qwen/Qwen3.5-9B"
+tool_parser = "qwen3_xml"
+reasoning_parser = "qwen3"
+max_model_len = 32768
+gated = false
+est_vram_gb = 22
+capabilities = ["chat", "code", "vision", "tools", "reasoning"]
+tested = false
+notes = "Qwen3.5 dense 9B (Mar 2026): natively multimodal (early fusion, no -VL split), claimed to beat Qwen3-VL at similar scale. Direct upgrade candidate over qwen3-vl-8b; bf16 ~19 GB, lowest-risk add. Parser choice mirrors 3.6 line — verify."
+
+[models."gemma-4-12b-it"]
+hf_repo = "google/gemma-4-12B-it"
+tool_parser = "gemma4"
+reasoning_parser = "gemma4"
+max_model_len = 32768
+gated = false
+est_vram_gb = 27
+capabilities = ["chat", "code", "vision", "tools"]
+tested = false
+notes = "Gemma 4 12B (Apr 2026): encoder-free multimodal (image+audio), first Gemma gen with a real tool-call protocol (dedicated gemma4 vLLM parsers), family DocVQA ~94.9, per-request vision token budgets (cheap Grafana polling vs detailed reads). bf16 ~24 GB."
+
+[models."gemma-4-31b-it-awq"]
+hf_repo = "QuantTrio/gemma-4-31B-it-AWQ"
+tool_parser = "gemma4"
+reasoning_parser = "gemma4"
+quantization = "awq"
+max_model_len = 16384
+gated = false
+est_vram_gb = 25
+capabilities = ["chat", "code", "vision", "tools"]
+tested = false
+notes = "Gemma 4 dense 31B via AWQ (~19 GB). Google claims tau2-bench 86.4 (would beat GLM-4.7-Flash) — unverified; our harness is the verifier. Multimodal. NEVER serve with on-the-fly FP8 quantization (vllm#39049 gibberish); AWQ-marlin is the safe sm_120 path."
 
 # --- Frontier baselines (Sprint 8) — API models, not served on kai. Evaluated through the
 # same suites for a local-vs-frontier comparison; token usage + est cost captured per run.
