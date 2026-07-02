@@ -246,9 +246,70 @@ network-off). Both acceptance models scored end-to-end through the hardened orch
 restored + health-checked each time); leaderboard shows the new `code` column beside merged `tools`
 scores. Suite discriminates 0.05 vs 0.48. STOP per hand-off scope: no Phase 3, no eval-all, no reimage.
 
+## Phase 2 Fable review (2026-07-02)
+
+Approved with one finding overturned. #1 (coder never calls tools) and #2 (submit/×0.9/passed
+distortion) confirmed via transcripts. **#3 was wrong**: `iteration_rate` populated fine — it is
+**0.0**, a true measurement (Opus read the earlier capability-gated run). The richest transcript:
+qwen2.5-7b on `c3-inventory` runs `pytest` **five times with zero edits between runs**, narrating
+"the issue still persists" — it believes its prose descriptions of fixes are edits. Same
+hallucinated-action pathology as the coder, one notch milder: greenfield-write works,
+read-diagnose-edit doesn't. Exactly the discrimination S2 was designed to find.
+
+## What shipped — Phase 3: composite, judge, gate extensions (Fable, 2026-07-02)
+
+- **Coding scoring v2** (resolves review finding #2): ×0.9 only when a REAL limit fired
+  (`LimitScope.limit_error` at runtime / `sample.limit` log-side); "ended without submit()" is
+  recorded, not penalized. `passed` = raw_frac ≥ 0.999. `suite_from_log` recomputes canonically
+  from logged evidence — both 7Bs re-scored from cached transcripts, no GPU re-runs
+  (qwen2.5-7b code 48%→53%, its four fully-solved tasks now count).
+- **`eval-config.toml` + composite**: weights (tools .30 / code .35 / agentic .25 / judged .10),
+  speed curve (floor 10 → 0.5×, full 40 → 1.0×), verdict floors. `score.composite()` renormalizes
+  over *eligible* suites (weight>0, current version, judged only when calibrated); gate-only
+  models are unranked, not zero-ranked. **Verdict v2** derives from the composite — qwen2.5-7b
+  promoted has-issues→worth-trying (0.75; a strong generalist with mediocre-but-real agentic
+  coding isn't broken), coder stays has-issues via the suite floor (tools 27%).
+- **Leaderboard v3**: ranked, ①②③ medals, composite column, weights footer;
+  `evalrun --rebuild-board` re-ranks + refreshes stored verdicts after re-weighting — no re-runs.
+- **S4 `judged` suite** (6 tasks: incident summary, strict JSON, migration plan, config
+  explanation, constrained list, professional rewrite) with rubric + auto-zero + reference
+  facts; mechanical pre-checks cap the score on objective format rules; judge =
+  `[judge].model` (Haiku 4.5) returning structured score/rationale/violations → rationales in
+  scorecards. Suites now declare a *required capability* (`judged` rides on `chat` — every
+  model). Live on both 7Bs: **63%/62%** — close on general instruction-following (plausible for
+  siblings), and the judge is sharp: it caught a fatal stale-dump data-loss flaw in a migration
+  plan and a root-cause inversion in an incident summary, rubric-grounded.
+- **Calibration bundle**: `docs/model-research/evals/calibration/judged-sheet.md` (12 rows) for
+  Ken to hand-score; **judged stays out of the composite until `[judge].calibrated = true`**
+  (protocol: judge within ±1 on ≥80%). ANTHROPIC_API_KEY rides in the repo-local gitignored
+  `.env` (just's dotenv-load).
+- **Gate extensions**: `context_probe()` (75%-of-max_model_len prompt must complete;
+  `ctx_probe_ok` recorded, failure caps the verdict — passed live), and v1-gate cards now count
+  as stale in `--all` selection (deepseek/internvl re-measure next sweep).
+- anthropic pinned ≥0.115 (inspect provider floor; venv had vllm's 0.113 → first judged run
+  errored cleanly). 93 unit tests green.
+
+## Decisions & discoveries (Phase 3)
+
+- **Composite exposes the coverage story honestly**: models scored only on `tools` currently
+  out-rank qwen2.5-7b (which also carries the much harder code suite) — renormalization means
+  "fewer suites = friendlier composite" until coverage evens out. The fix is coverage, not math:
+  `qwen3.6-27b-awq` now has the `code` cap and queues for the coding suite next sweep, and
+  `judged` runs on everything.
+- The judged 63/62 near-tie between siblings is expected; discrimination within this suite will
+  come from stronger vs weaker model families (and the rationales already differentiate quality).
+- models.toml cosmetic: moved the 14b's eval keys above the survey comment block (tomlkit
+  appends after trailing comments; was valid TOML, read wrong).
+
 ## Follow-ups
-- **Fable end-of-phase review**: read the 3 flagged items above (esp. #2, the submit/×0.9/passed
-  interaction) against the `code/` transcripts; decide the Phase 3 scoring refinements.
-- **Phase 3** (weighted composite + judge): owns the scoring-presentation fixes flagged above.
-- Context-pressure probe deferred from the gate (fable-planning/03 §S0) — add in Phase 3.
+
+- **Ken — two inputs needed**: (1) hand-score
+  [`calibration/judged-sheet.md`](../docs/model-research/evals/calibration/judged-sheet.md) and
+  flip `[judge].calibrated` if ≥80% within ±1; (2) reimage the sandbox host when convenient
+  (blocks only the Phase 4 cutover, not the build).
+- **Phase 4** (agentic suite): implement with **Opus** against
+  [`fable-planning/07-agentic-suite-spec.md`](fable-planning/07-agentic-suite-spec.md) —
+  fixture-homelab image, 8 planted-truth episodes incl. the honesty task, hybrid scoring.
+- Next `just eval-all`: picks up 27B coding, judged for the rest of the fleet, and the
+  deepseek/internvl gate refresh in one sweep.
 - Consider a `just gpu-health` recipe (Xid scan + drained check) for pre-sweep sanity.
