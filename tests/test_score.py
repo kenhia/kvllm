@@ -88,12 +88,12 @@ def test_slug_replaces_slashes_and_keeps_dots():
 
 
 def test_row_marks_stale_suites():
-    row = score._row(_card(), {"tools": 3})
+    row = score._row(_card(), {"tools": 3}, score.load_config())
     assert row["suites"]["tools"] == {"pass_rate": 0.91, "stale": True}
 
 
 def test_row_current_suite_not_stale():
-    row = score._row(_card(), {"tools": 2})
+    row = score._row(_card(), {"tools": 2}, score.load_config())
     assert row["suites"]["tools"]["stale"] is False
 
 
@@ -102,7 +102,7 @@ def test_row_v1_card_falls_back_to_tokens_per_sec():
         operational={"served": True, "gpu_used_mib": 1, "tokens_per_sec": 90.3},
         suites={"tools": {"passed": 7, "total": 7, "pass_rate": 1.0, "cases": []}},
     )
-    row = score._row(card, {"tools": 2})
+    row = score._row(card, {"tools": 2}, score.load_config())
     assert row["tok_s"] == 90.3
     assert row["suites"]["tools"]["stale"] is True  # v1 card has no version
 
@@ -248,3 +248,182 @@ def test_normalize_log_path_plain_and_file_uri():
 
 def test_normalize_log_path_outside_repo_stays_absolute():
     assert score._normalize_log_path("/tmp/elsewhere/x.eval") == "/tmp/elsewhere/x.eval"
+
+
+# --- partial-credit recompute (coding-style cases) ------------------------------------
+
+
+def _fake_log(monkeypatch, samples):
+    """Point suite_from_log's read_eval_log at a canned log object."""
+    import kvllm.score as score_mod
+
+    class _Log:
+        status = "success"
+
+        def __init__(self, samples):
+            self.samples = samples
+
+    import inspect_ai.log as ial
+
+    monkeypatch.setattr(ial, "read_eval_log", lambda p: _Log(samples))
+    return score_mod
+
+
+def test_suite_from_log_recomputes_from_raw_frac(tmp_path, monkeypatch):
+    from types import SimpleNamespace as NS
+
+    samples = [
+        # solved fully, no real limit, old-style ×0.9 explanation -> cleaned + full credit
+        NS(
+            id="a",
+            limit=None,
+            scores={
+                "s": NS(
+                    value=0.9,
+                    metadata={"raw_frac": 1.0},
+                    explanation="8/8 hidden tests; hit message/time limit (×0.9)",
+                )
+            },
+        ),
+        # partial + REAL limit -> ×0.9 kept
+        NS(
+            id="b",
+            limit=NS(type="message", limit=30),
+            scores={"s": NS(value=0.45, metadata={"raw_frac": 0.5}, explanation="4/8")},
+        ),
+    ]
+    score_mod = _fake_log(monkeypatch, samples)
+    result = score_mod.suite_from_log("x.eval", 1)
+    by = {c["name"]: c for c in result["cases"]}
+    assert by["a"]["score"] == 1.0 and by["a"]["passed"] is True
+    assert "×0.9" not in by["a"]["detail"]
+    assert by["b"]["score"] == 0.45 and by["b"]["passed"] is False
+    assert result["pass_rate"] == round((1.0 + 0.45) / 2, 2)
+
+
+def test_suite_from_log_binary_cases_unchanged(tmp_path, monkeypatch):
+    from types import SimpleNamespace as NS
+
+    samples = [
+        NS(
+            id="t1",
+            limit=None,
+            scores={"s": NS(value="C", metadata=None, explanation="ok")},
+        ),
+        NS(
+            id="t2",
+            limit=None,
+            scores={"s": NS(value="I", metadata=None, explanation="no")},
+        ),
+    ]
+    score_mod = _fake_log(monkeypatch, samples)
+    result = score_mod.suite_from_log("x.eval", 2)
+    assert result["passed"] == 1 and result["total"] == 2 and result["pass_rate"] == 0.5
+
+
+# --- composite / speed factor / verdict v2 -----------------------------------------------
+
+
+def _cfg(**over):
+    cfg = {
+        "weights": {"tools": 0.30, "code": 0.35, "agentic": 0.25, "judged": 0.10},
+        "speed": {"floor_tok_s": 10, "full_tok_s": 40},
+        "verdict": {"composite_floor": 0.55, "suite_floor": 0.40},
+        "judge": {"model": "anthropic/x", "calibrated": False},
+    }
+    cfg.update(over)
+    return cfg
+
+
+def test_speed_factor_curve():
+    cfg = _cfg()
+    assert score.speed_factor(None, cfg) == 1.0
+    assert score.speed_factor(5, cfg) == 0.5
+    assert score.speed_factor(10, cfg) == 0.5
+    assert score.speed_factor(40, cfg) == 1.0
+    assert score.speed_factor(100, cfg) == 1.0
+    assert score.speed_factor(25, cfg) == 0.75
+
+
+def _comp_card(suites, decode=100.0):
+    return {"suites": suites, "operational": {"decode_tok_s": decode}}
+
+
+def test_composite_renormalizes_over_eligible():
+    # tools 1.0 (w .30) + code 0.5 (w .35) -> (0.3 + 0.175) / 0.65
+    card = _comp_card(
+        {
+            "tools": {"version": 2, "pass_rate": 1.0},
+            "code": {"version": 1, "pass_rate": 0.5},
+        }
+    )
+    comp = score.composite(card, _cfg(), {"tools": 2, "code": 1})
+    assert comp["composite"] == round((0.3 + 0.175) / 0.65, 3)
+    assert comp["eligible"] == ["code", "tools"]
+    assert comp["speed_factor"] == 1.0
+
+
+def test_composite_excludes_stale_and_uncalibrated_judged():
+    card = _comp_card(
+        {
+            "tools": {"version": 1, "pass_rate": 1.0},  # stale (current is 2)
+            "judged": {"version": 1, "pass_rate": 1.0},  # uncalibrated
+            "code": {"version": 1, "pass_rate": 0.6},
+        }
+    )
+    comp = score.composite(card, _cfg(), {"tools": 2, "code": 1, "judged": 1})
+    assert comp["eligible"] == ["code"]
+    assert comp["composite"] == 0.6
+
+
+def test_composite_none_when_no_eligible_suites():
+    assert score.composite(_comp_card({}), _cfg(), {}) is None
+
+
+def test_composite_applies_speed_factor():
+    card = _comp_card({"code": {"version": 1, "pass_rate": 1.0}}, decode=25)
+    comp = score.composite(card, _cfg(), {"code": 1})
+    assert comp["speed_factor"] == 0.75
+    assert comp["composite"] == 0.75
+
+
+def test_verdict_v2_composite_floor():
+    # tools 100% + code 53% -> composite (0.3 + 0.1855)/0.65 = 0.747 -> worth trying
+    suites = {
+        "tools": {"version": 2, "pass_rate": 1.0},
+        "code": {"version": 1, "pass_rate": 0.53},
+    }
+    v = score.verdict(
+        True, suites, 105.0, cfg=_cfg(), current_versions={"tools": 2, "code": 1}
+    )
+    assert v == "worth trying"
+
+
+def test_verdict_v2_suite_floor_caps():
+    # coder: tools 27% (< suite_floor 0.40) -> has issues regardless of composite
+    suites = {
+        "tools": {"version": 2, "pass_rate": 0.27},
+        "code": {"version": 1, "pass_rate": 0.9},
+    }
+    v = score.verdict(
+        True, suites, 105.0, cfg=_cfg(), current_versions={"tools": 2, "code": 1}
+    )
+    assert v == "has issues"
+
+
+def test_verdict_v2_speed_floor_still_caps():
+    suites = {"tools": {"version": 2, "pass_rate": 1.0}}
+    assert score.verdict(True, suites, 9.0, cfg=_cfg()) == "has issues"
+
+
+def test_ranked_ordering_and_medals():
+    rows = [
+        {"model": "b", "composite": 0.5},
+        {"model": "gate-only", "composite": None},
+        {"model": "a", "composite": 0.9},
+        {"model": "c", "composite": 0.7},
+    ]
+    ranked = score._ranked(rows)
+    assert [r["model"] for r in ranked] == ["a", "c", "b", "gate-only"]
+    assert [r.get("medal") for r in ranked] == ["①", "②", "③", ""]
+    assert ranked[3]["rank"] is None

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import html
 import json
+import tomllib
 from pathlib import Path
 
 import tomlkit
@@ -23,30 +24,114 @@ import tomlkit
 REPO = Path(__file__).resolve().parent.parent
 EVALS = REPO / "docs" / "model-research" / "evals"
 REGISTRY = REPO / "models.toml"
+CONFIG = REPO / "eval-config.toml"
 
 VERDICT_EMOJI = {"worth trying": "✅", "has issues": "⚠️", "skip": "❌"}
 
-PASS_THRESHOLD = 0.8
-MIN_DECODE_TOK_S = 10.0  # below this a model "works" but is too slow to be practical
+MIN_DECODE_TOK_S = 10.0  # config [speed].floor_tok_s default; kept as a module fallback
+
+_DEFAULT_CONFIG = {
+    "weights": {"tools": 0.30, "code": 0.35, "agentic": 0.25, "judged": 0.10},
+    "speed": {"floor_tok_s": 10, "full_tok_s": 40},
+    "verdict": {"composite_floor": 0.55, "suite_floor": 0.40},
+    "judge": {"model": "anthropic/claude-haiku-4-5-20251001", "calibrated": False},
+}
 
 
-def verdict(served: bool, suites: dict, decode_tok_s: float | None = None) -> str:
-    """worth trying / has issues / skip — same thresholds as v1 (weights are Phase 3)."""
+def load_config() -> dict:
+    """eval-config.toml with defaults filled per-section (missing file → all defaults)."""
+    cfg = {k: dict(v) for k, v in _DEFAULT_CONFIG.items()}
+    if CONFIG.is_file():
+        for section, values in tomllib.loads(CONFIG.read_text()).items():
+            cfg.setdefault(section, {}).update(values)
+    return cfg
+
+
+# --- composite score (fable-planning/03) -------------------------------------------------
+
+
+def speed_factor(decode_tok_s: float | None, cfg: dict) -> float:
+    """Multiplier from decode tok/s: ≤ floor → 0.5, ≥ full → 1.0, linear between.
+    Unmeasured speed → 1.0 (the gate warns loudly when it can't measure)."""
+    if decode_tok_s is None:
+        return 1.0
+    floor = cfg["speed"]["floor_tok_s"]
+    full = cfg["speed"]["full_tok_s"]
+    if decode_tok_s <= floor:
+        return 0.5
+    if decode_tok_s >= full:
+        return 1.0
+    return round(0.5 + 0.5 * (decode_tok_s - floor) / (full - floor), 3)
+
+
+def composite(
+    card: dict, cfg: dict, current_versions: dict[str, int] | None = None
+) -> dict | None:
+    """Weighted composite over the suites the model is ELIGIBLE for: weight > 0, scored at the
+    current suite version (stale scores are shown † but never ranked), and — for `judged` —
+    only once the judge is calibrated. Weights renormalize over eligible suites. Returns None
+    when no suite is eligible (gate-only models are unranked, not zero-ranked)."""
+    weights = cfg["weights"]
+    eligible: dict[str, float] = {}
+    for cap, s in card.get("suites", {}).items():
+        w = weights.get(cap, 0.0)
+        if w <= 0:
+            continue
+        if cap == "judged" and not cfg["judge"].get("calibrated"):
+            continue
+        if (
+            current_versions
+            and cap in current_versions
+            and s.get("version") != current_versions[cap]
+        ):
+            continue
+        eligible[cap] = s.get("pass_rate", 0.0)
+    if not eligible:
+        return None
+    wsum = sum(weights[cap] for cap in eligible)
+    base = sum(weights[cap] * rate for cap, rate in eligible.items()) / wsum
+    sf = speed_factor(card.get("operational", {}).get("decode_tok_s"), cfg)
+    return {
+        "composite": round(sf * base, 3),
+        "base": round(base, 3),
+        "speed_factor": sf,
+        "eligible": sorted(eligible),
+    }
+
+
+def verdict(
+    served: bool,
+    suites: dict,
+    decode_tok_s: float | None = None,
+    *,
+    cfg: dict | None = None,
+    current_versions: dict[str, int] | None = None,
+) -> str:
+    """worth trying / has issues / skip, derived from the composite (fable-planning/03):
+    `skip` = gate failed; `has issues` = composite < floor, decode at/below the speed floor,
+    or any weighted suite < suite_floor; else `worth trying`. Gate-only models (no eligible
+    suites) fall back to the speed check alone — v1 behavior."""
     if not served:
         return "skip"
-    rates = [s.get("pass_rate", 0.0) for s in suites.values()]
-    base = (
-        "worth trying"
-        if (not suites or all(r >= PASS_THRESHOLD for r in rates))
-        else "has issues"
-    )
-    if (
-        base == "worth trying"
-        and decode_tok_s is not None
-        and decode_tok_s < MIN_DECODE_TOK_S
-    ):
+    cfg = cfg or load_config()
+    floor = cfg["speed"]["floor_tok_s"]
+    if decode_tok_s is not None and decode_tok_s <= floor:
         return "has issues"
-    return base
+    comp = composite(
+        {"suites": suites, "operational": {"decode_tok_s": decode_tok_s}},
+        cfg,
+        current_versions,
+    )
+    if comp is None:
+        return "worth trying"
+    if comp["composite"] < cfg["verdict"]["composite_floor"]:
+        return "has issues"
+    suite_floor = cfg["verdict"]["suite_floor"]
+    weights = cfg["weights"]
+    for cap in comp["eligible"]:
+        if weights.get(cap, 0) > 0 and suites[cap].get("pass_rate", 0.0) < suite_floor:
+            return "has issues"
+    return "worth trying"
 
 
 # --- inspect log → suite result ---------------------------------------------------------
@@ -90,14 +175,27 @@ def suite_from_log(log_path: str | Path, version: int) -> dict:
     cases = []
     for sample in log.samples or []:
         sc = next(iter((sample.scores or {}).values()), None)
-        pts = _points(sc.value) if sc else 0.0
+        meta = dict(sc.metadata) if sc and sc.metadata else {}
+        detail = (sc.explanation if sc else "no score recorded") or ""
+        if "raw_frac" in meta:
+            # Partial-credit suite: recompute canonically from the logged evidence, so old
+            # logs (whose scorer penalized ×0.9 for merely not calling submit) and new ones
+            # score identically: penalty only when a REAL limit terminated the sample.
+            real_limit = bool(getattr(sample, "limit", None))
+            pts = meta["raw_frac"] * (0.9 if real_limit else 1.0)
+            passed = meta["raw_frac"] >= 0.999
+            if not real_limit:
+                detail = detail.replace("; hit message/time limit (×0.9)", "")
+        else:
+            pts = _points(sc.value) if sc else 0.0
+            passed = pts >= 0.999
         cases.append(
             {
                 "name": str(sample.id),
-                "passed": pts >= 0.999,
+                "passed": passed,
                 "score": round(pts, 3),
-                "detail": (sc.explanation if sc else "no score recorded") or "",
-                "meta": dict(sc.metadata) if sc and sc.metadata else {},
+                "detail": detail,
+                "meta": meta,
             }
         )
     n = len(cases)
@@ -231,7 +329,7 @@ def scorecard_current(model: str, needed_versions: dict[str, int]) -> bool:
 # --- leaderboard -----------------------------------------------------------------------
 
 
-def _row(card: dict, current_versions: dict[str, int] | None) -> dict:
+def _row(card: dict, current_versions: dict[str, int] | None, cfg: dict) -> dict:
     op = card["operational"]
     suites = {}
     for cap, s in card["suites"].items():
@@ -241,10 +339,14 @@ def _row(card: dict, current_versions: dict[str, int] | None) -> dict:
             and s.get("version") != current_versions[cap]
         )
         suites[cap] = {"pass_rate": s["pass_rate"], "stale": stale}
+    comp = composite(card, cfg, current_versions)
     return {
         "model": card["model"],
         "verdict": card["verdict"],
         "date": card["date"],
+        "composite": comp["composite"] if comp else None,
+        "speed_factor": comp["speed_factor"] if comp else None,
+        "eligible": comp["eligible"] if comp else [],
         "gpu_mib": op.get("gpu_used_mib"),
         # v1 cards measured a single blended tokens_per_sec; fall back so old rows still show
         "tok_s": op.get("decode_tok_s", op.get("tokens_per_sec")),
@@ -254,6 +356,33 @@ def _row(card: dict, current_versions: dict[str, int] | None) -> dict:
     }
 
 
+_MEDALS = {0: "①", 1: "②", 2: "③"}
+
+
+def _ranked(rows: list[dict]) -> list[dict]:
+    """Sort by composite desc (unranked models after, alphabetical); attach medal ranks."""
+    ranked = sorted(
+        rows,
+        key=lambda r: (r["composite"] is None, -(r["composite"] or 0), r["model"]),
+    )
+    place = 0
+    for r in ranked:
+        r["rank"] = None
+        if r["composite"] is not None:
+            r["rank"] = place + 1
+            r["medal"] = _MEDALS.get(place, "")
+            place += 1
+        else:
+            r["medal"] = ""
+    return ranked
+
+
+def _comp_cell(r: dict) -> str:
+    if r["composite"] is None:
+        return "—"
+    return f"{r['medal']} {r['composite']:.2f}".strip()
+
+
 def _cell(row: dict, cap: str) -> str:
     s = row["suites"].get(cap)
     if s is None:
@@ -261,8 +390,21 @@ def _cell(row: dict, cap: str) -> str:
     return f"{s['pass_rate']:.0%}{'†' if s['stale'] else ''}"
 
 
+def _weights_note(cfg: dict) -> str:
+    ws = ", ".join(f"{k} {v:.2f}" for k, v in cfg["weights"].items() if v > 0)
+    judged = (
+        "" if cfg["judge"].get("calibrated") else " · judged excluded until calibrated"
+    )
+    return (
+        f"composite = speed_factor × weighted mean ({ws}); "
+        f"speed floor {cfg['speed']['floor_tok_s']} / full {cfg['speed']['full_tok_s']} tok/s"
+        f"{judged} — tune in eval-config.toml"
+    )
+
+
 def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Path]:
-    rows = [_row(c, current_versions) for c in _latest_scorecards()]
+    cfg = load_config()
+    rows = _ranked([_row(c, current_versions, cfg) for c in _latest_scorecards()])
     suite_keys = sorted({k for r in rows for k in r["suites"]})
     any_stale = any(s["stale"] for r in rows for s in r["suites"].values())
 
@@ -273,6 +415,7 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
                 "rows": rows,
                 "suites": suite_keys,
                 "current_versions": current_versions or {},
+                "config": {k: cfg[k] for k in ("weights", "speed", "verdict")},
             },
             indent=2,
         )
@@ -280,7 +423,9 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
     )
 
     hdr = [
+        "rank",
         "model",
+        "composite",
         "verdict",
         *suite_keys,
         "GPU MiB",
@@ -299,7 +444,12 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
         "|" + "---|" * len(hdr),
     ]
     for r in rows:
-        cells = [r["model"], f"{VERDICT_EMOJI.get(r['verdict'], '')} {r['verdict']}"]
+        cells = [
+            str(r["rank"] or "—"),
+            r["model"],
+            _comp_cell(r),
+            f"{VERDICT_EMOJI.get(r['verdict'], '')} {r['verdict']}",
+        ]
         cells += [_cell(r, k) for k in suite_keys]
         cells += [
             str(r["gpu_mib"] or "—"),
@@ -309,19 +459,22 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
             r["date"],
         ]
         md.append("| " + " | ".join(cells) + " |")
+    md += ["", f"_{_weights_note(cfg)}_"]
     if any_stale:
         md += ["", "† scored on an older suite version — re-run `just eval <key>`."]
     mpath = EVALS / "leaderboard.md"
     mpath.write_text("\n".join(md) + "\n")
 
     hpath = EVALS / "leaderboard.html"
-    hpath.write_text(_html(rows, suite_keys, any_stale))
+    hpath.write_text(_html(rows, suite_keys, any_stale, cfg))
     return [jpath, mpath, hpath]
 
 
-def _html(rows: list[dict], suite_keys: list[str], any_stale: bool) -> str:
+def _html(rows: list[dict], suite_keys: list[str], any_stale: bool, cfg: dict) -> str:
     head = [
+        "rank",
         "model",
+        "composite",
         "verdict",
         *suite_keys,
         "GPU MiB",
@@ -337,7 +490,9 @@ def _html(rows: list[dict], suite_keys: list[str], any_stale: bool) -> str:
             r["verdict"], ""
         )
         tds = [
+            f"<td>{r['rank'] or '—'}</td>",
             f'<td class="m">{html.escape(r["model"])}</td>',
+            f'<td class="m">{html.escape(_comp_cell(r))}</td>',
             f'<td class="{cls}">{VERDICT_EMOJI.get(r["verdict"], "")} '
             f"{html.escape(r['verdict'])}</td>",
         ]
@@ -350,11 +505,12 @@ def _html(rows: list[dict], suite_keys: list[str], any_stale: bool) -> str:
             f"<td>{html.escape(r['date'])}</td>",
         ]
         trs.append("<tr>" + "".join(tds) + "</tr>")
-    stale_note = (
-        '<div class="sub">† scored on an older suite version — re-run <code>just eval</code>.</div>'
-        if any_stale
-        else ""
-    )
+    stale_note = f'<div class="sub">{html.escape(_weights_note(cfg))}</div>'
+    if any_stale:
+        stale_note += (
+            '<div class="sub">† scored on an older suite version — '
+            "re-run <code>just eval</code>.</div>"
+        )
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>kvllm evals</title>
 <style>
@@ -395,6 +551,29 @@ def update_registry(card: dict) -> Path | None:
         del entry["eval_notes"]  # clear a stale failure note when the model now passes
     REGISTRY.write_text(tomlkit.dumps(doc))
     return REGISTRY
+
+
+def refresh_verdicts(current_versions: dict[str, int] | None = None) -> list[str]:
+    """Recompute every latest scorecard's verdict under the current eval-config.toml (verdicts
+    are derived from the composite, so re-weighting can change them). Rewrites the scorecard +
+    models.toml for any model whose verdict changed; returns the changed model keys."""
+    cfg = load_config()
+    changed = []
+    for card in _latest_scorecards():
+        op = card.get("operational", {})
+        new = verdict(
+            op.get("served", False),
+            card.get("suites", {}),
+            op.get("decode_tok_s"),
+            cfg=cfg,
+            current_versions=current_versions,
+        )
+        if new != card.get("verdict"):
+            changed.append(f"{card['model']}: {card.get('verdict')} → {new}")
+            card["verdict"] = new
+            write_scorecard(card)
+            update_registry(card)
+    return changed
 
 
 def write_all(card: dict, current_versions: dict[str, int] | None = None) -> list[Path]:

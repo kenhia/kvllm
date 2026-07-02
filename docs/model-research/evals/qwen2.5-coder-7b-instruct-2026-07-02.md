@@ -4,7 +4,7 @@
 
 ## Operational
 - served: True
-- cold start: 24.0 s
+- cold start: 22.0 s
 - GPU used: 29414 MiB
 - TTFT: 0.02 s
 - decode tok/s: 105.5
@@ -25,18 +25,18 @@ _Transcript: `eval-logs/qwen2.5-coder-7b-instruct/2026-07-02/2026-07-02T03-28-45
 
 ## Suite: code v1 — 0/15 (5%)
 _Transcript: `eval-logs/qwen2.5-coder-7b-instruct/2026-07-02/code/2026-07-02T07-12-34-00-00_coding_G5pHPqTxjy6rWGMzs6Q78L.eval` (open with `inspect view`)._
-- ❌ `c1-dedupe` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_dedupe; hit message/time limit (×0.9)
-- ❌ `c1-merge-intervals` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_merge_intervals; hit message/time limit (×0.9)
-- ❌ `c1-parse-duration` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_parse_duration; hit message/time limit (×0.9)
-- ❌ `c1-parse-size` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_parse_size; hit message/time limit (×0.9)
-- ❌ `c1-slugify` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_slugify; hit message/time limit (×0.9)
-- ❌ `c1-tail-lines` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_tail_lines; hit message/time limit (×0.9)
-- ❌ `c2-csvfilter` (0%) — 0/5 hidden tests; failed: test_no_conditions_returns_all, test_single_condition, test_multi_condition_and, test_no_matches_header_only, test_quoting_preserved; hit message/time limit (×0.9)
-- ❌ `c2-dumon` (0%) — 0/6 hidden tests; failed: test_basic_threshold_and_order, test_two_spaces_before_path, test_strictly_greater, test_tie_broken_by_path, test_rounding_to_nearest_mb; hit message/time limit (×0.9)
-- ❌ `c2-jsonmerge` (0%) — 0/6 hidden tests; failed: test_deep_merge_recurses_dicts, test_later_scalar_wins, test_array_replaces_not_merges, test_type_mismatch_replaces, test_three_files; hit message/time limit (×0.9)
-- ❌ `c2-logsum` (0%) — 0/4 hidden tests; failed: test_ordering_and_ties, test_blank_lines_ignored, test_top_errors_capped_at_three, test_error_message_tie_alpha; hit message/time limit (×0.9)
-- ❌ `c3-inventory` (11%) — 1/8 hidden tests; failed: test_two_instances_independent, test_remove_missing_is_noop, test_remove_more_than_present_clamps, test_three_instances_independent, test_remove_then_readd; hit message/time limit (×0.9)
-- ❌ `c3-stats-pure` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_stats; hit message/time limit (×0.9)
-- ❌ `c3-todo-due` (36%) — 4/10 hidden tests; failed: test_due_before_keeps_earlier, test_due_before_excludes_none_due, test_status_and_due_combine, test_due_before_is_strict_boundary, test_done_and_due_combine; hit message/time limit (×0.9)
-- ❌ `c4-lru-bugs` (22%) — 2/8 hidden tests; failed: test_capacity_evicts_lru, test_get_refreshes_recency, test_overwrite_refreshes_recency, test_repeated_get_keeps_key_alive, test_capacity_one; hit message/time limit (×0.9)
-- ❌ `c4-rolling` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_rolling; hit message/time limit (×0.9)
+- ❌ `c1-dedupe` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_dedupe
+- ❌ `c1-merge-intervals` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_merge_intervals
+- ❌ `c1-parse-duration` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_parse_duration
+- ❌ `c1-parse-size` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_parse_size
+- ❌ `c1-slugify` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_slugify
+- ❌ `c1-tail-lines` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_tail_lines
+- ❌ `c2-csvfilter` (0%) — 0/5 hidden tests; failed: test_no_conditions_returns_all, test_single_condition, test_multi_condition_and, test_no_matches_header_only, test_quoting_preserved
+- ❌ `c2-dumon` (0%) — 0/6 hidden tests; failed: test_basic_threshold_and_order, test_two_spaces_before_path, test_strictly_greater, test_tie_broken_by_path, test_rounding_to_nearest_mb
+- ❌ `c2-jsonmerge` (0%) — 0/6 hidden tests; failed: test_deep_merge_recurses_dicts, test_later_scalar_wins, test_array_replaces_not_merges, test_type_mismatch_replaces, test_three_files
+- ❌ `c2-logsum` (0%) — 0/4 hidden tests; failed: test_ordering_and_ties, test_blank_lines_ignored, test_top_errors_capped_at_three, test_error_message_tie_alpha
+- ❌ `c3-inventory` (12%) — 1/8 hidden tests; failed: test_two_instances_independent, test_remove_missing_is_noop, test_remove_more_than_present_clamps, test_three_instances_independent, test_remove_then_readd
+- ❌ `c3-stats-pure` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_stats
+- ❌ `c3-todo-due` (40%) — 4/10 hidden tests; failed: test_due_before_keeps_earlier, test_due_before_excludes_none_due, test_status_and_due_combine, test_due_before_is_strict_boundary, test_done_and_due_combine
+- ❌ `c4-lru-bugs` (25%) — 2/8 hidden tests; failed: test_capacity_evicts_lru, test_get_refreshes_recency, test_overwrite_refreshes_recency, test_repeated_get_keeps_key_alive, test_capacity_one
+- ❌ `c4-rolling` (0%) — 0/1 hidden tests; failed: .hidden_tests.test_rolling

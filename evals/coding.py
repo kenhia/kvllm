@@ -187,8 +187,11 @@ def coding_agent():
         # LimitExceededError, so control resumes after the `with` — we must still return a
         # TaskState (react mutates it in place, so it holds the partial transcript). Returning
         # inside the `with` would return None on a caught limit and crash scoring.
-        with apply_limits([message_limit(limit)], catch_errors=True):
+        with apply_limits([message_limit(limit)], catch_errors=True) as scope:
             state = await _REACT_SOLVER(state, generate)
+        # Whether a REAL limit fired (vs the episode just ending without submit — Phase 2
+        # showed local models routinely never call submit(); that alone is not a limit hit).
+        state.metadata["hit_real_limit"] = scope.limit_error is not None
         return state
 
     return solve
@@ -233,7 +236,10 @@ def coding_scorer():
         frac = passed / total if total else 0.0
 
         sig = extract_coding_signals(state.messages)
-        hit_limit = not sig["submitted"]
+        # ×0.9 only when a REAL message/time limit fired. "Ended without calling submit()" is
+        # common local-model behavior (Phase 2: 0/30 episodes submitted) and already shows up
+        # in the tools suite — penalizing finished work for it distorted the coding signal.
+        hit_limit = bool(state.metadata.get("hit_real_limit"))
         points = round(frac * (0.9 if hit_limit else 1.0), 3)
         recovered = sig["saw_failing_run"] and frac >= 0.8
 
@@ -241,13 +247,16 @@ def coding_scorer():
         if failed:
             detail += f"; failed: {', '.join(failed[:5])}"
         if hit_limit:
-            detail += "; hit message/time limit (×0.9)"
+            detail += "; hit message limit (×0.9)"
+        elif not sig["submitted"]:
+            detail += "; ended without submit()"
         return Score(
             value=points,
             answer=f"{passed}/{total}",
             explanation=detail,
             metadata={
                 "tier": tier,
+                "submitted": sig["submitted"],
                 "hit_limit": hit_limit,
                 "test_runs": sig["test_runs"],
                 "saw_failing_run": sig["saw_failing_run"],

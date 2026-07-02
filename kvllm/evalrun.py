@@ -163,6 +163,7 @@ def evaluate(
         card["operational"].get("served", False),
         card["suites"],
         card["operational"].get("decode_tok_s"),
+        current_versions={cap: ver for cap, (_, ver) in suites.items()},
     )
     return card
 
@@ -223,7 +224,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="don't write scorecard/leaderboard/registry",
     )
+    p.add_argument(
+        "--rebuild-board",
+        action="store_true",
+        help="rebuild the leaderboard from existing scorecards (after re-weighting "
+        "eval-config.toml) — runs no evals",
+    )
     args = p.parse_args(argv)
+
+    if args.rebuild_board:
+        suites = _suites()
+        versions = {cap: ver for cap, (_, ver) in suites.items()}
+        for change in score.refresh_verdicts(versions):
+            print("verdict:", change)
+        paths = score.write_leaderboard(versions)
+        print("rebuilt:", ", ".join(str(p) for p in paths))
+        return 0
 
     if args.endpoint and (args.all or len(args.keys) != 1):
         sys.exit("error: --endpoint evaluates exactly one model key")
