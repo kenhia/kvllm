@@ -183,8 +183,13 @@ def coding_agent():
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         limit = TIER_MSG_LIMIT.get(state.metadata.get("tier"), 40)
+        # catch_errors=True: when the limit fires, apply_limits SUPPRESSES the
+        # LimitExceededError, so control resumes after the `with` — we must still return a
+        # TaskState (react mutates it in place, so it holds the partial transcript). Returning
+        # inside the `with` would return None on a caught limit and crash scoring.
         with apply_limits([message_limit(limit)], catch_errors=True):
-            return await _REACT_SOLVER(state, generate)
+            state = await _REACT_SOLVER(state, generate)
+        return state
 
     return solve
 
