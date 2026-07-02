@@ -126,6 +126,11 @@ eval-all *flags:
 eval-sandbox-smoke:
     uv run --group eval python evals/sandbox_smoke.py
 
+# Self-test the coding suite: every task's reference solution must pass its hidden tests
+# (needs Docker; no GPU/model). Run before trusting a coding eval.
+test-coding-suite:
+    uv run --group eval python -m evals.coding_selftest
+
 # Open the HTML leaderboard
 eval-board:
     @echo "docs/model-research/evals/leaderboard.html"

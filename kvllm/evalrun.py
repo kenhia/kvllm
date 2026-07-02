@@ -33,10 +33,15 @@ LOG_ROOT = REPO / "eval-logs"
 def _suites():
     """Capability tag → (task factory, version). Imported lazily to keep inspect off the
     CLI-arg-error path. Extend as suites land (fable-planning/03)."""
+    from evals.coding import VERSION as CODING_VERSION
+    from evals.coding import coding
     from evals.tools import VERSION as TOOLS_VERSION
     from evals.tools import tools
 
-    return {"tools": (tools, TOOLS_VERSION)}
+    return {
+        "tools": (tools, TOOLS_VERSION),
+        "code": (coding, CODING_VERSION),
+    }
 
 
 def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
@@ -145,6 +150,9 @@ def evaluate(
                     )
                 card["suites"] = _run_suites(key, base_url, to_run, log_dir)
 
+    # Fold in suites this run didn't cover (e.g. `--suite code` keeps prior tools results),
+    # so the model's card — and its one leaderboard row — stays complete.
+    card["suites"] = score.merge_prior_suites(key, card["suites"])
     card["verdict"] = score.verdict(
         card["operational"].get("served", False),
         card["suites"],

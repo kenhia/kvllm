@@ -67,35 +67,79 @@ def _normalize_log_path(log_path: str | Path) -> str:
         return str(p)
 
 
+def _points(value) -> float:
+    """A score value → [0, 1] points. Binary suites (tools) use CORRECT/INCORRECT ('C'/'I');
+    partial-credit suites (coding) use a float 0..1. Both collapse here."""
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return 1.0 if value == "C" else 0.0
+    return 0.0
+
+
 def suite_from_log(log_path: str | Path, version: int) -> dict:
-    """Reduce one Inspect .eval log to the scorecard suite shape (per-case pass/detail)."""
+    """Reduce one Inspect .eval log to the scorecard suite shape. Handles both binary
+    (tools: pass_rate = fraction correct) and partial-credit (coding: pass_rate = mean of the
+    per-task float scores) suites. If any case carries a `saw_failing_run` flag, an
+    `iteration_rate` (share of those that then recovered) is added — the coding suite's metric."""
     from inspect_ai.log import read_eval_log  # heavy import; only when aggregating
 
     log = read_eval_log(str(log_path))
     cases = []
     for sample in log.samples or []:
-        score = next(iter((sample.scores or {}).values()), None)
-        passed = bool(score and score.value == "C")
+        sc = next(iter((sample.scores or {}).values()), None)
+        pts = _points(sc.value) if sc else 0.0
         cases.append(
             {
                 "name": str(sample.id),
-                "passed": passed,
-                "detail": (score.explanation if score else "no score recorded") or "",
+                "passed": pts >= 0.999,
+                "score": round(pts, 3),
+                "detail": (sc.explanation if sc else "no score recorded") or "",
+                "meta": dict(sc.metadata) if sc and sc.metadata else {},
             }
         )
     n = len(cases)
-    passed_n = sum(c["passed"] for c in cases)
     result = {
         "version": version,
-        "passed": passed_n,
+        "passed": sum(1 for c in cases if c["passed"]),
         "total": n,
-        "pass_rate": round(passed_n / n, 2) if n else 0.0,
+        "pass_rate": round(sum(c["score"] for c in cases) / n, 2) if n else 0.0,
         "cases": cases,
         "log": _normalize_log_path(log_path),
     }
+    iter_cases = [c for c in cases if c["meta"].get("saw_failing_run")]
+    if iter_cases:
+        result["iteration_rate"] = round(
+            sum(1 for c in iter_cases if c["meta"].get("recovered")) / len(iter_cases),
+            2,
+        )
     if log.status != "success":
         result["error"] = f"inspect run status: {log.status}"
     return result
+
+
+def merge_prior_suites(model: str, fresh: dict) -> dict:
+    """Fold suites from the model's most-recent prior scorecard under the freshly-run ones, so a
+    `--suite X` run doesn't drop the model's other suites from its card (and off the leaderboard,
+    which shows one card per model). Fresh suites win on key collision. A carried suite whose
+    transcript log no longer exists keeps its scores but drops the dangling `log` pointer (e.g.
+    after `--force` wiped that date's logs)."""
+    prior = latest_scorecard(model)
+    if not prior:
+        return fresh
+    merged: dict[str, dict] = {}
+    for cap, s in prior.get("suites", {}).items():
+        if cap in fresh:
+            continue
+        s = dict(s)
+        log = s.get("log")
+        if log and not (REPO / log).exists():
+            s.pop("log", None)
+        merged[cap] = s
+    merged.update(fresh)
+    return merged
 
 
 # --- scorecards -----------------------------------------------------------------------
@@ -134,11 +178,18 @@ def write_scorecard(card: dict) -> list[Path]:
             f"## Suite: {cap} v{s.get('version', 1)} — "
             f"{s['passed']}/{s['total']} ({s['pass_rate']:.0%})",
         ]
+        if "iteration_rate" in s:
+            lines.append(
+                f"_iteration (recovered after a failing test run): "
+                f"{s['iteration_rate']:.0%}_"
+            )
         if s.get("log"):
             lines.append(f"_Transcript: `{s['log']}` (open with `inspect view`)._")
         for c in s["cases"]:
+            pts = c.get("score")
+            frac = f" ({pts:.0%})" if (pts is not None and not c["passed"]) else ""
             lines.append(
-                f"- {'✅' if c['passed'] else '❌'} `{c['name']}` — {c['detail']}"
+                f"- {'✅' if c['passed'] else '❌'} `{c['name']}`{frac} — {c['detail']}"
             )
     mpath = EVALS / f"{stem}.md"
     mpath.write_text("\n".join(lines) + "\n")
