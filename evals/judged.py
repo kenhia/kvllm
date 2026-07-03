@@ -28,7 +28,11 @@ from inspect_ai.model import GenerateConfig, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import generate
 
-VERSION = 1
+# v2 (2026-07-03): max_tokens 1024 → 4096. Reasoning models (Qwen3.5/3.6 family) burned the
+# whole 1024 inside <think> and submitted empty answers — the judge was grading blanks. 4096
+# gives thinking room while the rubrics still reward concision; non-reasoning models' answers
+# are unaffected (they fit in 1024 already).
+VERSION = 2
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -336,7 +340,7 @@ def judged() -> Task:
         dataset=MemoryDataset(samples, name="judged"),
         solver=generate(),
         scorer=judged_scorer(),
-        config=GenerateConfig(max_tokens=1024),
+        config=GenerateConfig(max_tokens=4096),
         version=VERSION,
     )
 
