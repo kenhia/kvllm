@@ -427,3 +427,57 @@ def test_ranked_ordering_and_medals():
     assert [r["model"] for r in ranked] == ["a", "c", "b", "gate-only"]
     assert [r.get("medal") for r in ranked] == ["①", "②", "③", ""]
     assert ranked[3]["rank"] is None
+
+
+# --- HTML detail panels ----------------------------------------------------------------------
+
+
+def test_html_detail_panel_shows_cases_and_gate(tmp_path, monkeypatch):
+    monkeypatch.setattr(score, "EVALS", tmp_path)
+    monkeypatch.setattr(score, "REGISTRY", tmp_path / "absent.toml")
+    card = _card()
+    card["suites"]["tools"]["cases"].append(
+        {
+            "name": "judged-case",
+            "passed": False,
+            "score": 0.4,
+            "detail": "judge 4/10 — weak <answer> & vague",
+            "meta": {
+                "violations": ["fabricated a metric"],
+                "fabricated": True,
+                "tool_calls": 7,
+            },
+        }
+    )
+    (tmp_path / "test-model-2026-07-02.json").write_text(json.dumps(card))
+
+    score.write_leaderboard({"tools": 2})
+    h = (tmp_path / "leaderboard.html").read_text()
+
+    assert 'class="detail"' in h and 'class="row"' in h
+    assert "judged-case" in h
+    # detail text is escaped, not raw-injected
+    assert "weak &lt;answer&gt; &amp; vague" in h
+    assert "<answer>" not in h
+    assert "fabricated a metric" in h
+    assert "7 tool calls" in h
+    assert "55 tok/s decode" in h
+    assert "org/test-model" in h
+
+
+def test_html_detail_panel_registry_notes_and_eq(tmp_path, monkeypatch):
+    monkeypatch.setattr(score, "EVALS", tmp_path)
+    reg = tmp_path / "models.toml"
+    reg.write_text(
+        '[models."test-model"]\nhf_repo = "org/test-model"\n'
+        'notes = "registry-note-text"\neval_notes = "old OOM trace"\n'
+    )
+    monkeypatch.setattr(score, "REGISTRY", reg)
+    (tmp_path / "test-model-2026-07-02.json").write_text(json.dumps(_card()))
+
+    score.write_leaderboard({"tools": 2})
+    h = (tmp_path / "leaderboard.html").read_text()
+
+    assert "registry-note-text" in h
+    assert "old OOM trace" in h
+    assert "speed ×" in h  # composite equation rendered
