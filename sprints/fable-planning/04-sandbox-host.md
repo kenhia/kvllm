@@ -95,7 +95,41 @@ that.
 
 ## Open items for Ken
 
-- [ ] Actual specs once it's plugged in (cores/RAM/disk decide episode concurrency; 32 GB+ RAM and
-      8+ cores would comfortably run 4–8 parallel episodes).
-- [ ] Hostname, and whether it joins whatever inventory/DNS convention the homelab uses.
-- [ ] Reimage timing — roadmap Phase 1–2 doesn't wait on it; Phase 3 prefers it; Phase 4 needs it.
+- [x] Actual specs: i5-13400F (16 threads), 32 GB RAM, ~83 GB free on / — comfortably runs the
+      full 15-sample coding fan-out.
+- [x] Hostname: `ksandbox` (192.168.1.112), passwordless ssh + sudo, Docker 29.6.1.
+- [x] Reimage done 2026-07-02; cutover landed the same day (see sprint-08 doc). Checklist items
+      4–5 done: `docker context create sandbox`, images pre-built, smoke + both suite self-tests
+      pass remotely. The harness selects the host via `[sandbox].docker_host` in eval-config.toml
+      (DOCKER_HOST env overrides).
+- [x] authorized_keys trimmed to `ken@kai` + `kenhi@cleo` (2026-07-02; pre-trim backup at
+      `~/.ssh/authorized_keys.pre-trim` on ksandbox). Remaining item-6 hygiene: confirm no
+      secrets/HF tokens land on the box, optional LAN-egress firewall.
+- [x] Root LV grown 100G → 500G online (headless-installer quirk left it at 100G);
+      **~1.33T left unallocated in `ubuntu-vg`** on purpose — growing is online/instant,
+      shrinking isn't, and the Phase 4 VM layer wants its own LV from those free extents.
+
+### Second disk (2026-07-02)
+
+The spare 1 TB NVMe is now the **container-state disk**: GPT + ext4 (`LABEL=sandbox-docker`),
+mounted at `/data` with fstab **bind mounts** carrying both `/var/lib/docker` *and*
+`/var/lib/containerd` — Docker 29 uses the containerd image store, so image layers live under
+containerd's root, not Docker's; moving only `/var/lib/docker` moves almost nothing. All fstab
+entries are UUID-based + `nofail` (the reboot test renumbered `nvme0n1`↔`nvme1n1`, so device
+paths would have broken). The old NTFS partition's contents (stale May-2025 copy of the Gratch
+vault + WoW backups, 804 MB) were archived to kai at
+`~/backups/ksandbox-nvme0n1-Source-2026-07-02.tar.gz` before the wipe.
+
+Boot-disk note for the Phase 4+ VM layer: `ubuntu-vg` has **~1.7 TB unallocated** (root LV is
+100 G of a 2 TB disk) — carve a dedicated LV for libvirt images there when the time comes.
+
+### Cutover gotcha (found 2026-07-02, fixed)
+
+Inspect drives `docker compose` over ssh with one fresh connection per concurrent compose call.
+The 15-sample coding suite storms sshd's `MaxStartups` (default 10) → `kex_exchange_identification:
+Connection reset by peer` → episodes die with "No services started". Fix (both halves):
+
+- **kai** `~/.ssh/config`: `ControlMaster auto` + `ControlPersist 10m` for `Host ksandbox` — all
+  docker CLI ssh invocations multiplex over one TCP connection.
+- **ksandbox** `/etc/ssh/sshd_config.d/50-eval-concurrency.conf`: `MaxSessions 64`,
+  `MaxStartups 64:30:128` (multiplexed channels count against MaxSessions, default 10).

@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""korg CLI shim for the fixture homelab — field shape mirrors the real korg MCP (wi_number,
+title, wi_status, project, sprint, updated, content) so prompts transfer to production later.
+Supports: korg list [--project X] [--json] | korg show <wi_number>."""
+
+import json
+import sys
+
+SCENARIOS = "/usr/share/hostinfo/scenarios.json"
+MARKER = "/workspace/.scenario"
+
+
+def wis():
+    data = json.load(open(SCENARIOS))
+    try:
+        scen = open(MARKER).read().strip() or "base"
+    except OSError:
+        scen = "base"
+    names, seen = None, set()
+    while scen and scen not in seen:
+        seen.add(scen)
+        node = data.get(scen, {})
+        if "wis" in node:
+            names = node["wis"]
+            break
+        scen = node.get("inherit")
+    out = []
+    for name in names or []:
+        out.extend(data.get("wi_sets", {}).get(name, []))
+    return out
+
+
+def main(argv):
+    args = argv[1:]
+    if not args or args[0] not in ("list", "show"):
+        print("usage: korg list [--project NAME] [--json] | korg show <wi_number>")
+        return 2
+    items = wis()
+    if args[0] == "list":
+        if "--project" in args:
+            proj = args[args.index("--project") + 1]
+            items = [w for w in items if w.get("project") == proj]
+        if "--json" in args:
+            print(json.dumps(items, indent=2))
+            return 0
+        print(f"{'WI':<5} {'STATUS':<7} {'UPDATED':<11} TITLE")
+        for w in items:
+            print(
+                f"#{w['wi_number']:<4} {w['wi_status']:<7} {w['updated']:<11} {w['title']}"
+            )
+        return 0
+    # show
+    try:
+        n = int(args[1].lstrip("#"))
+    except (IndexError, ValueError):
+        print("usage: korg show <wi_number>")
+        return 2
+    for w in items:
+        if w["wi_number"] == n:
+            print(json.dumps(w, indent=2))
+            return 0
+    print(f"no such work item: #{n}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

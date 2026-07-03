@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""systemctl shim for the fixture homelab (S3 agentic suite). Renders unit state from
+/usr/share/hostinfo/scenarios.json, selected by /workspace/.scenario (default: base).
+Supports: status <unit>, is-active <unit>, list-units [--failed] [--type=service].
+Exit codes mirror systemd: status/is-active exit 3 for non-active units."""
+
+import json
+import sys
+
+SCENARIOS = "/usr/share/hostinfo/scenarios.json"
+MARKER = "/workspace/.scenario"
+
+
+def load_units():
+    data = json.load(open(SCENARIOS))
+    try:
+        scen = open(MARKER).read().strip() or "base"
+    except OSError:
+        scen = "base"
+    seen, units = set(), {}
+    while scen and scen not in seen:
+        seen.add(scen)
+        node = data.get(scen, {})
+        for name, u in node.get("units", {}).items():
+            units.setdefault(name, u)
+        scen = node.get("inherit")
+    return units
+
+
+def norm(unit):
+    return unit if unit.endswith(".service") else unit + ".service"
+
+
+def is_failed(u):
+    return "failed" in u["active"] or "auto-restart" in u["active"]
+
+
+def dot(u):
+    return "×" if is_failed(u) else "●"
+
+
+def status(units, name):
+    name = norm(name)
+    u = units.get(name)
+    if not u:
+        print(f"Unit {name} could not be found.", file=sys.stderr)
+        return 4
+    print(f"{dot(u)} {name} - {u['desc']}")
+    print(f"     Loaded: loaded (/etc/systemd/system/{name}; enabled; preset: enabled)")
+    line = f"     Active: {u['active']} since {u['since']}"
+    print(line)
+    if u.get("exit"):
+        print(f"    Process: ExecStart (code=exited, {u['exit']})")
+    print()
+    for ln in u.get("journal", [])[-6:]:
+        print(f"{ln}")
+    return 3 if is_failed(u) else 0
+
+
+def is_active(units, name):
+    u = units.get(norm(name))
+    if not u:
+        print("inactive")
+        return 4
+    state = "failed" if "failed" in u["active"] else (
+        "activating" if "auto-restart" in u["active"] else "active"
+    )
+    print(state)
+    return 0 if state == "active" else 3
+
+
+def list_units(units, failed_only):
+    rows = [
+        (n, u) for n, u in sorted(units.items()) if not failed_only or is_failed(u)
+    ]
+    print(f"  UNIT{' ' * 28}LOAD   ACTIVE SUB     DESCRIPTION")
+    for n, u in rows:
+        act = "failed" if is_failed(u) else "active"
+        sub = u["active"].split("(")[-1].rstrip(")") if "(" in u["active"] else act
+        print(f"{dot(u)} {n:<31} loaded {act:<6} {sub:<7} {u['desc']}")
+    print()
+    print(f"{len(rows)} loaded units listed.")
+    return 0
+
+
+def main(argv):
+    args = [a for a in argv[1:] if a not in ("--user", "--no-pager", "--full", "-l")]
+    units = load_units()
+    if not args:
+        return list_units(units, failed_only=False)
+    cmd, rest = args[0], args[1:]
+    rest = [a for a in rest if not a.startswith("--type")]
+    if cmd == "status" and rest:
+        return status(units, rest[0])
+    if cmd == "is-active" and rest:
+        return is_active(units, rest[0])
+    if cmd == "list-units":
+        return list_units(units, failed_only="--failed" in args)
+    if cmd == "list-unit-files":
+        for n in sorted(units):
+            print(f"{n:<35} enabled enabled")
+        print(f"\n{len(units)} unit files listed.")
+        return 0
+    if cmd in ("start", "stop", "restart", "enable", "disable"):
+        print(f"Failed to {cmd} {rest[0] if rest else ''}: Access denied", file=sys.stderr)
+        return 1
+    print(f"Unknown command verb {cmd}.", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -111,12 +111,25 @@ helper-status:
 helper-logs:
     journalctl --user -u kvllm-helper -f
 
-# --- Eval (kvllm.eval; see docs/model-research/evals/) ---
+# --- Eval (kvllm.evalrun + evals/; see docs/model-research/evals/ and sprints/fable-planning/) ---
 
-# Evaluate a registered model on kai: serve it, run the suites matching its capabilities,
-# write a scorecard + rebuild the leaderboard + update models.toml. Orchestrates the service.
+# Evaluate registered model(s): serve → operational gate → Inspect suites → scorecard +
+# leaderboard + models.toml. Orchestrates kvllm.service around each model.
 eval key *flags:
-    uv run --group eval python -m kvllm.eval {{key}} --today "$(date +%F)" {{flags}}
+    uv run --group eval python -m kvllm.evalrun {{key}} {{flags}}
+
+# Sweep the registry (resumable: skips models already scored on current suite versions)
+eval-all *flags:
+    uv run --group eval python -m kvllm.evalrun --all {{flags}}
+
+# Prove the Docker sandbox path works (mock model, no GPU). Set DOCKER_HOST to test remote.
+eval-sandbox-smoke:
+    uv run --group eval python evals/sandbox_smoke.py
+
+# Self-test the coding suite: every task's reference solution must pass its hidden tests
+# (needs Docker; no GPU/model). Run before trusting a coding eval.
+test-coding-suite:
+    uv run --group eval python -m evals.coding_selftest
 
 # Open the HTML leaderboard
 eval-board:
@@ -133,3 +146,8 @@ test:
 
 # Lint + unit tests (fast — no live model needed)
 check: lint test
+
+# Self-test the agentic suite: planted truths must be discoverable + reference reports
+# must score 1.0 mechanically (needs Docker; no GPU/model/judge).
+test-agentic-suite:
+    uv run --group eval python -m evals.agentic_selftest

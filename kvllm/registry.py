@@ -40,8 +40,12 @@ def load_registry(path: Path | None = None) -> dict[str, dict]:
     if not models:
         sys.exit(f"error: no [models.<key>] entries in {path}")
     for key, entry in models.items():
-        if "hf_repo" not in entry:
-            sys.exit(f"error: model '{key}' is missing required field 'hf_repo'")
+        # Local models serve HF weights on kai (hf_repo); frontier baselines are API models
+        # (provider, e.g. "anthropic/claude-haiku-4-5") evaluated for comparison + cost.
+        if "hf_repo" not in entry and "provider" not in entry:
+            sys.exit(
+                f"error: model '{key}' needs 'hf_repo' (local) or 'provider' (API)"
+            )
     return models
 
 
@@ -63,6 +67,10 @@ def build_serve_argv(
     gpu_util: str = DEFAULT_GPU_UTIL,
 ) -> list[str]:
     """Resolve a registry entry into a `vllm serve ...` argv."""
+    if entry.get("provider"):
+        sys.exit(
+            f"error: '{key}' is an API baseline ({entry['provider']}) — not servable"
+        )
     argv = [
         "vllm",
         "serve",
@@ -91,6 +99,9 @@ def build_serve_argv(
         argv += ["--trust-remote-code"]
     if entry.get("enforce_eager"):
         argv += ["--enforce-eager"]  # skip CUDA-graph capture (saves VRAM; slower)
+    # Escape hatch for model-specific vllm flags with no dedicated field
+    # (e.g. Devstral's --tokenizer-mode/--config-format/--load-format mistral).
+    argv += [str(a) for a in entry.get("extra_args", [])]
     return argv
 
 
@@ -108,6 +119,8 @@ def _cmd_list(args: argparse.Namespace) -> int:
         caps = ",".join(entry.get("capabilities", []))
         vram = entry.get("est_vram_gb")
         vram_s = f"~{vram}GB" if vram is not None else "?"
+        if entry.get("provider"):
+            vram_s = "API"
         flags = []
         if verdict:
             flags.append(
