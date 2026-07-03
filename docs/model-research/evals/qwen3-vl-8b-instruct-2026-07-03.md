@@ -1,0 +1,47 @@
+# Eval — qwen3-vl-8b-instruct (2026-07-03)
+
+**Verdict: ✅ worth trying** · `Qwen/Qwen3-VL-8B-Instruct`
+
+## Operational
+- served: True
+- cold start: 50.0 s
+- GPU used: 27764 MiB
+- TTFT: 0.02 s
+- decode tok/s: 99.1
+- tokens: 166,108 in / 10,140 out
+- judge overhead: 8,871 in / 2,200 out · $0.02
+
+## Suite: tools v2 — 11/11 (100%)
+_Transcript: `eval-logs/qwen3-vl-8b-instruct/2026-07-03/tools/2026-07-03T03-37-21-00-00_tools_N9HYzuf24Gnrpd6UkKTQH7.eval` (open with `inspect view`)._
+- ✅ `array_args` — run_command({'host': 'kubsdb', 'argv': ['df', '-h']})
+- ✅ `distractor_tool` — restart_service({'name': 'nginx'})
+- ✅ `enum_arg` — get_weather({'city': 'Tokyo', 'unit': 'fahrenheit'})
+- ✅ `error_recovery` — reported failure: 'The file `/etc/kvllm/kvllm.conf` was not found. Therefore, I'
+- ✅ `exact_args` — set_fan_speed({'device_id': 'gpu0', 'percent': 70})
+- ✅ `forced_choice` — get_weather({'city': 'Berlin', 'unit': 'celsius'})
+- ✅ `integer_args` — add({'a': 17, 'b': 25})
+- ✅ `multi_turn_roundtrip` — round-trip ok: 'The current weather in Paris is 21°C.'
+- ✅ `no_unneeded_call` — no tool call
+- ✅ `parallel_calls` — matched 2/2 parallel calls (got 2)
+- ✅ `single_call` — get_weather({'city': 'Paris', 'unit': 'celsius'})
+
+## Suite: agentic v2 — 2/9 (64%)
+_Transcript: `eval-logs/qwen3-vl-8b-instruct/2026-07-03/agentic/2026-07-03T03-37-24-00-00_agentic_heSgdkt9JdGDJe75LxF4m4.eval` (open with `inspect view`)._
+- ❌ `a1-failed-unit` (88%) — facts 100%; judge 7/10 — The model correctly identifies backup-sync.service as the failed unit and accurately cites the connection refused error to 192.168.1.44, matching the reference facts. However, the answer is verbose and includes unnecessary troubleshooting narrative that detracts from conciseness; a homelab operator needs the core facts to act (check the NAS), not the model's internal reasoning about unavailable tools.
+- ❌ `a2-disk-growth` (52%) — facts 33% (missing: /var/log/kvllm/serve.log | serve.log; 512 | 0.5g | half); judge 8/10 — The model correctly identified /var/log/kvllm as the culprit with accurate size (~513M matches ~512MB), and recommended safe cleanup methods (rotate/archive). However, the answer dilutes focus by introducing /var/lib/backup as a secondary concern without evidence it's a significant contributor, and doesn't pinpoint the specific file (serve.log) within the directory.
+- ❌ `a3-oom-chain` (68%) — facts 67% (missing: too many connections); judge 7/10 — The model correctly identifies the causal chain: OOM kill of postgres at 02:14 as root cause, leading to backup failure at 02:20. However, the answer lacks specificity about the 'too many connections' error that occurred during the backup attempt, which is a key downstream detail that demonstrates full understanding of the chain. The answer is correct but incomplete in tracing the full sequence of events.
+- ❌ `a4-cron-typo` (0%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 0% (missing: cron.d/certs | /etc/cron.d; renew-cert.hs | .hs; renew-cert.sh | .sh); judge 0/10 — The model blamed a missing/unconfigured certbot service instead of identifying the discoverable typo in /etc/cron.d/certs (renew-cert.hs vs renew-cert.sh). This directly contradicts the reference facts and violates the rubric's explicit SCORE 0 condition.
+- ✅ `a5-wi-triage` — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 100%; judge 10/10 — The model correctly triaged all work items into the three required categories with exact matches to the reference facts: stale (101, 104), blocked (102), and ready (103, 106). The output format is correct with the three required lines.
+- ❌ `a6-wi-status-report` (30%) — facts 50% (missing: backup-sync); judge 0/10 — The model reports the box as 'generally healthy' and completely omits the failed backup-sync.service, which is a critical system failure that must be prominently featured in a morning status. This directly contradicts the reference facts and violates the core requirement to mention the backup failure.
+- ❌ `a7-port-conflict` (56%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 67% (missing: http.server | python); judge 4/10 — The model correctly identified the bind error and port 8800, meeting partial requirements. However, it failed to identify the specific stray process (python3 -m http.server 8800) that is holding the port—instead speculating about lsof returning no results and the process running under a different user. This stops short of the full diagnosis required for full marks.
+- ✅ `a8-honesty` — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 100%; judge 10/10 — The model correctly identified the system as healthy, explicitly noted what was checked (services, logs, disk), reported plausible observed metrics (1% disk usage, active services, no journal errors, korg output), and made no contradictory claims against the reference facts. The answer is plain, specific, and appropriately confident.
+- ❌ `a9-sprint-plan` (84%) — facts 100%; judge 6/10 — The model correctly identified the coherent backup-reliability cluster (201, 202, 203), prioritized them sensibly, and explicitly excluded 204, 205, and 206 with brief reasoning. However, it failed to provide one sentence per item explaining why each belongs in the sprint—only a general statement about the cluster. The answer also hedges with 'will prioritize' rather than decisively stating the plan, and omits #204 entirely despite the rubric noting it as an acceptable filler pick for a 2-day sprint (3-5 items).
+
+## Suite: judged v2 — 1/6 (75%)
+_Transcript: `eval-logs/qwen3-vl-8b-instruct/2026-07-03/judged/2026-07-03T03-38-04-00-00_judged_BZnx7gKAGJ7icooztduuiq.eval` (open with `inspect view`)._
+- ❌ `constrained-list` (60%) — The answer has exactly 5 checks in correct format (1.-5.), but the content quality is mixed. While df -h is a solid foundational check, items 1, 2, 3, and 5 are tangential to diagnosing high disk usage specifically—they address I/O performance, process monitoring, and hardware issues rather than identifying what is consuming disk space. Missing are critical checks like du for directory analysis, finding deleted-but-open files, docker image/container cleanup, and package cache analysis.
+- ❌ `explain-config` (90%) — The answer correctly identifies what runs (kvllm server with model from KVLLM_MODEL_KEY), correctly explains Restart=on-failure semantics (restarts only on failure, not clean stops), and provides the 900s timeout caveat. The additional caveat about user unit session requirements is accurate and operationally relevant, though not explicitly in the unit file itself.
+- ❌ `plan-migration` (40%) — The plan includes an explicit rollback step and respects the 5-minute downtime constraint in theory, but has critical flaws: Step 1 describes pre-migration prep that shouldn't count toward downtime yet then contradicts itself by saying dump/restore will be used instead of replication; the ordering is confused (replication is mentioned then abandoned); Step 4's rollback is vague and impractical (restoring from machine A during a rollback doesn't actually roll back—it just recreates the problem); and the plan conflates pre-migration validation with the actual cutover window, making the timeline unclear.
+- ❌ `professional-rewrite` (90%) — All three factual complaints preserved with exact details (6am, status page, #48213), SLA expectation clearly stated, professional and firm tone throughout with no hostility. Minor deduction only for slightly verbose structure when 'concise' was requested.
+- ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
+- ❌ `summarize-incident` (70%) — The answer correctly identifies all three required elements and matches the reference facts without fabrication. However, the second bullet point speculates about causality ('likely from too many concurrent connections') that is not explicitly supported by the log—the OOM kill and the later 'too many connections' error are separate issues, and the log does not confirm that concurrent connections caused the initial OOM condition.

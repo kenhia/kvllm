@@ -28,7 +28,7 @@ from inspect_ai.model import ChatMessageUser, GenerateConfig, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.tool import bash
-from inspect_ai.util import apply_limits, message_limit
+from inspect_ai.util import apply_limits, message_limit, time_limit
 
 from evals.judged import JUDGE_PROMPT, parse_judge_json
 
@@ -43,7 +43,16 @@ BASH_TIMEOUT_S = 60
 MSG_LIMIT = (
     40  # 25 cut off thorough investigators (Haiku burned 23 msgs probing, no report)
 )
-TIME_LIMIT_S = 480
+# Episode wall-clock budget, enforced INSIDE the solver via apply_limits so a timeout is a
+# scored partial (CUT OFF), not an unscored sample error. The 2026-07-03 rerun showed the
+# old Task-level time_limit=480 was the 27B's real killer (CancelledError on 9/9 at 44 tok/s)
+# — slow models the composite already discounts via speed_factor were dying unscored instead.
+# The Task-level limit stays as a 2× backstop (scoring/judge time rides on it too).
+TIME_LIMIT_S = 900
+TASK_TIME_LIMIT_S = 2 * TIME_LIMIT_S
+# Cap a single tool result (bytes): the a2 fixture's 512MB log means one unbounded cat/du can
+# exceed an 8-16K context window in ONE message — untruncatable by conversation truncation.
+MAX_TOOL_OUTPUT = 4 * 1024
 
 PROMPT_TEMPLATE = """You are investigating the Linux machine you are on (fixhost-01) for its \
 owner, Ken. {task}
@@ -429,7 +438,9 @@ _REACT_SOLVER = as_solver(_AGENT)
 @solver
 def agentic_agent():
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        with apply_limits([message_limit(MSG_LIMIT)], catch_errors=True) as scope:
+        with apply_limits(
+            [message_limit(MSG_LIMIT), time_limit(TIME_LIMIT_S)], catch_errors=True
+        ) as scope:
             state = await _REACT_SOLVER(state, generate)
         state.metadata["hit_real_limit"] = scope.limit_error is not None
         return state
@@ -532,7 +543,8 @@ def agentic() -> Task:
         solver=agentic_agent(),
         scorer=agentic_scorer(),
         sandbox=("docker", COMPOSE),
-        time_limit=TIME_LIMIT_S,
+        time_limit=TASK_TIME_LIMIT_S,
+        config=GenerateConfig(max_tool_output=MAX_TOOL_OUTPUT),
         version=VERSION,
     )
 
@@ -564,18 +576,25 @@ WRAP_UP_PROMPT = (
 )
 
 
+ASSISTED_WRAP_TIME_S = 180  # wall-clock reserved for the demanded final report
+
+
 @solver
 def assisted_agent():
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         investigate = ASSISTED_MSG_LIMIT - ASSISTED_WRAP_RESERVE
-        with apply_limits([message_limit(investigate)], catch_errors=True) as scope:
+        with apply_limits(
+            [message_limit(investigate), time_limit(ASSISTED_TIME_LIMIT_S)],
+            catch_errors=True,
+        ) as scope:
             state = await _REACT_SOLVER(state, generate)
         state.metadata["hit_real_limit"] = False
         if scope.limit_error is not None:
             state.metadata["wrapped_up"] = True
             state.messages.append(ChatMessageUser(content=WRAP_UP_PROMPT))
             with apply_limits(
-                [message_limit(ASSISTED_MSG_LIMIT)], catch_errors=True
+                [message_limit(ASSISTED_MSG_LIMIT), time_limit(ASSISTED_WRAP_TIME_S)],
+                catch_errors=True,
             ) as scope2:
                 state = await _REACT_SOLVER(state, generate)
             state.metadata["hit_real_limit"] = scope2.limit_error is not None
@@ -591,6 +610,7 @@ def agentic_assisted() -> Task:
         solver=assisted_agent(),
         scorer=agentic_scorer(),
         sandbox=("docker", COMPOSE),
-        time_limit=ASSISTED_TIME_LIMIT_S,
+        time_limit=ASSISTED_TIME_LIMIT_S + ASSISTED_WRAP_TIME_S + TIME_LIMIT_S,
+        config=GenerateConfig(max_tool_output=MAX_TOOL_OUTPUT),
         version=ASSISTED_VERSION,
     )

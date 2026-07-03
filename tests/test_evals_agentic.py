@@ -243,3 +243,18 @@ def test_assisted_prompt_raises_step_budget():
 
     assert "~15 tool calls" in PROMPT_TEMPLATE
     assert "~25 tool calls" in ASSISTED_PROMPT_TEMPLATE
+
+
+def test_time_limits_are_solver_scoped_with_task_backstop():
+    from evals.agentic import (
+        MAX_TOOL_OUTPUT,
+        TASK_TIME_LIMIT_S,
+        TIME_LIMIT_S,
+        agentic,
+    )
+
+    t = agentic()
+    assert (
+        t.time_limit == TASK_TIME_LIMIT_S > TIME_LIMIT_S
+    )  # backstop above solver budget
+    assert t.config.max_tool_output == MAX_TOOL_OUTPUT
