@@ -1,6 +1,6 @@
 """Eval controller — make a registry model servable and measure the operational gate.
 
-The controller half of the Sprint 7 runner, split out per fable-planning/02: it owns
+The controller half of the Sprint 7 runner, split out per planning/02: it owns
 "stop kvllm.service → serve model K standalone → health-wait → restore" and the operational
 measurements (cold start, VRAM, TTFT, decode tok/s). It knows nothing about suites or scoring —
 kvllm.evalrun composes this with the Inspect tasks in evals/.
@@ -188,7 +188,7 @@ def serving(key: str, entry: dict, *, port: int):
 
 
 def context_probe(base_url: str, model: str, max_model_len: int) -> bool | None:
-    """Deferred gate check from fable-planning/03 §S0: a prompt at ~75% of the served context
+    """Deferred gate check from planning/03 §S0: a prompt at ~75% of the served context
     window must complete without error (catches KV-cache/rope/serving bugs that only bite under
     context pressure). Returns True/False, or None if the probe couldn't run."""
     from openai import OpenAI

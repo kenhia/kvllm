@@ -1,6 +1,6 @@
 # Sprint 1 — Core setup (vLLM serving + tools + LangChain)
 
-_2026-06-30 on `kai` (RTX 5090). See [`../docs/00-kickoff.md`](../docs/00-kickoff.md). **Shipped.**_
+_2026-06-30 on `kai` (RTX 5090). See [`../sprints/planning/00-kickoff.md`](../sprints/planning/00-kickoff.md). **Shipped.**_
 
 ## Goal
 

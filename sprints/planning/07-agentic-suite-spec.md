@@ -1,6 +1,6 @@
 # S3 agentic suite — task-design spec (Phase 4, build with Opus)
 
-_2026-07-02, fable-planning. Authored by Fable per [05-roadmap.md](05-roadmap.md); Opus
+_2026-07-02, planning. Authored by Fable per [05-roadmap.md](05-roadmap.md); Opus
 implements. Prereqs that now exist: the episode runner + Docker sandbox path (Phase 1), the
 sandboxed-suite pattern with hidden ground truth (Phase 2, `evals/coding.py`), and the judge
 plumbing with rubric + auto-zero + structured rationale (`evals/judged.py`, Phase 3). Where this

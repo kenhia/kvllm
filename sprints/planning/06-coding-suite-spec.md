@@ -1,6 +1,6 @@
 # S2 coding suite — task-design spec (Phase 2, build with Opus)
 
-_2026-07-02, fable-planning. Authored by Fable per the model guidance in
+_2026-07-02, planning. Authored by Fable per the model guidance in
 [05-roadmap.md](05-roadmap.md): this spec makes the design decisions; Opus implements against it.
 Read [02-eval-harness-architecture.md](02-eval-harness-architecture.md) first — Phase 1 shipped
 the episode runner (`kvllm/evalrun.py` + `evals/`), and the Docker sandbox path is proven
@@ -45,7 +45,7 @@ Custom `@scorer` per sample, after the episode ends:
    `metadata` = `{"tier", "hit_limit", "test_runs", "recovered"}` where:
    - `test_runs` = count of bash commands in the transcript matching `pytest|python .*test`
    - `recovered` = at least one such run's tool output indicated failure AND the final hidden
-     pass fraction ≥ 0.8 — this is the **iteration metric** (fable-planning/03: the single most
+     pass fraction ≥ 0.8 — this is the **iteration metric** (planning/03: the single most
      important agentic-coding behavior for our use case).
 5. Suite `pass_rate` (mean of task scores) flows into the scorecard exactly like `tools`;
    additionally put `iteration_rate` (mean of `recovered` over C4 + any task with a failing run)

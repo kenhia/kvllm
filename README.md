@@ -4,7 +4,7 @@ Local LLM serving on the `kai` RTX 5090 via **vLLM**, exposed as an OpenAI-compa
 endpoint for use from LangChain — chosen for **model breadth** (HuggingFace-native, no per-model
 engine builds) and mature **tool calling**. Sibling backend to `trt-llm-explore`.
 
-**Start here:** [`docs/00-kickoff.md`](docs/00-kickoff.md) — the decision, priorities, environment,
+**Start here:** [`sprints/planning/00-kickoff.md`](sprints/planning/00-kickoff.md) — the decision, priorities, environment,
 and plan. Progress in [`sprints/`](sprints/).
 
 ## Quick start
@@ -22,7 +22,7 @@ vLLM holds **one model per process**; switch models by stopping one `serve` and 
 
 ## Docs
 
-- [`docs/00-kickoff.md`](docs/00-kickoff.md) — why vLLM, priorities, environment, roadmap.
+- [`sprints/planning/00-kickoff.md`](sprints/planning/00-kickoff.md) — why vLLM, priorities, environment, roadmap.
 - [`docs/01-backend-contract.md`](docs/01-backend-contract.md) — the OpenAI `/v1` surface clients depend on.
 - [`docs/02-quantization.md`](docs/02-quantization.md) — AWQ/GPTQ/FP8 and what fits 32 GB.
 - [`docs/03-deployment.md`](docs/03-deployment.md) — systemd service: keep kvllm up across reboots.

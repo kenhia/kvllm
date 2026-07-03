@@ -1,6 +1,6 @@
 """S3 `agentic` suite — investigate a fixture homelab with bash, report findings.
 
-The rehearsal for the monitoring-controller goal (fable-planning/07): each episode drops the
+The rehearsal for the monitoring-controller goal (planning/07): each episode drops the
 model on `fixhost-01` (Docker, systemctl/journalctl/korg shims over planted scenario state) and
 asks an ops question with a planted ground truth. Hybrid scoring:
 

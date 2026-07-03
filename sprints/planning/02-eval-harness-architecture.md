@@ -1,6 +1,6 @@
 # Eval harness v2 — architecture & stack decision
 
-_2026-07-02, fable-planning. The target design for the rich local model eval: agentic episodes in
+_2026-07-02, planning. The target design for the rich local model eval: agentic episodes in
 sandboxes, frontier-model judging, weighted leaderboard. Facts below were verified against primary
 sources on 2026-07-02 (research pass; sources linked inline)._
 

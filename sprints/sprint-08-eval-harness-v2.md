@@ -1,19 +1,19 @@
 # Sprint 8 — Eval harness v2 (Inspect AI, sandboxed agentic+coding, weighted leaderboard)
 
 _2026-07-02 on `kai`. korg #104. Branch `08-eval-harness-v2`. Builds on
-[Sprint 7](sprint-07-eval-harness.md). Planning in [`sprints/fable-planning/`](fable-planning/README.md)
+[Sprint 7](sprint-07-eval-harness.md). Planning in [`sprints/planning/`](planning/README.md)
 (repo review, stack decision, suites/scoring design, sandbox-host plan, phased roadmap)._
 
 ## Goal
 
 Turn the Sprint 7 MVP eval into the rich harness Ken wants: agentic + coding episodes in sandboxes,
 frontier-model judging, a weighted composite leaderboard. This sprint covers **roadmap Phase 0**
-(hygiene) — see [`fable-planning/05-roadmap.md`](fable-planning/05-roadmap.md) for the full phased
+(hygiene) — see [`planning/05-roadmap.md`](planning/05-roadmap.md) for the full phased
 plan (Phase 1 — episode runner core + Inspect AI migration — is next).
 
 ## Plan (Phase 0, per the roadmap)
 
-Review items 4, 7, 10 from [`fable-planning/01-current-state-review.md`](fable-planning/01-current-state-review.md):
+Review items 4, 7, 10 from [`planning/01-current-state-review.md`](planning/01-current-state-review.md):
 commit the outstanding v1 eval results as a clean baseline; add unit tests for the eval package's
 pure functions (none existed); fix the `--today` default (`"undated"` when run outside `just`).
 
@@ -80,7 +80,7 @@ pure functions (none existed); fix the `--today` default (`"undated"` when run o
 - **v1 retired**: `kvllm/eval/` deleted; tests ported (`test_evals_tools.py`, `test_score.py`
   — 47 total, up from 37); `eval-logs/` gitignored; evals README rewritten.
 - **Phase 2 spec written** (Fable → Opus handoff):
-  [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md) — 15 tasks
+  [`planning/06-coding-suite-spec.md`](planning/06-coding-suite-spec.md) — 15 tasks
   (C1 functions ×6, C2 script-contract ×4, C3 fix/extend ×3, C4 iterate-to-green ×2),
   post-episode hidden-test injection, junitxml scoring with partial credit, the `recovered`
   iteration metric, suite self-test against reference solutions, acceptance criteria.
@@ -163,7 +163,7 @@ Registry after the sweep: 7 of 10 `worth trying`, 1 `has issues`, 2 `skip` — a
 
 ## What shipped — Phase 2: S2 coding suite (Opus, 2026-07-02)
 
-Implements [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md): a
+Implements [`planning/06-coding-suite-spec.md`](planning/06-coding-suite-spec.md): a
 react agent codes in a Docker `/workspace` (bash tool), then a scorer injects hidden pytest tests
 the model never saw, runs them in the sandbox, and scores partial credit from junit XML — never
 from the model's claims.

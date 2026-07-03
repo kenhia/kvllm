@@ -1,10 +1,10 @@
-"""S2 `coding` suite — sandboxed write-run-fix coding tasks (fable-planning/06-coding-suite-spec).
+"""S2 `coding` suite — sandboxed write-run-fix coding tasks (planning/06-coding-suite-spec).
 
 The model works in a Docker /workspace with a `bash` tool (react agent), writes code, runs it,
 and iterates. After the episode a custom scorer injects HIDDEN pytest tests the model never saw,
 runs them in the sandbox, and scores partial credit from the junit XML — never from the model's
 own claims. C4 tasks additionally measure `recovered` (ran tests, saw a failure, still reached
->=80%) — the iteration signal that matters most for our agentic use (fable-planning/03).
+>=80%) — the iteration signal that matters most for our agentic use (planning/03).
 
 Tiers: C1 single function (6), C2 script/IO contract (4), C3 fix/extend a seeded repo (3),
 C4 iterate-to-green (2). Assets live in coding_assets/<task-id>/{prompt.md,hidden/,solution/,seed/}.

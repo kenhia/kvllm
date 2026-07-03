@@ -1,6 +1,6 @@
 # Current-state review — what's in the repo today
 
-_2026-07-02, fable-planning. A pre-planning review of the whole repo (~1,300 lines of Python across
+_2026-07-02, planning. A pre-planning review of the whole repo (~1,300 lines of Python across
 `registry.py`, `helper.py`, `eval/`, plus docs/sprints), feeding the eval-harness plan in
 [02-eval-harness-architecture.md](02-eval-harness-architecture.md)._
 

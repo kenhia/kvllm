@@ -1,7 +1,7 @@
 # Sprint 5 — Model collection research
 
 _2026-06-30 on `kai`. korg #99 (the "Wed research" block, pulled forward). Branch `05-model-research`._
-_Feeds the [Sprint 2](sprint-02-serving-ergonomics.md) registry. See [`../docs/00-kickoff.md`](../docs/00-kickoff.md)._
+_Feeds the [Sprint 2](sprint-02-serving-ergonomics.md) registry. See [`../sprints/planning/00-kickoff.md`](../sprints/planning/00-kickoff.md)._
 
 ## Goal
 

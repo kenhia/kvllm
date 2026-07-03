@@ -1,6 +1,6 @@
 # Suites, scoring, and the weighted leaderboard
 
-_2026-07-02, fable-planning. What we test, how each thing is scored, and how per-suite scores roll
+_2026-07-02, planning. What we test, how each thing is scored, and how per-suite scores roll
 up into a weighted composite that actually ranks the leaderboard. Companion to
 [02-eval-harness-architecture.md](02-eval-harness-architecture.md)._
 

@@ -3,7 +3,7 @@
 Our own "worth trying / has issues / skip" testing of models **on `kai`** — not online leaderboard
 scores, but whether a model actually serves, fits, and performs on the 5090. Harness v2 (Sprint 8)
 runs suites as **Inspect AI** tasks ([`evals/`](../../../evals/)); design in
-[`sprints/fable-planning/`](../../../sprints/fable-planning/README.md).
+[`sprints/planning/`](../../../sprints/planning/README.md).
 
 **The human view:** open [`leaderboard.html`](leaderboard.html). Agent-friendly siblings:
 [`leaderboard.json`](leaderboard.json) (source of truth) and [`leaderboard.md`](leaderboard.md).
@@ -32,7 +32,7 @@ reruns; gate-failed models need `--retry-skips`).
 [`eval-config.toml`](../../../eval-config.toml); `DOCKER_HOST` env overrides, empty = local
 Docker). The coding/agentic containers get their own machine — no CPU contention with vLLM, and
 untrusted model-generated code stays off `kai`. Background:
-[`fable-planning/04-sandbox-host.md`](../../../sprints/fable-planning/04-sandbox-host.md).
+[`planning/04-sandbox-host.md`](../../../sprints/planning/04-sandbox-host.md).
 
 ## What's measured
 
@@ -59,7 +59,7 @@ suite < 0.40, or decode ≤ 10 tok/s) · `skip` (didn't serve) · `baseline` �
 ranked for comparison, never swept by `--all`, leaderboard shows **est $/run** from measured
 token usage).
 
-## Roadmap (sprints/fable-planning/05-roadmap.md)
+## Roadmap (sprints/planning/05-roadmap.md)
 
 - **vision** suite (Phase 5) — for `vision` models.
 - VM layer on ksandbox (snapshot/revert full-machine episodes), computer-use after that.

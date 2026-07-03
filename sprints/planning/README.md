@@ -1,4 +1,4 @@
-# fable-planning — eval harness v2
+# planning — eval harness v2
 
 _2026-07-02. Planning pass for the rich "local evaluation of models" harness: agentic + coding
 episodes in sandboxes, frontier-model judging, weighted leaderboard, and the option of a dedicated

@@ -1,7 +1,7 @@
 # Sprint 2 — Serving ergonomics (registry + recipes + quant notes + /v1 contract)
 
 _Started 2026-06-30 on `kai` (RTX 5090). korg #97. Branch `02-serving-ergonomics`._
-_Builds on [Sprint 1](sprint-01-core-setup.md). See [`../docs/00-kickoff.md`](../docs/00-kickoff.md)._
+_Builds on [Sprint 1](sprint-01-core-setup.md). See [`../sprints/planning/00-kickoff.md`](../sprints/planning/00-kickoff.md)._
 
 ## Goal
 

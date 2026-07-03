@@ -5,7 +5,7 @@ scored by a frontier judge (eval-config.toml [judge].model, Anthropic API) again
 rubric, with mechanical pre-checks capping the score where format rules are objective (bullet
 counts, JSON validity — an unparseable "JSON" answer is auto-0 regardless of judge opinion).
 The judge returns structured JSON {score 0-10, rationale, violations}; the rationale is stored
-in the scorecard so every judged number is auditable (fable-planning/03).
+in the scorecard so every judged number is auditable (planning/03).
 
 The suite is EXCLUDED from the composite until the calibration protocol passes
 ([judge].calibrated in eval-config.toml): `python -m evals.judged sheet <log.eval>` renders a

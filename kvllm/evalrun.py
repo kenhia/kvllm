@@ -64,7 +64,7 @@ def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
 
 
 def _apply_sandbox_host() -> None:
-    """Point suite sandboxes at [sandbox].docker_host (fable-planning/04 — the ksandbox
+    """Point suite sandboxes at [sandbox].docker_host (planning/04 — the ksandbox
     cutover). An explicit DOCKER_HOST in the environment wins over config."""
     if os.environ.get("DOCKER_HOST"):
         print(f"[sandbox] DOCKER_HOST={os.environ['DOCKER_HOST']} (env)")
