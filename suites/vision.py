@@ -66,7 +66,10 @@ VTASKS = [
         name="v4-terminal-df",
         image="v4-terminal-df.png",
         question="Which filesystem is fullest, and at what use percentage?",
-        groups=[["/data"], ["91"]],
+        # First-run rubric bug (2026-07-03): 5/7 models answered the device
+        # ("/dev/nvme1n1p1"), which IS the Filesystem column — only the mount was
+        # accepted. Fairness fix on the then-unranked v1; affected models re-run.
+        groups=[["/data", "nvme1n1"], ["91"]],
     ),
     VTask(
         name="v5-journal-error",

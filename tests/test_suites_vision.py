@@ -41,3 +41,13 @@ def test_digit_alternatives_require_word_boundary():
 def test_alternatives_any_of_matches():
     frac, _ = fact_score([["oom", "out of memory"]], "kernel reported Out of Memory")
     assert frac == 1.0
+
+
+def test_v4_accepts_device_or_mount():
+    from suites.vision import VTASKS
+
+    t = next(t for t in VTASKS if t.name == "v4-terminal-df")
+    frac, _ = fact_score(t.groups, "/dev/nvme1n1p1 at 91%")
+    assert frac == 1.0
+    frac, _ = fact_score(t.groups, "/data is at 91%")
+    assert frac == 1.0
