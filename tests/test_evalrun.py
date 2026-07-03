@@ -86,3 +86,27 @@ def test_suites_for_excludes_optional_by_default():
     assert set(evalrun._suites_for(entry, "assisted", suites)) == {"assisted"}
     assert set(evalrun._suites_for(entry, "agentic", suites)) == {"agentic"}
     assert evalrun._suites_for({"capabilities": ["chat"]}, "assisted", suites) == {}
+
+
+def test_stale_suites_drops_current_keeps_missing_and_stale():
+    to_run = {
+        "tools": (None, 2),
+        "agentic": (None, 2),
+        "vision": (None, 1),
+    }
+    prior = {
+        "suites": {
+            "tools": {"version": 2, "pass_rate": 1.0},  # current → drop
+            "agentic": {"version": 1, "pass_rate": 0.2},  # stale → keep
+            # vision absent → keep
+        }
+    }
+    out = evalrun._stale_suites(to_run, prior)
+    assert set(out) == {"agentic", "vision"}
+
+
+def test_stale_suites_reruns_errored_and_handles_no_prior():
+    to_run = {"code": (None, 1)}
+    prior = {"suites": {"code": {"version": 1, "error": "no inspect log produced"}}}
+    assert set(evalrun._stale_suites(to_run, prior)) == {"code"}
+    assert evalrun._stale_suites(to_run, None) == to_run
