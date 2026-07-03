@@ -29,6 +29,15 @@ projects, and (c) a shareable community write-up.
   snapshot, not maintained).
 - `docs/findings/README.md` — index with decay labels per doc.
 
+## Addendum (same day, post-merge)
+
+ATV feedback on the report asked how things were scored → added
+`docs/findings/methodology-2026-07.html`, a same-identity companion: pipeline, per-suite
+rubrics (all case/episode names), judge anatomy + the 12/12 ±1 calibration protocol + the
+fabrication-wording lesson, composite/speed-factor/verdict math with two worked examples
+(qwen3-vl a1 hybrid score; gemma-31b's ① composite), cost accounting, and a
+limits-of-the-methodology section. Main report footer now links it.
+
 ## Decisions
 
 - Findings live in `docs/findings/` — matches the sprint-10 target shape where `docs/` is
