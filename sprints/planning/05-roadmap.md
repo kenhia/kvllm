@@ -1,6 +1,6 @@
 # Roadmap — phased sprints to the rich eval harness
 
-_2026-07-02, fable-planning. Phases sized like the existing sprints (a focused day-ish each),
+_2026-07-02, planning. Phases sized like the existing sprints (a focused day-ish each),
 each with exit criteria; numbering continues the sprint log (next is Sprint 08). Dependencies are
 explicit — the sandbox host ([04](04-sandbox-host.md)) only blocks Phase 4._
 

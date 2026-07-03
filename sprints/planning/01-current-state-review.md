@@ -1,6 +1,6 @@
 # Current-state review — what's in the repo today
 
-_2026-07-02, fable-planning. A pre-planning review of the whole repo (~1,300 lines of Python across
+_2026-07-02, planning. A pre-planning review of the whole repo (~1,300 lines of Python across
 `registry.py`, `helper.py`, `eval/`, plus docs/sprints), feeding the eval-harness plan in
 [02-eval-harness-architecture.md](02-eval-harness-architecture.md)._
 
@@ -13,7 +13,7 @@ _2026-07-02, fable-planning. A pre-planning review of the whole repo (~1,300 lin
 | `kvllm/helper.py` | LAN control panel (FastAPI): status, switch model, start/stop. Token-gated, fails closed. |
 | `kvllm/eval/` | Sprint-07 MVP: operational gate + 7-case tool-use suite + tri-format leaderboard + `models.toml` write-back. |
 | `tests/` | Three network smoke scripts (tools, LangChain, DeepSeek) — exit criteria for Sprint 1, not unit tests. |
-| `docs/`, `sprints/` | Strong narrative docs; `docs/model-research/` is a working research pipeline with two skills (`/model-research`, `/model-scout`). |
+| `docs/`, `sprints/` | Strong narrative docs; `model-research/` is a working research pipeline with two skills (`/model-research`, `/model-scout`). |
 
 ## What's good (keep these properties)
 

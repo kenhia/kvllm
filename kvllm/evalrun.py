@@ -36,14 +36,14 @@ def _suites():
     registry `capabilities` contain the required cap (`judged` rides on plain `chat` — every
     model). Optional suites (`assisted`) run ONLY when named via --suite — they're labeled
     alternate conditions, never part of the default sweep or its resume check."""
-    from evals.agentic import ASSISTED_VERSION, agentic, agentic_assisted
-    from evals.agentic import VERSION as AGENTIC_VERSION
-    from evals.coding import VERSION as CODING_VERSION
-    from evals.coding import coding
-    from evals.judged import VERSION as JUDGED_VERSION
-    from evals.judged import judged
-    from evals.tools import VERSION as TOOLS_VERSION
-    from evals.tools import tools
+    from suites.agentic import ASSISTED_VERSION, agentic, agentic_assisted
+    from suites.agentic import VERSION as AGENTIC_VERSION
+    from suites.coding import VERSION as CODING_VERSION
+    from suites.coding import coding
+    from suites.judged import VERSION as JUDGED_VERSION
+    from suites.judged import judged
+    from suites.tools import VERSION as TOOLS_VERSION
+    from suites.tools import tools
 
     return {
         "tools": (tools, TOOLS_VERSION, "tools", False),
@@ -64,7 +64,7 @@ def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
 
 
 def _apply_sandbox_host() -> None:
-    """Point suite sandboxes at [sandbox].docker_host (fable-planning/04 — the ksandbox
+    """Point suite sandboxes at [sandbox].docker_host (planning/04 — the ksandbox
     cutover). An explicit DOCKER_HOST in the environment wins over config."""
     if os.environ.get("DOCKER_HOST"):
         print(f"[sandbox] DOCKER_HOST={os.environ['DOCKER_HOST']} (env)")

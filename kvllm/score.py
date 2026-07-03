@@ -1,6 +1,6 @@
 """Scoring & reporting — scorecards, verdicts, the tri-format leaderboard, models.toml write-back.
 
-Successor to kvllm/eval/report.py for harness v2 (fable-planning/02): scorecards now record a
+Successor to kvllm/eval/report.py for harness v2 (planning/02): scorecards now record a
 suite `version` and the Inspect `.eval` log path per suite, operational gains ttft_s/decode_tok_s,
 and the leaderboard marks scores from older suite versions as stale (†). Weighted composite
 ranking lands in Phase 3; verdict logic is unchanged from v1 (threshold + speed floor).
@@ -22,7 +22,7 @@ from pathlib import Path
 import tomlkit
 
 REPO = Path(__file__).resolve().parent.parent
-EVALS = REPO / "docs" / "model-research" / "evals"
+EVALS = REPO / "model-research" / "evals"
 REGISTRY = REPO / "models.toml"
 CONFIG = REPO / "eval-config.toml"
 
@@ -52,7 +52,7 @@ def load_config() -> dict:
     return cfg
 
 
-# --- composite score (fable-planning/03) -------------------------------------------------
+# --- composite score (planning/03) -------------------------------------------------
 
 
 def speed_factor(decode_tok_s: float | None, cfg: dict) -> float:
@@ -112,7 +112,7 @@ def verdict(
     cfg: dict | None = None,
     current_versions: dict[str, int] | None = None,
 ) -> str:
-    """worth trying / has issues / skip, derived from the composite (fable-planning/03):
+    """worth trying / has issues / skip, derived from the composite (planning/03):
     `skip` = gate failed; `has issues` = composite < floor, decode at/below the speed floor,
     or any weighted suite < suite_floor; else `worth trying`. Gate-only models (no eligible
     suites) fall back to the speed check alone — v1 behavior."""

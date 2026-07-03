@@ -1,7 +1,7 @@
 # Sprint 3 — Availability (systemd auto-start across reboots)
 
 _Started 2026-06-30 on `kai` (RTX 5090). korg #98 (Ken's idea). Branch `03-availability`._
-_Builds on [Sprint 2](sprint-02-serving-ergonomics.md). See [`../docs/00-kickoff.md`](../docs/00-kickoff.md)._
+_Builds on [Sprint 2](sprint-02-serving-ergonomics.md). See [`../sprints/planning/00-kickoff.md`](../sprints/planning/00-kickoff.md)._
 
 ## Goal
 

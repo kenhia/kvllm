@@ -1,4 +1,4 @@
-"""Unit tests for the coding suite's pure functions (evals/coding.py).
+"""Unit tests for the coding suite's pure functions (suites/coding.py).
 
 No Docker / no model / no inspect run — parse_junit and extract_coding_signals are pure. The
 end-to-end scorer path (sandbox exec, hidden-test injection) is covered by `just test-coding-suite`.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from evals.coding import (
+from suites.coding import (
     ASSETS,
     TASKS,
     _is_test_run,

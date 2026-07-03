@@ -68,11 +68,11 @@ minus the KServe load/unload bits — vLLM is one-model-per-process).
 **Sprint 3 — Availability (✅ shipped 2026-06-30; korg #98; Ken's idea).** A **systemd user service**
 (linger is on → starts at boot, no sudo) serves the default registry model, `Restart=on-failure`,
 with `just service-*` recipes (install/enable/switch/status/logs) and a clean stop-to-free-the-GPU
-path. Verified start→serve + crash→respawn. See [`docs/03-deployment.md`](03-deployment.md).
+path. Verified start→serve + crash→respawn. See [`docs/03-deployment.md`](../../docs/03-deployment.md).
 
 **Sprint 5 — Model collection research (✅ shipped 2026-06-30; korg #99).** Cited survey of free
 models for coding + agentic control + vision that fit a 5090, in
-[`docs/model-research/`](model-research/README.md); confirmed **Qwen3.6** is real (open `-27B` /
+[`model-research/`](../../model-research/README.md); confirmed **Qwen3.6** is real (open `-27B` /
 `-35B-A3B`, new `qwen3_5*` arch — verify on sm_120) and added 5 models to the registry. _Original
 framing below:_
 
@@ -84,7 +84,7 @@ weekend. (This is research-heavy; could use the deep-research harness.)
 FastAPI + vanilla-JS web control panel (`kvllm-helper.service`, LAN-accessible) that shows status +
 the registry and lets you **restart and load model X from a browser** (incl. Windows machines).
 Token-gated control. The single-GPU model-switching story, one click. See
-[`docs/04-helper-app.md`](04-helper-app.md).
+[`docs/04-helper-app.md`](../../docs/04-helper-app.md).
 
 ## Recommended technical approach (to derisk Sprint 1)
 

@@ -1,6 +1,6 @@
 """S3 `agentic` suite — investigate a fixture homelab with bash, report findings.
 
-The rehearsal for the monitoring-controller goal (fable-planning/07): each episode drops the
+The rehearsal for the monitoring-controller goal (planning/07): each episode drops the
 model on `fixhost-01` (Docker, systemctl/journalctl/korg shims over planted scenario state) and
 asks an ops question with a planted ground truth. Hybrid scoring:
 
@@ -11,7 +11,7 @@ asks an ops question with a planted ground truth. Hybrid scoring:
 Mechanical layer = case-insensitive containment of required fact groups (each group is a list
 of acceptable alternatives), plus structured checks for the triage task (category set-matching)
 and the status report (>=2 correct WI numbers). Pure functions, unit-tested without Docker or a
-judge. The judge layer reuses evals/judged.py's machinery (rubric + auto-zero + reference facts
+judge. The judge layer reuses suites/judged.py's machinery (rubric + auto-zero + reference facts
 + parse_judge_json) — calibrated 2026-07-02.
 """
 
@@ -30,7 +30,7 @@ from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.tool import bash
 from inspect_ai.util import apply_limits, message_limit, time_limit
 
-from evals.judged import JUDGE_PROMPT, parse_judge_json
+from suites.judged import JUDGE_PROMPT, parse_judge_json
 
 VERSION = (
     2  # v2 adds a9-sprint-plan (work selection / short-burst planning — Ken's #1 ask)
@@ -549,7 +549,7 @@ def agentic() -> Task:
     )
 
 
-# --- assisted variant (docs/model-research/agentic-gap-2026-07.md) ---------------------------
+# --- assisted variant (model-research/agentic-gap-2026-07.md) ---------------------------
 #
 # Same nine tasks, same facts, same judge — different CONDITION, reported as its own suite
 # (weight 0.0: shown on the board, never ranked, so the raw-autonomy comparison stays clean).

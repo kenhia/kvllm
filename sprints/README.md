@@ -3,7 +3,7 @@
 A published, chronological record of how **kvllm** evolved — one file per sprint — so the journey
 is legible. Same casual cadence as `trt-llm-langchain`.
 
-See [`../docs/00-kickoff.md`](../docs/00-kickoff.md) for why this project exists (vLLM over
+See [`../sprints/planning/00-kickoff.md`](../sprints/planning/00-kickoff.md) for why this project exists (vLLM over
 TRT-LLM) and the roadmap.
 
 ## Convention

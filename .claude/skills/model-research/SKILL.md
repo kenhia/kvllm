@@ -1,6 +1,6 @@
 ---
 name: model-research
-description: "Deep-dive one specific model for the kvllm 5090/vLLM environment and write a cited docs/model-research/<date>-<slug>.md. Use when the user names a model to evaluate (e.g. '/model-research Devstral-Small-2' or a HF repo id), or asks 'is <model> worth trying on the 5090?'. Verifies fit/parsers/sm_120 support against primary sources and proposes a registry row."
+description: "Deep-dive one specific model for the kvllm 5090/vLLM environment and write a cited model-research/<date>-<slug>.md. Use when the user names a model to evaluate (e.g. '/model-research Devstral-Small-2' or a HF repo id), or asks 'is <model> worth trying on the 5090?'. Verifies fit/parsers/sm_120 support against primary sources and proposes a registry row."
 ---
 
 # Model research (single model)
@@ -19,9 +19,9 @@ ask which model. If ambiguous (a family, not a checkpoint), resolve to the speci
 ## Procedure
 
 1. **Load the standing context** (do this first, every time):
-   - `docs/model-research/README.md` — the serving profile (hardware, vLLM, quant, parsers, fit math).
+   - `model-research/README.md` — the serving profile (hardware, vLLM, quant, parsers, fit math).
    - `models.toml` — so you don't re-recommend an existing entry; note if this supersedes one.
-   - Skim recent `docs/model-research/*.md` passes for prior findings on this family.
+   - Skim recent `model-research/*.md` passes for prior findings on this family.
 
 2. **Verify against PRIMARY sources** (don't trust blogs/memory — the AI world moves fast and model
    names get faked/renamed). For the target model, establish each field below, citing the source URL:
@@ -49,12 +49,12 @@ ask which model. If ambiguous (a family, not a checkpoint), resolve to the speci
 3. **Adversarially sanity-check** the load-bearing conclusions before writing — especially "fits
    32 GB" (do the weight math) and "tool calling works" (right parser? known bugs?). Mark confidence.
 
-4. **Write `docs/model-research/<YYYY-MM-DD>-<model-slug>.md`** (use today's date from context) with:
+4. **Write `model-research/<YYYY-MM-DD>-<model-slug>.md`** (use today's date from context) with:
    verdict (worth trying / has issues / skip) · exact HF repo(s) · params/arch · quant + est VRAM ·
    license/gated · tool+reasoning parser · vLLM+sm_120 maturity & caveats · best-at · a ready-to-add
    `models.toml` row · sources. Keep it scannable.
 
-5. **Update `docs/model-research/README.md`** — add the pass to the index table.
+5. **Update `model-research/README.md`** — add the pass to the index table.
 
 6. **Offer to add the registry row** to `models.toml` (`tested = false` until served on `kai`), and
    to validate it live with `just serve <key>` + a smoke test.

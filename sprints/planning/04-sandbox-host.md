@@ -1,6 +1,6 @@
 # Sandbox host — the dedicated test machine
 
-_2026-07-02, fable-planning. Plan for the spare machine (currently unplugged; newer/more capable
+_2026-07-02, planning. Plan for the spare machine (currently unplugged; newer/more capable
 than `kubsdb`) as the **execution sandbox host** for the eval harness. Ken will clean/reimage it
 and set it up like the rest of the homelab (passwordless `ssh`, passwordless `sudo`)._
 

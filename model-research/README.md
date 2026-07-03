@@ -25,7 +25,7 @@ For each recommended model report: exact HF repo · params · recommended quant 
 
 ## Current registry (avoid re-recommending; note when superseded)
 
-See [`../../models.toml`](../../models.toml). As of 2026-06-30 it holds: `qwen2.5-7b-instruct`
+See [`../../models.toml`](../models.toml). As of 2026-06-30 it holds: `qwen2.5-7b-instruct`
 (default), `qwen2.5-coder-7b-instruct`, `deepseek-r1-distill-qwen-7b`, `llama-3.1-8b-instruct`,
 `qwen2.5-14b-instruct-awq`, plus the survey additions (all `tested = false` until served on `kai`).
 
@@ -37,7 +37,7 @@ See [`../../models.toml`](../../models.toml). As of 2026-06-30 it holds: `qwen2.
 
 ## Skills
 
-Two project skills (in [`.claude/skills/`](../../.claude/skills/)) automate this and read the serving
+Two project skills (in [`.claude/skills/`](../.claude/skills/)) automate this and read the serving
 profile above:
 
 - **`/model-research <name|hf-repo>`** — deep-dive one model against our constraints (primary-source

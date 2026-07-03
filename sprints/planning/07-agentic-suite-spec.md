@@ -1,9 +1,9 @@
 # S3 agentic suite — task-design spec (Phase 4, build with Opus)
 
-_2026-07-02, fable-planning. Authored by Fable per [05-roadmap.md](05-roadmap.md); Opus
+_2026-07-02, planning. Authored by Fable per [05-roadmap.md](05-roadmap.md); Opus
 implements. Prereqs that now exist: the episode runner + Docker sandbox path (Phase 1), the
-sandboxed-suite pattern with hidden ground truth (Phase 2, `evals/coding.py`), and the judge
-plumbing with rubric + auto-zero + structured rationale (`evals/judged.py`, Phase 3). Where this
+sandboxed-suite pattern with hidden ground truth (Phase 2, `suites/coding.py`), and the judge
+plumbing with rubric + auto-zero + structured rationale (`suites/judged.py`, Phase 3). Where this
 spec says VERIFY, confirm against the code/API before relying on it; deviations go in the sprint
 doc, never silently._
 
@@ -17,7 +17,7 @@ useful to Ken (judge).
 
 ## The fixture homelab image
 
-`evals/agentic_assets/Dockerfile` + `compose.yaml` (same hardening as coding: non-root,
+`suites/agentic_assets/Dockerfile` + `compose.yaml` (same hardening as coding: non-root,
 `network_mode: none`, mem/cpu/pids caps). A slim container can't run real systemd, so the image
 ships **shim commands backed by fixture state** — the model interrogates the box exactly as it
 would a real one:
@@ -49,7 +49,7 @@ temperature 0. Instructions template:
 
 Final report = the `submit()` answer; if the model never submits (Phase 2/3 showed local models
 often don't), fall back to the last assistant message text (VERIFY: reuse
-`extract_coding_signals`-style transcript reduction; factor shared helpers into `evals/_common.py`
+`extract_coding_signals`-style transcript reduction; factor shared helpers into `suites/_common.py`
 rather than copy-pasting).
 
 ## The 8 tasks and their planted truths
@@ -74,7 +74,7 @@ is worse than none.
 1. **Mechanical fact check** (pure function, unit-tested): case-insensitive containment of each
    planted truth in the final report (`a5` uses exact wi_number set-matching per category).
    `fact_score = found / required`.
-2. **Judge rubric** (reuse the `evals/judged.py` machinery: rubric + auto-zero + facts +
+2. **Judge rubric** (reuse the `suites/judged.py` machinery: rubric + auto-zero + facts +
    `parse_judge_json`): grades accuracy-beyond-facts, actionability, and **no fabrication**
    (auto-zero). Judge sees the task, the planted truth (as reference facts), and the report —
    not the transcript.

@@ -43,7 +43,7 @@ just service-disable     # stop now + don't start at boot
 
 | Command | Does |
 |---|---|
-| `just start` / `just stop` / `just restart` | control the running service |
+| `just service-start` / `just service-stop` / `just service-restart` | control the running service |
 | `just service-switch <key>` | write the key into `deploy/kvllm.env` and restart onto it |
 | `just service-status` | systemd status |
 | `just service-logs` | follow journald (`journalctl --user -u kvllm -f`) |
@@ -56,7 +56,7 @@ While it's running it owns the GPU, so:
 
 - **Switch models:** `just service-switch <key>` (don't also run a manual `just serve` — they'd
   collide on the GPU and port 8000).
-- **Free the GPU** for ad-hoc work or the `trt-llm-explore` backend: `just stop` (keeps it enabled
+- **Free the GPU** for ad-hoc work or the `trt-llm-explore` backend: `just service-stop` (keeps it enabled
   for next boot) or `just service-disable` (also stops auto-start).
 
 ## Resilience

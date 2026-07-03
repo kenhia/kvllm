@@ -68,11 +68,16 @@ service-enable:
 service-disable:
     systemctl --user disable --now kvllm
 
-start:
+# Start the service (until reboot; service-enable makes it stick)
+service-start:
     systemctl --user start kvllm
-stop:
+
+# Stop the service (until reboot; service-disable makes it stick)
+service-stop:
     systemctl --user stop kvllm
-restart:
+
+# Restart the service (same model; use service-switch to change models)
+service-restart:
     systemctl --user restart kvllm
 
 # Switch the served model: write the key into deploy/kvllm.env and restart
@@ -82,9 +87,11 @@ service-switch key:
     systemctl --user restart kvllm
     @echo "switched to {{key}}; run 'just healthy' to wait for /v1"
 
+# Show the service's systemd status
 service-status:
     systemctl --user status kvllm --no-pager || true
 
+# Follow the service's journal
 service-logs:
     journalctl --user -u kvllm -f
 
@@ -102,19 +109,22 @@ helper-enable:
 helper-disable:
     systemctl --user disable --now kvllm-helper
 
+# Restart the helper
 helper-restart:
     systemctl --user restart kvllm-helper
 
+# Show the helper's systemd status
 helper-status:
     systemctl --user status kvllm-helper --no-pager || true
 
+# Follow the helper's journal
 helper-logs:
     journalctl --user -u kvllm-helper -f
 
-# --- Eval (kvllm.evalrun + evals/; see docs/model-research/evals/ and sprints/fable-planning/) ---
+# --- Eval (kvllm.evalrun + suites/; see model-research/evals/ and sprints/planning/) ---
 
-# Evaluate registered model(s): serve → operational gate → Inspect suites → scorecard +
-# leaderboard + models.toml. Orchestrates kvllm.service around each model.
+# (Orchestrates kvllm.service around each model; writes scorecard + leaderboard + models.toml.)
+# Evaluate registered model(s): serve → operational gate → Inspect suites → score
 eval key *flags:
     uv run --group eval python -m kvllm.evalrun {{key}} {{flags}}
 
@@ -124,16 +134,16 @@ eval-all *flags:
 
 # Prove the Docker sandbox path works (mock model, no GPU). Set DOCKER_HOST to test remote.
 eval-sandbox-smoke:
-    uv run --group eval python evals/sandbox_smoke.py
+    uv run --group eval python suites/sandbox_smoke.py
 
-# Self-test the coding suite: every task's reference solution must pass its hidden tests
-# (needs Docker; no GPU/model). Run before trusting a coding eval.
+# (Runs in the sandbox; run before trusting a coding eval.)
+# Self-test the coding suite: reference solutions must pass hidden tests (Docker; no GPU)
 test-coding-suite:
-    uv run --group eval python -m evals.coding_selftest
+    uv run --group eval python -m suites.coding_selftest
 
 # Open the HTML leaderboard
 eval-board:
-    @echo "docs/model-research/evals/leaderboard.html"
+    @echo "model-research/evals/leaderboard.html"
 
 # Lint + format-check
 lint:
@@ -147,7 +157,7 @@ test:
 # Lint + unit tests (fast — no live model needed)
 check: lint test
 
-# Self-test the agentic suite: planted truths must be discoverable + reference reports
-# must score 1.0 mechanically (needs Docker; no GPU/model/judge).
+# (Reference reports must score 1.0 mechanically; no GPU/model/judge needed.)
+# Self-test the agentic suite: planted truths discoverable in the fixture (Docker)
 test-agentic-suite:
-    uv run --group eval python -m evals.agentic_selftest
+    uv run --group eval python -m suites.agentic_selftest

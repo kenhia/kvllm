@@ -1,7 +1,7 @@
 """S1 `tools` suite — the mechanical tool-calling battery, as an Inspect task.
 
 v2 of the Sprint 7 suite: the original 7 cases (single/enum/integer args, negative no-call,
-forced choice, multi-turn round-trip, parallel calls) plus 4 hard cases from the fable-planning
+forced choice, multi-turn round-trip, parallel calls) plus 4 hard cases from the planning
 design — array args, a distractor tool, tool-error recovery, and exact-argument adherence.
 
 Stub tools return canned values so multi-turn cases round-trip deterministically; scoring is

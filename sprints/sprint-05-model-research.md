@@ -1,7 +1,7 @@
 # Sprint 5 — Model collection research
 
 _2026-06-30 on `kai`. korg #99 (the "Wed research" block, pulled forward). Branch `05-model-research`._
-_Feeds the [Sprint 2](sprint-02-serving-ergonomics.md) registry. See [`../docs/00-kickoff.md`](../docs/00-kickoff.md)._
+_Feeds the [Sprint 2](sprint-02-serving-ergonomics.md) registry. See [`../sprints/planning/00-kickoff.md`](../sprints/planning/00-kickoff.md)._
 
 ## Goal
 
@@ -11,11 +11,11 @@ cited survey + a ready-to-add registry "download set."
 
 ## What shipped
 
-- **[`docs/model-research/`](../docs/model-research/)** — new folder (per the helper-skills plan):
-  - **[README.md](../docs/model-research/README.md)** — the standing **serving profile** (hardware,
+- **[`model-research/`](../model-research/)** — new folder (per the helper-skills plan):
+  - **[README.md](../model-research/README.md)** — the standing **serving profile** (hardware,
     vLLM, quant, parsers, fit math) that future passes + the planned `/model-research` and
     `/model-scout` skills inject. Plus the pass index.
-  - **[2026-06-30-survey.md](../docs/model-research/2026-06-30-survey.md)** — the cited report:
+  - **[2026-06-30-survey.md](../model-research/2026-06-30-survey.md)** — the cited report:
     headlines, sm_120 quant guidance, ranked shortlist (coding / agentic / vision), weekend download
     set, supersedes list, method & confidence.
 - **[`models.toml`](../models.toml)** — 5 verified additions (all `tested=false`): `qwen3-8b-fp8`,
@@ -42,7 +42,7 @@ cited survey + a ready-to-add registry "download set."
   108 agents had already run; I salvaged **121 extracted claims + 75 adversarial-verify votes** from
   the run `journal.jsonl` and synthesized the report by hand. No re-run needed — the verified
   material was intact. _(Follow-up: the harness's synth schema is brittle at this result volume.)_
-- **Adopted `docs/model-research/`** with a standing-context README, setting up the future
+- **Adopted `model-research/`** with a standing-context README, setting up the future
   `/model-research` + `/model-scout` skills to emit dated passes into it.
 - New models stay **`tested=false`** until actually served on `kai` — the `qwen3_5*` arch support is
   the biggest open risk.

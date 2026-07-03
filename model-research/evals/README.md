@@ -2,8 +2,8 @@
 
 Our own "worth trying / has issues / skip" testing of models **on `kai`** — not online leaderboard
 scores, but whether a model actually serves, fits, and performs on the 5090. Harness v2 (Sprint 8)
-runs suites as **Inspect AI** tasks ([`evals/`](../../../evals/)); design in
-[`sprints/fable-planning/`](../../../sprints/fable-planning/README.md).
+runs suites as **Inspect AI** tasks ([`suites/`](../../suites/)); design in
+[`sprints/planning/`](../../sprints/planning/README.md).
 
 **The human view:** open [`leaderboard.html`](leaderboard.html). Agent-friendly siblings:
 [`leaderboard.json`](leaderboard.json) (source of truth) and [`leaderboard.md`](leaderboard.md).
@@ -24,15 +24,15 @@ just eval-sandbox-smoke                    # prove the Docker sandbox path (mock
 `just eval` **orchestrates the service**: it stops `kvllm.service` to free the GPU, serves the
 target standalone, runs the operational gate + the suites matching the model's registry
 `capabilities`, then restarts the service. It writes a scorecard, rebuilds the leaderboard, and
-stamps `tested` / `eval_verdict` / `eval_date` back into [`../../../models.toml`](../../../models.toml).
+stamps `tested` / `eval_verdict` / `eval_date` back into [`../../../models.toml`](../../models.toml).
 `just eval-all` resumes: models already scored on current suite versions are skipped (`--force`
 reruns; gate-failed models need `--retry-skips`).
 
 **Sandboxes run on `ksandbox`** (`[sandbox].docker_host` in
-[`eval-config.toml`](../../../eval-config.toml); `DOCKER_HOST` env overrides, empty = local
+[`eval-config.toml`](../../eval-config.toml); `DOCKER_HOST` env overrides, empty = local
 Docker). The coding/agentic containers get their own machine — no CPU contention with vLLM, and
 untrusted model-generated code stays off `kai`. Background:
-[`fable-planning/04-sandbox-host.md`](../../../sprints/fable-planning/04-sandbox-host.md).
+[`planning/04-sandbox-host.md`](../../sprints/planning/04-sandbox-host.md).
 
 ## What's measured
 
@@ -53,13 +53,13 @@ untrusted model-generated code stays off `kai`. Background:
 Suites are **versioned**; the leaderboard marks scores from older versions with † until re-run.
 
 **Ranking:** composite = speed_factor × weighted mean of suite scores
-([`eval-config.toml`](../../../eval-config.toml) weights; re-weighting re-ranks without
+([`eval-config.toml`](../../eval-config.toml) weights; re-weighting re-ranks without
 re-running via `--rescore`). **Verdict:** `worth trying` · `has issues` (composite < 0.55, any
 suite < 0.40, or decode ≤ 10 tok/s) · `skip` (didn't serve) · `baseline` 🌐 (API models —
 ranked for comparison, never swept by `--all`, leaderboard shows **est $/run** from measured
 token usage).
 
-## Roadmap (sprints/fable-planning/05-roadmap.md)
+## Roadmap (sprints/planning/05-roadmap.md)
 
 - **vision** suite (Phase 5) — for `vision` models.
 - VM layer on ksandbox (snapshot/revert full-machine episodes), computer-use after that.

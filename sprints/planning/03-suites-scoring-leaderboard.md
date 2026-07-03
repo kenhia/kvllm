@@ -1,6 +1,6 @@
 # Suites, scoring, and the weighted leaderboard
 
-_2026-07-02, fable-planning. What we test, how each thing is scored, and how per-suite scores roll
+_2026-07-02, planning. What we test, how each thing is scored, and how per-suite scores roll
 up into a weighted composite that actually ranks the leaderboard. Companion to
 [02-eval-harness-architecture.md](02-eval-harness-architecture.md)._
 
@@ -138,7 +138,7 @@ suite < 0.4. `worth trying` = otherwise. Same three values flow into `models.tom
 
 ## Leaderboard v2
 
-Same tri-format convention, same location (`docs/model-research/evals/`):
+Same tri-format convention, same location (`model-research/evals/`):
 
 - `leaderboard.json` — adds `composite`, `speed_factor`, `weights_version`, per-suite
   `{score, version, date}`, and an `eligible` list.

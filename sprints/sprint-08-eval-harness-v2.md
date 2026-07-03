@@ -1,19 +1,19 @@
 # Sprint 8 — Eval harness v2 (Inspect AI, sandboxed agentic+coding, weighted leaderboard)
 
 _2026-07-02 on `kai`. korg #104. Branch `08-eval-harness-v2`. Builds on
-[Sprint 7](sprint-07-eval-harness.md). Planning in [`sprints/fable-planning/`](fable-planning/README.md)
+[Sprint 7](sprint-07-eval-harness.md). Planning in [`sprints/planning/`](planning/README.md)
 (repo review, stack decision, suites/scoring design, sandbox-host plan, phased roadmap)._
 
 ## Goal
 
 Turn the Sprint 7 MVP eval into the rich harness Ken wants: agentic + coding episodes in sandboxes,
 frontier-model judging, a weighted composite leaderboard. This sprint covers **roadmap Phase 0**
-(hygiene) — see [`fable-planning/05-roadmap.md`](fable-planning/05-roadmap.md) for the full phased
+(hygiene) — see [`planning/05-roadmap.md`](planning/05-roadmap.md) for the full phased
 plan (Phase 1 — episode runner core + Inspect AI migration — is next).
 
 ## Plan (Phase 0, per the roadmap)
 
-Review items 4, 7, 10 from [`fable-planning/01-current-state-review.md`](fable-planning/01-current-state-review.md):
+Review items 4, 7, 10 from [`planning/01-current-state-review.md`](planning/01-current-state-review.md):
 commit the outstanding v1 eval results as a clean baseline; add unit tests for the eval package's
 pure functions (none existed); fix the `--today` default (`"undated"` when run outside `just`).
 
@@ -57,7 +57,7 @@ pure functions (none existed); fix the `--today` default (`"undated"` when run o
   vLLM). Verified the exact APIs before building: `generate(tool_calls="none"|"single"|"loop")`,
   `TaskState.tools/tool_choice`, `ToolCall.function/.arguments` (pre-parsed dicts),
   `ModelOutput.for_tool_call`, `eval_set` resume, `Literal` → enum tool schemas.
-- **`evals/tools.py`** — the S1 suite as an Inspect task, **v2 = 11 cases**: the 7 ported Sprint 7
+- **`suites/tools.py`** — the S1 suite as an Inspect task, **v2 = 11 cases**: the 7 ported Sprint 7
   cases + 4 hard ones from the design (array args, distractor tool, tool-error recovery,
   exact-argument adherence with word→int coercion). Stub tools return canned values; scoring is a
   pure function (`score_extract`) with its own unit tests.
@@ -73,14 +73,14 @@ pure functions (none existed); fix the `--today` default (`"undated"` when run o
   scorecard-current skip at the model level, `eval_set` log-dir resume within a model,
   gate-`skip` models held behind `--retry-skips`), `--endpoint` to eval any served /v1 without
   orchestration, one-broken-model-doesn't-kill-the-sweep error handling.
-- **`evals/sandbox_smoke.py` + `just eval-sandbox-smoke`** — proves Inspect executes bash in a
+- **`suites/sandbox_smoke.py` + `just eval-sandbox-smoke`** — proves Inspect executes bash in a
   Docker container *here* using a mock model (no GPU): scorer requires the marker in the **tool**
   message, so it can't pass without real sandbox execution. This is the go/no-go vehicle for the
   Phase 4 `DOCKER_HOST=ssh://` experiment.
 - **v1 retired**: `kvllm/eval/` deleted; tests ported (`test_evals_tools.py`, `test_score.py`
   — 47 total, up from 37); `eval-logs/` gitignored; evals README rewritten.
 - **Phase 2 spec written** (Fable → Opus handoff):
-  [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md) — 15 tasks
+  [`planning/06-coding-suite-spec.md`](planning/06-coding-suite-spec.md) — 15 tasks
   (C1 functions ×6, C2 script-contract ×4, C3 fix/extend ×3, C4 iterate-to-green ×2),
   post-episode hidden-test injection, junitxml scoring with partial credit, the `recovered`
   iteration metric, suite self-test against reference solutions, acceptance criteria.
@@ -163,17 +163,17 @@ Registry after the sweep: 7 of 10 `worth trying`, 1 `has issues`, 2 `skip` — a
 
 ## What shipped — Phase 2: S2 coding suite (Opus, 2026-07-02)
 
-Implements [`fable-planning/06-coding-suite-spec.md`](fable-planning/06-coding-suite-spec.md): a
+Implements [`planning/06-coding-suite-spec.md`](planning/06-coding-suite-spec.md): a
 react agent codes in a Docker `/workspace` (bash tool), then a scorer injects hidden pytest tests
 the model never saw, runs them in the sandbox, and scores partial credit from junit XML — never
 from the model's claims.
 
-- **`evals/coding_assets/`**: `Dockerfile` (python:3.12-slim + pinned pytest, non-root) +
+- **`suites/coding_assets/`**: `Dockerfile` (python:3.12-slim + pinned pytest, non-root) +
   `compose.yaml` (`network_mode: none`, mem/cpu/pids caps); **15 tasks** — C1 single-function ×6,
   C2 script/IO-contract ×4, C3 fix-a-seeded-repo ×3, C4 iterate-to-green ×2. Each: `prompt.md`,
   `hidden/`, reference `solution/`, and (C2/C3/C4) `seed/`. Every seed verified to *fail* its
   visible tests (planted bugs real); every reference solution verified to *pass* its hidden tests.
-- **`evals/coding.py`**: `coding()` task (per-tier message limits via `apply_limits`; time_limit
+- **`suites/coding.py`**: `coding()` task (per-tier message limits via `apply_limits`; time_limit
   600 s; bash timeout 120 s), `react(attempts=1)` (C4 measures *self*-iteration), and
   `coding_scorer` — post-episode hidden-test injection, ×0.9 hit-limit factor, and the `recovered`
   iteration metric. `parse_junit` / `extract_coding_signals` are pure (unit-tested).
@@ -182,7 +182,7 @@ from the model's claims.
   `score.merge_prior_suites` folds prior suites forward so `--suite code` keeps a model's `tools`
   row on the leaderboard; each suite now runs in its own log subdir (`…/<date>/<cap>`) so
   cross-suite runs and `--force` don't collide.
-- **`just test-coding-suite`** (`evals/coding_selftest.py`): seeds each reference solution, runs
+- **`just test-coding-suite`** (`suites/coding_selftest.py`): seeds each reference solution, runs
   the real scorer, asserts `raw_frac == 1.0` ×15 **and** the sandbox has no network — all pass.
 - **Tests**: 20 pure-function unit tests (66 total; `just check` green).
 
@@ -279,7 +279,7 @@ read-diagnose-edit doesn't. Exactly the discrimination S2 was designed to find.
   model). Live on both 7Bs: **63%/62%** — close on general instruction-following (plausible for
   siblings), and the judge is sharp: it caught a fatal stale-dump data-loss flaw in a migration
   plan and a root-cause inversion in an incident summary, rubric-grounded.
-- **Calibration bundle**: `docs/model-research/evals/calibration/judged-sheet.md` (12 rows) for
+- **Calibration bundle**: `model-research/evals/calibration/judged-sheet.md` (12 rows) for
   Ken to hand-score; **judged stays out of the composite until `[judge].calibrated = true`**
   (protocol: judge within ±1 on ≥80%). ANTHROPIC_API_KEY rides in the repo-local gitignored
   `.env` (just's dotenv-load).

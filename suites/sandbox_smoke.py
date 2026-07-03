@@ -7,7 +7,7 @@ No GPU / no served model: a mock model emits one scripted bash() call; the score
 marker string to come back in the TOOL message (i.e. the command really ran in the sandbox —
 checking the final answer would only prove the mock can echo). This is the go/no-go check for
 remote-docker (inspect_ai issue #540: DOCKER_HOST is unofficial); if ssh:// misbehaves, the
-fallback is running the eval runner on the sandbox host (fable-planning/02).
+fallback is running the eval runner on the sandbox host (planning/02).
 """
 
 from __future__ import annotations
