@@ -24,7 +24,7 @@ from pathlib import Path
 from inspect_ai import Task, task
 from inspect_ai.agent import as_solver, react
 from inspect_ai.dataset import MemoryDataset, Sample
-from inspect_ai.model import GenerateConfig, get_model
+from inspect_ai.model import ChatMessageUser, GenerateConfig, get_model
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.tool import bash
@@ -512,24 +512,85 @@ def agentic_scorer():
     return score
 
 
+def _samples(prompt_template: str) -> list[Sample]:
+    return [
+        Sample(
+            id=t.name,
+            input=prompt_template.format(task=t.question),
+            metadata=asdict(t),
+            files={".scenario": t.scenario},
+            setup=t.setup,
+        )
+        for t in ATASKS
+    ]
+
+
 @task
 def agentic() -> Task:
-    samples = []
-    for t in ATASKS:
-        samples.append(
-            Sample(
-                id=t.name,
-                input=PROMPT_TEMPLATE.format(task=t.question),
-                metadata=asdict(t),
-                files={".scenario": t.scenario},
-                setup=t.setup,
-            )
-        )
     return Task(
-        dataset=MemoryDataset(samples, name="agentic"),
+        dataset=MemoryDataset(_samples(PROMPT_TEMPLATE), name="agentic"),
         solver=agentic_agent(),
         scorer=agentic_scorer(),
         sandbox=("docker", COMPOSE),
         time_limit=TIME_LIMIT_S,
         version=VERSION,
+    )
+
+
+# --- assisted variant (docs/model-research/agentic-gap-2026-07.md) ---------------------------
+#
+# Same nine tasks, same facts, same judge — different CONDITION, reported as its own suite
+# (weight 0.0: shown on the board, never ranked, so the raw-autonomy comparison stays clean).
+# The scaffolding is what a production controller loop would provide: a bigger budget, and a
+# two-phase wrap-up — when the investigation budget is exhausted, a user message demands the
+# report and reserves the last messages for delivering it. The gap analysis showed the
+# strongest locals fail at self-pacing (gemma-4-12b judges 9.3/10 when it submits but
+# delivered 3/9): assisted-vs-raw delta measures how much of the gap controller support
+# closes, per model.
+
+ASSISTED_VERSION = 1
+ASSISTED_MSG_LIMIT = 60
+ASSISTED_WRAP_RESERVE = 8  # messages kept back for the demanded final report
+ASSISTED_TIME_LIMIT_S = 900  # slower-but-capable explicitly fits the use case
+
+ASSISTED_PROMPT_TEMPLATE = PROMPT_TEMPLATE.replace(
+    "before ~15 tool calls", "before ~25 tool calls"
+)
+
+WRAP_UP_PROMPT = (
+    "Budget check from the controller: your investigation budget is exhausted. Do not run "
+    "any more tools. Call submit() NOW with your report based on what you have already "
+    "seen — a partial report beats none."
+)
+
+
+@solver
+def assisted_agent():
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        investigate = ASSISTED_MSG_LIMIT - ASSISTED_WRAP_RESERVE
+        with apply_limits([message_limit(investigate)], catch_errors=True) as scope:
+            state = await _REACT_SOLVER(state, generate)
+        state.metadata["hit_real_limit"] = False
+        if scope.limit_error is not None:
+            state.metadata["wrapped_up"] = True
+            state.messages.append(ChatMessageUser(content=WRAP_UP_PROMPT))
+            with apply_limits(
+                [message_limit(ASSISTED_MSG_LIMIT)], catch_errors=True
+            ) as scope2:
+                state = await _REACT_SOLVER(state, generate)
+            state.metadata["hit_real_limit"] = scope2.limit_error is not None
+        return state
+
+    return solve
+
+
+@task
+def agentic_assisted() -> Task:
+    return Task(
+        dataset=MemoryDataset(_samples(ASSISTED_PROMPT_TEMPLATE), name="assisted"),
+        solver=assisted_agent(),
+        scorer=agentic_scorer(),
+        sandbox=("docker", COMPOSE),
+        time_limit=ASSISTED_TIME_LIMIT_S,
+        version=ASSISTED_VERSION,
     )

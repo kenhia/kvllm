@@ -74,3 +74,15 @@ def test_run_suites_other_errors_propagate(tmp_path, monkeypatch):
         evalrun._run_suites(
             "mockllm/model", {"tools": (lambda: None, 2)}, tmp_path, local=False
         )
+
+
+def test_suites_for_excludes_optional_by_default():
+    suites = {
+        "agentic": (None, 2, "tools", False),
+        "assisted": (None, 1, "tools", True),
+    }
+    entry = {"capabilities": ["tools"]}
+    assert set(evalrun._suites_for(entry, None, suites)) == {"agentic"}
+    assert set(evalrun._suites_for(entry, "assisted", suites)) == {"assisted"}
+    assert set(evalrun._suites_for(entry, "agentic", suites)) == {"agentic"}
+    assert evalrun._suites_for({"capabilities": ["chat"]}, "assisted", suites) == {}

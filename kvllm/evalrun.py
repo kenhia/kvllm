@@ -31,11 +31,13 @@ LOG_ROOT = REPO / "eval-logs"
 
 
 def _suites():
-    """Suite name → (task factory, version, required registry capability). Imported lazily to
-    keep inspect off the CLI-arg-error path. A suite runs on a model iff the model's registry
-    `capabilities` contain the required cap (`judged` rides on plain `chat` — every model)."""
+    """Suite name → (task factory, version, required registry capability, optional). Imported
+    lazily to keep inspect off the CLI-arg-error path. A suite runs on a model iff the model's
+    registry `capabilities` contain the required cap (`judged` rides on plain `chat` — every
+    model). Optional suites (`assisted`) run ONLY when named via --suite — they're labeled
+    alternate conditions, never part of the default sweep or its resume check."""
+    from evals.agentic import ASSISTED_VERSION, agentic, agentic_assisted
     from evals.agentic import VERSION as AGENTIC_VERSION
-    from evals.agentic import agentic
     from evals.coding import VERSION as CODING_VERSION
     from evals.coding import coding
     from evals.judged import VERSION as JUDGED_VERSION
@@ -44,10 +46,11 @@ def _suites():
     from evals.tools import tools
 
     return {
-        "tools": (tools, TOOLS_VERSION, "tools"),
-        "code": (coding, CODING_VERSION, "code"),
-        "agentic": (agentic, AGENTIC_VERSION, "tools"),
-        "judged": (judged, JUDGED_VERSION, "chat"),
+        "tools": (tools, TOOLS_VERSION, "tools", False),
+        "code": (coding, CODING_VERSION, "code", False),
+        "agentic": (agentic, AGENTIC_VERSION, "tools", False),
+        "judged": (judged, JUDGED_VERSION, "chat", False),
+        "assisted": (agentic_assisted, ASSISTED_VERSION, "tools", True),
     }
 
 
@@ -55,8 +58,8 @@ def _suites_for(entry: dict, only: str | None, suites: dict) -> dict:
     caps = entry.get("capabilities", [])
     return {
         name: (factory, version)
-        for name, (factory, version, req_cap) in suites.items()
-        if req_cap in caps and (not only or only == name)
+        for name, (factory, version, req_cap, optional) in suites.items()
+        if req_cap in caps and (only == name if optional or only else True)
     }
 
 

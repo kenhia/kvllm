@@ -71,7 +71,16 @@ harness change rescues these; the gap to Haiku here is real model capability.
 
 ## Actions
 
-- [x] `truncation="auto"` (this commit) — fixes mode 1.
+- [x] `truncation="auto"` — fixes mode 1.
 - [ ] Re-run agentic for the three sample-death models (after the judged sweep frees the GPU).
-- [ ] Follow-up experiment: `on_continue` budget nudge → agentic v3 (decide deliberately).
+- [x] **`assisted` suite built** (2026-07-03) — the mode-2 lever, done right: same nine
+  tasks/facts/judge as agentic, but under controller scaffolding — message limit 60 (vs 40),
+  time limit 900s ("slower but capable" explicitly fits the hybrid plan), and a two-phase
+  budget: investigation runs to limit−8, then the harness injects a wrap-up demand ("do not
+  run more tools; submit() now") with 8 messages reserved for delivery. Weight 0.0 — shown
+  on the board, never ranked; the ranked `agentic` column is untouched, so nothing skews.
+  Opt-in: `just eval <key> --suite assisted` (excluded from `--all` sweeps and resume checks).
+  **The assisted−agentic delta per model is the measurement**: how much of the frontier gap
+  is pacing (controller-fixable) vs capability. Baselines should run it too — their delta
+  ≈ 0 is the control. Predictions: gemma-4-12b jumps hard; llama-3.1 doesn't move.
 - [ ] gemma-4-12b: watch as primary local-controller candidate once mode-1 rerun lands.

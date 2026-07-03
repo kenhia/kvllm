@@ -210,3 +210,36 @@ def test_sprint_plan_nonexistent_item():
 def test_mechanical_a9_dispatch():
     s_, _ = mechanical_score(_meta("a9-sprint-plan"), "sprint: 201 202 203")
     assert s_ == 1.0
+
+
+# --- assisted variant -------------------------------------------------------------------
+
+
+def test_assisted_task_same_nine_scenarios():
+    from evals.agentic import ASSISTED_VERSION, ATASKS, agentic_assisted
+
+    t = agentic_assisted()
+    assert len(t.dataset) == len(ATASKS) == 9
+    assert t.version == ASSISTED_VERSION
+    ids = {s.id for s in t.dataset}
+    assert ids == {a.name for a in ATASKS}
+
+
+def test_assisted_budget_leaves_wrap_reserve():
+    from evals.agentic import (
+        ASSISTED_MSG_LIMIT,
+        ASSISTED_WRAP_RESERVE,
+        MSG_LIMIT,
+        WRAP_UP_PROMPT,
+    )
+
+    assert ASSISTED_MSG_LIMIT > MSG_LIMIT  # "longer runs" is the point
+    assert 0 < ASSISTED_WRAP_RESERVE < ASSISTED_MSG_LIMIT
+    assert "submit()" in WRAP_UP_PROMPT  # the demand names the delivery mechanism
+
+
+def test_assisted_prompt_raises_step_budget():
+    from evals.agentic import ASSISTED_PROMPT_TEMPLATE, PROMPT_TEMPLATE
+
+    assert "~15 tool calls" in PROMPT_TEMPLATE
+    assert "~25 tool calls" in ASSISTED_PROMPT_TEMPLATE
