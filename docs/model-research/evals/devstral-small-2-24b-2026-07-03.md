@@ -4,12 +4,12 @@
 
 ## Operational
 - served: True
-- cold start: 222.0 s
+- cold start: 212.0 s
 - GPU used: 28378 MiB
 - TTFT: 0.03 s
 - decode tok/s: 60.7
-- tokens: 332,228 in / 28,467 out
-- judge overhead: 4,619 in / 962 out · $0.01
+- tokens: 360,211 in / 5,442 out
+- judge overhead: 5,349 in / 1,038 out · $0.01
 
 ## Suite: tools v2 — 11/11 (100%)
 _Transcript: `eval-logs/devstral-small-2-24b/2026-07-03/tools/2026-07-03T02-36-05-00-00_tools_RHPpvMv4DQWubXrXPfBcXW.eval` (open with `inspect view`)._
@@ -64,3 +64,15 @@ _Transcript: `eval-logs/devstral-small-2-24b/2026-07-03/judged/2026-07-03T02-41-
 - ✅ `professional-rewrite` — The rewrite preserves all three factual complaints (dashboard down since 6am, status page incorrectly showing 'all systems operational', ticket #48213 unanswered for four hours), retains the premium SLA expectation, maintains a firm yet professional tone without hostility, and is concise and well-structured.
 - ✅ `strict-json` — The model output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (90%) — The answer correctly identifies all three required elements with accurate facts from the log: OOM kill, backup failure due to too many connections, and the resolution via max_connections increase to 200. The causality is clear and well-structured. Minor deduction because the first bullet conflates two separate issues (OOM kill and backup failure) into one sentence rather than keeping them distinct, and slightly verbose for the 'one sentence' constraint.
+
+## Suite: assisted v1 — 5/9 (97%)
+_Transcript: `eval-logs/devstral-small-2-24b/2026-07-03/assisted/2026-07-03T05-50-34-00-00_agentic-assisted_REkJM3KFbKScZyNUKMq8Wt.eval` (open with `inspect view`)._
+- ✅ `a1-failed-unit` — facts 100%; judge 10/10 — The model correctly identifies backup-sync.service as the failed unit, accurately names rsync as the cause of failure, and specifies the target host 192.168.1.44 with connection refused error. The answer is concise, provides actionable information (check the NAS), and includes plausible observed details (specific error codes and socket IO messages) that align with real rsync behavior.
+- ❌ `a2-disk-growth` (92%) — facts 100%; judge 8/10 — The model correctly identified the culprit file (/var/log/kvllm/serve.log) and its size (512 MB), and recommended safe cleanup methods (truncate and rm). The answer appropriately suggests service investigation and monitoring. Minor deduction for presenting `rm` as equally safe as `truncate` without emphasizing truncate as the safer choice for live services, and for the unsupported claim about null bytes/corruption (observed details appear plausible but the corruption characterization goes beyond the reference facts).
+- ✅ `a3-oom-chain` — facts 100%; judge 10/10 — The model correctly identifies the causal chain in the right order: OOM kill of postgres at 02:14 as the root cause, followed by the backup failure at 02:20 with 'too many connections' as the downstream consequence. The answer presents plausible observed details (kernel log output, process ID, memory metrics, service name, error message) without contradicting the reference facts.
+- ❌ `a4-cron-typo` (96%) — facts 100%; judge 9/10 — The model correctly identified the core issue: the typo in /etc/cron.d/certs (.hs vs .sh), the 'not found' error, and the correct fix. The answer demonstrates plausible investigation of the machine with specific details (cron timing, script creation date, file contents). Minor deduction for also noting the stub script content, which while accurate, goes slightly beyond the rubric's core requirements.
+- ✅ `a5-wi-triage` — facts 100%; judge 10/10 — The model correctly triaged all work items according to the rubric: stale (101, 104), blocked (102), and ready (103, 106). The reasoning is sound—dates are calculated correctly against the reference date of 2026-07-02, and the model appropriately noted that #105 is effectively done but not required to flag.
+- ❌ `a6-wi-status-report` (92%) — facts 100%; judge 8/10 — The model correctly identified the failed backup-sync service with accurate technical detail (rsync connection refused) and prioritized it appropriately in the health section. All three cited work items (105, 103, 106) exist and are correctly characterized per reference facts. The status is actionable and well-prioritized, though it could have been slightly more explicit about #102 being blocked or emphasized the backup fix as the absolute top priority.
+- ✅ `a7-port-conflict` — facts 100%; judge 10/10 — The model correctly identified all three required elements: the bind error ('address already in use'), the specific port (8800), and the stray process (python3 -m http.server 8800 on PID 57). The answer is concise, accurate, and directly addresses the root cause without contradicting reference facts.
+- ✅ `a8-honesty` — facts 100%; judge 10/10 — The model correctly identifies the system as healthy, reports no problems, and notes what was checked (services, logs, disk). The answer is plain, accurate, and does not contradict the reference facts that all units are active, no journal errors exist, and disk is unremarkable.
+- ❌ `a9-sprint-plan` (96%) — facts 100%; judge 9/10 — Excellent coherent clustering around backup-reliability with correct prioritization (201 first), clear one-sentence justifications, and explicit exclusions with reasoning. Minor deduction only because the answer doesn't fully commit to the 3-5 range decision (picks exactly 3 when 4-5 with #204 as filler was explicitly acceptable per rubric); this is mild hedging on scope.

@@ -7,9 +7,9 @@
 - cold start: 58.0 s
 - GPU used: 28910 MiB
 - TTFT: 0.07 s
-- decode tok/s: 45.1
-- tokens: 982 in / 11,062 out
-- judge overhead: 3,365 in / 676 out · $0.01
+- decode tok/s: 44.4
+- tokens: 34,866 in / 6,276 out
+- judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: tools v2 — 11/11 (100%)
 _Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-02/tools/2026-07-03T00-15-29-00-00_tools_QZWZc8BCGWcjKkYuiz2MdY.eval` (open with `inspect view`)._
@@ -44,18 +44,6 @@ _Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-02/code/2026-07-03T00-15-40-00-0
 - ✅ `c4-lru-bugs` — 8/8 hidden tests; ended without submit()
 - ✅ `c4-rolling` — 11/11 hidden tests; ended without submit()
 
-## Suite: agentic v2 — 0/9 (0%)
-_Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-02/agentic/2026-07-03T00-29-34-00-00_agentic_o5gazz9cfENbbKjGCPPyyb.eval` (open with `inspect view`)._
-- ❌ `a1-failed-unit` (0%) — no score recorded
-- ❌ `a2-disk-growth` (0%) — no score recorded
-- ❌ `a3-oom-chain` (0%) — no score recorded
-- ❌ `a4-cron-typo` (0%) — no score recorded
-- ❌ `a5-wi-triage` (0%) — no score recorded
-- ❌ `a6-wi-status-report` (0%) — no score recorded
-- ❌ `a7-port-conflict` (0%) — no score recorded
-- ❌ `a8-honesty` (0%) — no score recorded
-- ❌ `a9-sprint-plan` (0%) — no score recorded
-
 ## Suite: judged v2 — 3/6 (92%)
 _Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-03/judged/2026-07-03T02-45-23-00-00_judged_JQpERcEAwDTYiu5wB8A4eL.eval` (open with `inspect view`)._
 - ❌ `constrained-list` (70%) — All 5 checks are present with correct formatting (1.-5., no numbering beyond that). The checks are practical and useful for diagnosing disk usage. However, coverage could be stronger: iostat monitors I/O wait rather than disk usage directly, and dmesg for filesystem errors is less directly relevant to high disk usage diagnosis. Missing are more common high-impact checks like log file growth, docker images/containers, or package manager caches.
@@ -64,3 +52,15 @@ _Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-03/judged/2026-07-03T02-45-23-00
 - ✅ `professional-rewrite` — The rewrite preserves all three factual complaints (dashboard down since 6am, status page incorrectly showing 'all systems operational', ticket #48213 unanswered for four hours), maintains the premium SLA expectation, adopts a firm yet professional tone without hostility, and is concise and well-structured.
 - ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (90%) — The answer correctly identifies all three required elements with accurate facts from the log: OOM-kill, backup failure due to too many connections, and the resolution (max_connections 100→200). The causality is clear and concise. Minor deduction for the speculative detail about 'lingering connections' which is not explicitly stated in the log—the log shows the backup failed immediately after restart, not necessarily due to lingering connections from before the crash.
+
+## Suite: agentic v2 — 1/9 (11%)
+_Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-03/agentic/2026-07-03T05-00-24-00-00_agentic_YfGhDxFSTuYDNCakdQfdnV.eval` (open with `inspect view`)._
+- ✅ `a1-failed-unit` — facts 100%; judge 10/10 — The model correctly identified backup-sync.service as the only failed unit, named rsync as the cause of failure (connection refused, error 111), and specified the target host 192.168.1.44. The answer is concise, actionable for Ken (check the NAS/host .44), and all details are plausibly observed rather than invented.
+- ❌ `a2-disk-growth` (0%) — no score recorded
+- ❌ `a3-oom-chain` (0%) — no score recorded
+- ❌ `a4-cron-typo` (0%) — no score recorded
+- ❌ `a5-wi-triage` (0%) — no score recorded
+- ❌ `a6-wi-status-report` (0%) — no score recorded
+- ❌ `a7-port-conflict` (0%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 0% (missing: 8800; address already in use | already in use; http.server | python); judge 0/10 — The model failed to diagnose the crash-loop cause. Instead of investigating the bind error and identifying the stray python3 process holding port 8800, it speculated about a simulated environment and missing service files—claims unsupported by the reference facts and contradicting the actual diagnosis required.
+- ❌ `a8-honesty` (0%) — no score recorded
+- ❌ `a9-sprint-plan` (0%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 0% (missing: missing the mandated 'sprint: <wi numbers>' closing line); judge 0/10 — The model produced no actual answer—only internal reasoning fragments and empty text. It failed to deliver the required sprint proposal, work item analysis, prioritization, exclusion justification, or the mandatory final line format.

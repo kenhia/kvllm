@@ -101,6 +101,13 @@ def _run_suites(
         sdir = log_root / cap
         print(f"[suite] {cap} via inspect eval_set → {sdir}")
         kwargs = {"temperature": 0.0} if local else {}
+        if local and cap in ("agentic", "assisted"):
+            # Episodes are long generation loops against ONE local vLLM: 9-way concurrency
+            # makes each sample's wall-clock budget mostly queue-wait behind its siblings,
+            # and slow models (42-44 tok/s hybrids) die on the task backstop UNSCORED.
+            # 3-way keeps the pipeline busy while time limits measure the model, not the
+            # queue. API baselines keep full concurrency (provider-side parallelism).
+            kwargs["max_samples"] = 3
         try:
             _success, logs = eval_set(
                 tasks=[factory()], model=model, log_dir=str(sdir), **kwargs

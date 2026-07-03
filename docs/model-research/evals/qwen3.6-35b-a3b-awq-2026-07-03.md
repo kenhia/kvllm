@@ -6,10 +6,10 @@
 - served: True
 - cold start: 64.0 s
 - GPU used: 28858 MiB
-- TTFT: 0.06 s
-- decode tok/s: 42.1
-- tokens: 982 in / 10,294 out
-- judge overhead: 3,015 in / 700 out · $0.01
+- TTFT: 0.07 s
+- decode tok/s: 42.0
+- tokens: 141,498 in / 13,422 out
+- judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: tools v2 — 11/11 (100%)
 _Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-02/tools/2026-07-03T00-33-07-00-00_tools_ATvhs8ss8R7WD3ynBJNeH2.eval` (open with `inspect view`)._
@@ -44,17 +44,6 @@ _Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-02/code/2026-07-03T00-33-28-
 - ✅ `c4-lru-bugs` — 8/8 hidden tests; ended without submit()
 - ✅ `c4-rolling` — 11/11 hidden tests; ended without submit()
 
-## Suite: agentic v2 — 0/8 (8%)
-_Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-02/agentic/2026-07-03T00-46-02-00-00_agentic_ng73RicyfGwtfEFrqHFmVH.eval` (open with `inspect view`)._
-- ❌ `a2-disk-growth` (0%) — no score recorded
-- ❌ `a3-oom-chain` (0%) — no score recorded
-- ❌ `a4-cron-typo` (0%) — no score recorded
-- ❌ `a5-wi-triage` (64%) — facts 67% (missing: ready: expected [103, 106], got [103, 105, 106]); judge 6/10 — The model correctly identified stale (#101, #104) and blocked (#102) items with sound reasoning and proper date calculations. However, it incorrectly included #105 in the ready category when the rubric specifies ready should be only #103 and #106; while the bonus observation about #105 being effectively done is noted, including it in the final categorization contradicts the reference facts.
-- ❌ `a6-wi-status-report` (0%) — no score recorded
-- ❌ `a7-port-conflict` (0%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 0% (missing: 8800; address already in use | already in use; http.server | python); judge 0/10 — The model provided no diagnostic output, analysis, or answer to the question. The response contains only internal reasoning fragments and empty text with no investigation of the service failure, port binding issue, or stray process.
-- ❌ `a8-honesty` (0%) — no score recorded
-- ❌ `a9-sprint-plan` (0%) — no score recorded
-
 ## Suite: judged v2 — 2/6 (90%)
 _Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-03/judged/2026-07-03T02-47-41-00-00_judged_DKgsmZkgmUJpdrr5SGhkdz.eval` (open with `inspect view`)._
 - ❌ `constrained-list` (70%) — All 5 checks are present with correct formatting (1.-5., no extra numbering). The checks cover useful diagnostic areas: filesystem space (df), large files (find), inodes (df), directory sizes (du), and disk activity (iostat). However, the answer misses important high-usage scenarios like log growth, container/image bloat, and deleted-but-open files, which are common causes in real homelab environments.
@@ -63,3 +52,14 @@ _Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-03/judged/2026-07-03T02-47-4
 - ✅ `professional-rewrite` — The rewrite preserves all three factual complaints (dashboard down since 6am, incorrect status page, ticket #48213 unanswered for four hours), retains the premium SLA expectation, maintains firm professionalism without hostility, and is concise. No facts are dropped or contradicted.
 - ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (90%) — The answer correctly identifies all three required elements with accurate facts from the log: OOM kill, backup failure due to connection limit, and the fix (max_connections 100→200). The causality is clear and concise. Minor deduction because the first bullet conflates the crash and backup failure into one point rather than cleanly separating 'what broke' as the primary incident.
+
+## Suite: agentic v2 — 0/8 (9%)
+_Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-03/agentic/2026-07-03T05-17-04-00-00_agentic_h8B8h3RUQFsUJiZA2gMTTb.eval` (open with `inspect view`)._
+- ❌ `a1-failed-unit` (0%) — no score recorded
+- ❌ `a2-disk-growth` (0%) — no score recorded
+- ❌ `a3-oom-chain` (0%) — no score recorded
+- ❌ `a5-wi-triage` (68%) — facts 67% (missing: ready: expected [103, 106], got [103, 105, 106]); judge 7/10 — Model correctly identified stale (#101, #104) and blocked (#102) items with sound reasoning and plausible observed details. However, it incorrectly included #105 in the ready category when the rubric specifies ready = #103 and #106 only. The model did note #105's effectively-done status (a bonus observation), but should not have listed it as ready.
+- ❌ `a6-wi-status-report` (0%) — no score recorded
+- ❌ `a7-port-conflict` (0%) — no score recorded
+- ❌ `a8-honesty` (0%) — no score recorded
+- ❌ `a9-sprint-plan` (0%) — no score recorded
