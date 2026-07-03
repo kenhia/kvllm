@@ -44,6 +44,8 @@ def _suites():
     from suites.judged import judged
     from suites.tools import VERSION as TOOLS_VERSION
     from suites.tools import tools
+    from suites.vision import VERSION as VISION_VERSION
+    from suites.vision import vision
 
     return {
         "tools": (tools, TOOLS_VERSION, "tools", False),
@@ -51,6 +53,7 @@ def _suites():
         "agentic": (agentic, AGENTIC_VERSION, "tools", False),
         "judged": (judged, JUDGED_VERSION, "chat", False),
         "assisted": (agentic_assisted, ASSISTED_VERSION, "tools", True),
+        "vision": (vision, VISION_VERSION, "vision", False),
     }
 
 
