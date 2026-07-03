@@ -111,7 +111,7 @@ helper-status:
 helper-logs:
     journalctl --user -u kvllm-helper -f
 
-# --- Eval (kvllm.evalrun + evals/; see docs/model-research/evals/ and sprints/fable-planning/) ---
+# --- Eval (kvllm.evalrun + evals/; see model-research/evals/ and sprints/fable-planning/) ---
 
 # Evaluate registered model(s): serve → operational gate → Inspect suites → scorecard +
 # leaderboard + models.toml. Orchestrates kvllm.service around each model.
@@ -133,7 +133,7 @@ test-coding-suite:
 
 # Open the HTML leaderboard
 eval-board:
-    @echo "docs/model-research/evals/leaderboard.html"
+    @echo "model-research/evals/leaderboard.html"
 
 # Lint + format-check
 lint:

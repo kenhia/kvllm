@@ -72,7 +72,7 @@ path. Verified start→serve + crash→respawn. See [`docs/03-deployment.md`](03
 
 **Sprint 5 — Model collection research (✅ shipped 2026-06-30; korg #99).** Cited survey of free
 models for coding + agentic control + vision that fit a 5090, in
-[`docs/model-research/`](model-research/README.md); confirmed **Qwen3.6** is real (open `-27B` /
+[`model-research/`](model-research/README.md); confirmed **Qwen3.6** is real (open `-27B` /
 `-35B-A3B`, new `qwen3_5*` arch — verify on sm_120) and added 5 models to the registry. _Original
 framing below:_
 

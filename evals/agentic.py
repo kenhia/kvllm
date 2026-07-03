@@ -549,7 +549,7 @@ def agentic() -> Task:
     )
 
 
-# --- assisted variant (docs/model-research/agentic-gap-2026-07.md) ---------------------------
+# --- assisted variant (model-research/agentic-gap-2026-07.md) ---------------------------
 #
 # Same nine tasks, same facts, same judge — different CONDITION, reported as its own suite
 # (weight 0.0: shown on the board, never ranked, so the raw-autonomy comparison stays clean).

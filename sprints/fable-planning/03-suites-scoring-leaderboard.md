@@ -138,7 +138,7 @@ suite < 0.4. `worth trying` = otherwise. Same three values flow into `models.tom
 
 ## Leaderboard v2
 
-Same tri-format convention, same location (`docs/model-research/evals/`):
+Same tri-format convention, same location (`model-research/evals/`):
 
 - `leaderboard.json` — adds `composite`, `speed_factor`, `weights_version`, per-suite
   `{score, version, date}`, and an `eligible` list.

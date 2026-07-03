@@ -20,5 +20,5 @@ or planning local-agent projects, and for sharing.
   an explicit "what this does NOT claim" section. Self-contained, shareable alongside the
   main report.
 
-Live data these derive from: [`../model-research/evals/`](../model-research/evals/)
+Live data these derive from: [`../model-research/evals/`](../../model-research/evals/)
 (leaderboard + per-run scorecards) and `eval-logs/` (gitignored transcripts).

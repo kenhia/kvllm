@@ -25,7 +25,7 @@ that flips `models.toml` `tested=false` into a real verdict. Per-skillset target
 - **`tools` suite** (7 cases): single / enum / integer args, `tool_choice=required`, negative
   (no-call), multi-turn round-trip, parallel calls. Mechanical pass/fail; gated by the registry
   `capabilities`.
-- **Tri-format leaderboard** in [`docs/model-research/evals/`](../docs/model-research/evals/README.md):
+- **Tri-format leaderboard** in [`model-research/evals/`](../model-research/evals/README.md):
   `leaderboard.html` (human), `leaderboard.json` (source of truth) + `leaderboard.md` (agents);
   per-run `<model>-<date>.{json,md}`.
 - **`just eval <key> [--suite ...] [--no-write]`** — serve→score→restore→write; stamps

@@ -1,6 +1,6 @@
 ---
 name: model-scout
-description: "Scan for newly-released open models worth evaluating on the kvllm 5090/vLLM box since the last scout, diffing against docs/model-research/.scout-state.json. Use when the user wants to check 'what's new worth trying' / find recent models / refresh the candidate list. Proposes candidates and suggests /model-research for deep dives; does not itself do per-model deep research."
+description: "Scan for newly-released open models worth evaluating on the kvllm 5090/vLLM box since the last scout, diffing against model-research/.scout-state.json. Use when the user wants to check 'what's new worth trying' / find recent models / refresh the candidate list. Proposes candidates and suggests /model-research for deep dives; does not itself do per-model deep research."
 ---
 
 # Model scout (what's new worth trying)
@@ -20,8 +20,8 @@ Optional focus (e.g. `coding`, `vision`, `agentic`, or an org like `Mistral`). E
 ## Procedure
 
 1. **Load state + context:**
-   - `docs/model-research/.scout-state.json` — `{ "last_run", "seen": [<hf repos already known>] }`.
-   - `docs/model-research/README.md` — the serving profile (the fit/parser/quant bar to filter by).
+   - `model-research/.scout-state.json` — `{ "last_run", "seen": [<hf repos already known>] }`.
+   - `model-research/README.md` — the serving profile (the fit/parser/quant bar to filter by).
    - `models.toml` — already-registered models (also "seen").
 
 2. **Search release surfaces** for open models published/updated **since `last_run`**, focused on
@@ -41,7 +41,7 @@ Optional focus (e.g. `coding`, `vision`, `agentic`, or an org like `Mistral`). E
 
 5. **Update state:** write today's date to `last_run` and add every surfaced repo (recommended or
    not) to `seen`, so the next scout doesn't re-surface it. Optionally write a dated
-   `docs/model-research/<YYYY-MM-DD>-scout.md` if the user wants it persisted.
+   `model-research/<YYYY-MM-DD>-scout.md` if the user wants it persisted.
 
 ## Notes
 

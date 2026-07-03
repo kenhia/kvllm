@@ -22,7 +22,7 @@ from pathlib import Path
 import tomlkit
 
 REPO = Path(__file__).resolve().parent.parent
-EVALS = REPO / "docs" / "model-research" / "evals"
+EVALS = REPO / "model-research" / "evals"
 REGISTRY = REPO / "models.toml"
 CONFIG = REPO / "eval-config.toml"
 

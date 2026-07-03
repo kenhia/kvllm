@@ -279,7 +279,7 @@ read-diagnose-edit doesn't. Exactly the discrimination S2 was designed to find.
   model). Live on both 7Bs: **63%/62%** — close on general instruction-following (plausible for
   siblings), and the judge is sharp: it caught a fatal stale-dump data-loss flaw in a migration
   plan and a root-cause inversion in an incident summary, rubric-grounded.
-- **Calibration bundle**: `docs/model-research/evals/calibration/judged-sheet.md` (12 rows) for
+- **Calibration bundle**: `model-research/evals/calibration/judged-sheet.md` (12 rows) for
   Ken to hand-score; **judged stays out of the composite until `[judge].calibrated = true`**
   (protocol: judge within ±1 on ≥80%). ANTHROPIC_API_KEY rides in the repo-local gitignored
   `.env` (just's dotenv-load).

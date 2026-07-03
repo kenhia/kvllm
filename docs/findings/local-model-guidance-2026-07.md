@@ -66,6 +66,6 @@ mistral-format flags and 8K ctx (KV cache); cap episode concurrency at ~3 per lo
 
 ## Regeneration
 
-Board: [`docs/model-research/evals/leaderboard.md`](../model-research/evals/leaderboard.md)
+Board: [`model-research/evals/leaderboard.md`](../../model-research/evals/leaderboard.md)
 (+ `.html` for the clickable per-case records). Re-run: `just eval-all` (locals) /
 `just eval claude-haiku-4-5` (baselines). Assisted: `just eval <key> --suite assisted`.

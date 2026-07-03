@@ -74,6 +74,6 @@ in **self-pacing and trustworthiness-under-freedom**, not analysis quality. Full
 ## Deep links
 
 - Sprint narrative: [`sprints/sprint-08-eval-harness-v2.md`](../../sprints/sprint-08-eval-harness-v2.md)
-- Gap decomposition: [`docs/model-research/agentic-gap-2026-07.md`](../model-research/agentic-gap-2026-07.md)
-- Candidate selection method: [`docs/model-research/candidates-2026-07.md`](../model-research/candidates-2026-07.md)
+- Gap decomposition: [`model-research/agentic-gap-2026-07.md`](../../model-research/agentic-gap-2026-07.md)
+- Candidate selection method: [`model-research/candidates-2026-07.md`](../../model-research/candidates-2026-07.md)
 - Architecture/design: [`sprints/fable-planning/`](../../sprints/fable-planning/)
