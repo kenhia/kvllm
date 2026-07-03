@@ -161,3 +161,11 @@ check: lint test
 # Self-test the agentic suite: planted truths discoverable in the fixture (Docker)
 test-agentic-suite:
     uv run --group eval python -m suites.agentic_selftest
+
+# Self-test the vision suite: fixtures render/load + reference answers score 1.0 (no GPU/Docker)
+test-vision-suite:
+    uv run --group eval python -m suites.vision_selftest
+
+# Browse eval transcripts (.eval logs) in the Inspect web viewer at http://localhost:7575
+eval-view dir="eval-logs":
+    uv run --group eval inspect view --log-dir {{dir}}

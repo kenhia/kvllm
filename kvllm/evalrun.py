@@ -44,6 +44,8 @@ def _suites():
     from suites.judged import judged
     from suites.tools import VERSION as TOOLS_VERSION
     from suites.tools import tools
+    from suites.vision import VERSION as VISION_VERSION
+    from suites.vision import vision
 
     return {
         "tools": (tools, TOOLS_VERSION, "tools", False),
@@ -51,6 +53,7 @@ def _suites():
         "agentic": (agentic, AGENTIC_VERSION, "tools", False),
         "judged": (judged, JUDGED_VERSION, "chat", False),
         "assisted": (agentic_assisted, ASSISTED_VERSION, "tools", True),
+        "vision": (vision, VISION_VERSION, "vision", False),
     }
 
 
@@ -168,6 +171,21 @@ def _total_usage(log_root: Path, model_str: str) -> tuple[dict, dict]:
     return usage, judge_usage
 
 
+def _stale_suites(to_run: dict, prior: dict | None) -> dict:
+    """Drop suites whose latest scorecard entry is already at the current version and
+    error-free. What remains is what actually needs GPU time."""
+    if not prior:
+        return to_run
+    out = {}
+    for cap, (factory, version) in to_run.items():
+        s = prior.get("suites", {}).get(cap)
+        if s and s.get("version") == version and not s.get("error"):
+            print(f"[suite] {cap}: current (v{version}) — keeping prior score")
+            continue
+        out[cap] = (factory, version)
+    return out
+
+
 def evaluate(
     key: str,
     entry: dict,
@@ -181,6 +199,12 @@ def evaluate(
 ) -> dict:
     suites = _suites()
     to_run = _suites_for(entry, only_suite, suites)
+    if not force and not only_suite:
+        # A model gets selected when ANY suite is missing/stale — but only re-run THOSE.
+        # Without this, adding one new suite (vision) re-ran every model's whole set
+        # (~hours of redundant GPU); merge_prior_suites keeps the current scores on the
+        # card. --force and an explicit --suite bypass the filter.
+        to_run = _stale_suites(to_run, score.latest_scorecard(key))
     served_name = model_name or key
     log_root = LOG_ROOT / key.replace("/", "_") / today
     if force:

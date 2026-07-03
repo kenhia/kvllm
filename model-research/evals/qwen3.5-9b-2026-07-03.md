@@ -4,12 +4,12 @@
 
 ## Operational
 - served: True
-- cold start: 88.0 s
-- GPU used: 28586 MiB
+- cold start: 60.0 s
+- GPU used: 28584 MiB
 - TTFT: 0.02 s
 - decode tok/s: 95.9
-- tokens: 982 in / 18,662 out
-- judge overhead: 2,631 in / 592 out · $0.01
+- tokens: 3,638 in / 2,343 out
+- judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: tools v2 — 11/11 (100%)
 _Transcript: `eval-logs/qwen3.5-9b/2026-07-02/tools/2026-07-03T01-16-45-00-00_tools_VPHRGZwZ3kRtNXb2wewbxa.eval` (open with `inspect view`)._
@@ -64,3 +64,14 @@ _Transcript: `eval-logs/qwen3.5-9b/2026-07-03/judged/2026-07-03T02-43-24-00-00_j
 - ❌ `professional-rewrite` (90%) — All three factual complaints are preserved with correct details (6am, status page, #48213), professional tone is maintained, SLA expectation is clearly stated, and the message is concise. Minor deduction only for including the quarter context (not in original) which slightly expands scope, though this is a minor enhancement rather than a violation.
 - ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (0%) — The model provided no answer at all. The answer tags are empty, so there is nothing to evaluate against the rubric. [mechanical: expected 3 bullets, found 0 → cap 4/10]
+
+## Suite: vision v1 — 8/8 (100%)
+_Transcript: `eval-logs/qwen3.5-9b/2026-07-03/vision/2026-07-03T23-03-50-00-00_vision_FqLdTcgXsrtHGHkgQzotTE.eval` (open with `inspect view`)._
+- ✅ `v1-dashboard-down` — facts 100%
+- ✅ `v2-gauge-disk` — facts 100%
+- ✅ `v3-chart-peak` — facts 100%
+- ✅ `v4-terminal-df` — facts 100%
+- ✅ `v5-journal-error` — facts 100%
+- ✅ `v6-table-registry` — facts 100%
+- ✅ `v7-count-warnings` — facts 100%
+- ✅ `v8-diagram-backup` — facts 100%
