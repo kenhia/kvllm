@@ -419,6 +419,31 @@ Board after reruns: baselines ①② (0.94/0.91) — no local beats them yet;
 68/77% — every 2026 candidate aces code and flunks multi-step investigation. Most locals
 carry judged† (v1) pending a refresh sweep.
 
+## A local takes ① + the assisted condition (Fable, 2026-07-03)
+
+Fixing the two real sample-killers (time limit → scored-partial inside the solver; 4KB tool
+output cap; then episode concurrency 3 for locals — 9-way parallelism against one 42 tok/s
+vLLM had turned time budgets into queue-wait) rewrote the top of the board:
+
+- **gemma-4-31b-awq: agentic 12% → 84%** — beats Haiku (68%) AND Sonnet (77%) on the ranked
+  suite, and takes **① overall at 0.94**, edging Sonnet. "Actual leaders rise": with harness
+  artifacts removed, a local earned #1 honestly.
+- **Assisted condition** (controller scaffolding, unranked): Haiku's +14% (68→82%) is the
+  generic-uplift control. Deltas above it are pacing rescue: **devstral +86% (11→97% — the
+  highest agentic-condition score of ANY model incl. the baselines)**, glm-4.7 +53% (→87%),
+  gemma-12b +34% (→74%). The agent-tuned 2026 class had the skills and lacked only the pacing.
+- **qwen3-vl-8b assisted −14% is a finding, not noise**: with longer episodes it fabricated
+  twice (auto-zeros) where raw limits had cut it off first. More rope reveals hallucination —
+  disqualifying signal for the monitor role that the raw suite was masking.
+- Hybrid Qwens (27B/35B) remain partially unscored even post-fix — concurrency starvation
+  (now capped); one 8193-token truncation boundary one-off. Re-run queued.
+
+**Hybrid-plan readout (Ken's framing — local monitor + frontier heavy-lifting):** under a
+controller loop, devstral/glm/gemma-31b operate at-or-above raw-Haiku level on the fixture
+homelab, at power-only cost. The frontier premium concentrates in self-pacing and
+trustworthiness-under-freedom — exactly what the controller layer (and #105's pre-work
+pattern) is designed to supply.
+
 ## Follow-ups
 
 - ksandbox hygiene remaining (04-sandbox-host item 6): optional LAN-egress firewall; keep
