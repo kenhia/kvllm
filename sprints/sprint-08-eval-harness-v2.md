@@ -398,6 +398,27 @@ parallel-episode target. Cutover, in order:
   the board was hiding most of this; the rest of the fleet gets refreshed in the overnight
   sweep.
 
+## Candidate sweep + judged v2 (Fable, 2026-07-03)
+
+The overnight `eval-all --retry-skips` (first run tripped on stale same-day logs → the
+self-heal fix in b0fef15) delivered the first fully-covered board, with sandboxes on
+ksandbox throughout. Then a results review caught two harness artifacts, both fixed and
+re-run the same night:
+
+- **judged v2** (max_tokens 1024 → 4096): the Qwen3.5/3.6 family burned the whole budget in
+  `<think>` and submitted EMPTY answers — the judge was scoring blanks (0-17%). Post-fix:
+  35B-A3B 0→90%, 27B 0→92%, 9B 17→42%. Verified by raw-sample inspection
+  (stop_reason=max_tokens, reasoning 3180 chars, text len 0).
+- **devstral ctx 32K → 8K**: FP8 weights left 1.69 GiB for a 5 GiB KV ask. Served fine at 8K:
+  code 95%, judged 90%, composite 0.75.
+
+Board after reruns: baselines ①② (0.94/0.91) — no local beats them yet;
+**gemma-4-12b-it best local ③ 0.78** (judged 92% *beats both baselines*; multimodal);
+35B-A3B #4 0.76 (code 100%); glm-4.7-flash 197 tok/s, gpt-oss-20b 305 tok/s.
+**The agentic column is now THE local gap**: best local 44% (qwen3-vl-8b) vs frontier
+68/77% — every 2026 candidate aces code and flunks multi-step investigation. Most locals
+carry judged† (v1) pending a refresh sweep.
+
 ## Follow-ups
 
 - ksandbox hygiene remaining (04-sandbox-host item 6): optional LAN-egress firewall; keep
