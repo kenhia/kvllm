@@ -11,9 +11,14 @@ or planning local-agent projects, and for sharing.
   for which role, hybrid local+frontier architecture readout, serving configs, cost anchors.
   **Dated — decays with the model landscape**; regenerate via `just eval-all`.
 - [`local-vs-frontier-2026-07.html`](local-vs-frontier-2026-07.html) — rich self-contained
-  report (charts, methodology, findings) prepared for the All-The-Vibes community. Open in
-  a browser; safe to share as a single file. Generated from live board data by a script —
-  a point-in-time snapshot, not maintained.
+  report (charts, findings, methodology overview) prepared for the All-The-Vibes community.
+  Open in a browser; safe to share as a single file. Generated from live board data by a
+  script — a point-in-time snapshot, not maintained.
+- [`methodology-2026-07.html`](methodology-2026-07.html) — companion to the above (ATV
+  feedback asked for it): the full scoring rubric and methodology — per-suite rubrics,
+  judge anatomy + calibration protocol, composite/verdict math with worked examples, and
+  an explicit "what this does NOT claim" section. Self-contained, shareable alongside the
+  main report.
 
 Live data these derive from: [`../model-research/evals/`](../model-research/evals/)
 (leaderboard + per-run scorecards) and `eval-logs/` (gitignored transcripts).
