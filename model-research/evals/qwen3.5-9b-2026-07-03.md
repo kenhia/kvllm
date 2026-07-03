@@ -4,11 +4,11 @@
 
 ## Operational
 - served: True
-- cold start: 62.0 s
+- cold start: 60.0 s
 - GPU used: 28584 MiB
 - TTFT: 0.02 s
 - decode tok/s: 95.9
-- tokens: 3,638 in / 2,310 out
+- tokens: 3,638 in / 2,343 out
 - judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: tools v2 — 11/11 (100%)
@@ -65,12 +65,12 @@ _Transcript: `eval-logs/qwen3.5-9b/2026-07-03/judged/2026-07-03T02-43-24-00-00_j
 - ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (0%) — The model provided no answer at all. The answer tags are empty, so there is nothing to evaluate against the rubric. [mechanical: expected 3 bullets, found 0 → cap 4/10]
 
-## Suite: vision v1 — 7/8 (94%)
-_Transcript: `eval-logs/qwen3.5-9b/2026-07-03/vision/2026-07-03T22-54-00-00-00_vision_5M2WkPYckxTxvAG5o8QpR7.eval` (open with `inspect view`)._
+## Suite: vision v1 — 8/8 (100%)
+_Transcript: `eval-logs/qwen3.5-9b/2026-07-03/vision/2026-07-03T23-03-50-00-00_vision_FqLdTcgXsrtHGHkgQzotTE.eval` (open with `inspect view`)._
 - ✅ `v1-dashboard-down` — facts 100%
 - ✅ `v2-gauge-disk` — facts 100%
 - ✅ `v3-chart-peak` — facts 100%
-- ❌ `v4-terminal-df` (50%) — facts 50% (missing: /data)
+- ✅ `v4-terminal-df` — facts 100%
 - ✅ `v5-journal-error` — facts 100%
 - ✅ `v6-table-registry` — facts 100%
 - ✅ `v7-count-warnings` — facts 100%
