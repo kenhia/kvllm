@@ -17,6 +17,13 @@ reports ([results](docs/findings/local-vs-frontier-2026-07.html) ·
 (or the clickable `.html` sibling — every row expands to gate stats, the composite equation,
 and per-case judge rationales).
 
+> **A note on the scores.** These evaluations measure how well each model works **for my
+> use case, on my hardware** — a homelab monitoring/coding agent served from a single
+> RTX 5090 — not general model capability. The suites, weights, and judge rubrics all
+> encode that intent, so treat rankings as an answer to "which model should *I* run?",
+> not as a public benchmark. The [methodology](docs/findings/methodology-2026-07.html) is
+> the transferable part; fork it and point it at *your* use case.
+
 ## Quick start — serving
 
 ```sh
