@@ -415,7 +415,14 @@ def flood_stats(messages) -> tuple[int, int]:
 
 # --- inspect wiring -------------------------------------------------------------------------
 
-_AGENT = react(prompt="", tools=[bash(timeout=BASH_TIMEOUT_S)], attempts=1)
+# truncation="auto": models served with reduced max_model_len (27B/31B/35B fit at 8-16K)
+# outgrow their context mid-episode; without truncation the sample DIES UNSCORED on a 400
+# (2026-07-03 sweep: 27B lost 9/9, 31B 7/8, 35B 6/8 — including a perfect a1 investigation).
+# Truncation only engages where the episode would otherwise crash, so completed-episode
+# scores are unchanged — no suite version bump.
+_AGENT = react(
+    prompt="", tools=[bash(timeout=BASH_TIMEOUT_S)], attempts=1, truncation="auto"
+)
 _REACT_SOLVER = as_solver(_AGENT)
 
 
