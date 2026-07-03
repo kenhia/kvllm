@@ -444,14 +444,26 @@ homelab, at power-only cost. The frontier premium concentrates in self-pacing an
 trustworthiness-under-freedom — exactly what the controller layer (and #105's pre-work
 pattern) is designed to supply.
 
-## Follow-ups
+## Follow-ups (carried forward at close)
 
+- Qwen hybrid rerun under the concurrency cap: `just eval qwen3.6-27b-awq
+  qwen3.6-35b-a3b-awq --suite agentic --force` (their 11%/9% include unscored
+  starvation deaths); optional `--suite assisted` for gemma-31b (does ① respond to
+  scaffolding too?).
+- Leaderboard est-$ column scopes to the latest date-dir (Haiku shows assisted-only $0.23);
+  cost should merge across a card's contributing runs.
 - ksandbox hygiene remaining (04-sandbox-host item 6): optional LAN-egress firewall; keep
-  secrets/HF tokens off the box. (authorized_keys trimmed to kai+cleo and root LV grown to
-  500G on 2026-07-02 — see 04 doc; ~1.33T left free in ubuntu-vg for the Phase 4 VM LV.)
-- Next `just eval-all`: 27B coding + agentic/judged for the fleet + deepseek/internvl gate
-  refresh in one sweep — the first fully-covered composite ranking.
-- "Ken's voice" rubric adjustment for professional-rewrite; consider a react tool-call-burst
-  cap (the a7/a8 flood executed 135 container execs before the message limit caught it).
-- Consider a `just gpu-health` recipe (Xid scan + drained check) for pre-sweep sanity.
-- Phase 5 (vision suite) remains per the roadmap.
+  secrets/HF tokens off the box.
+- "Ken's voice" rubric adjustment for professional-rewrite; `just gpu-health` recipe.
+- Phase 5 (vision suite) — next feature sprint after the findings/restructure sprints.
+
+## Sprint close (2026-07-03)
+
+Exit state vs the goal ("rich eval harness where actual leaders rise"): **delivered and
+proven** — four ranked suites + assisted condition, calibrated judge, weighted composite
+with costs, frontier baselines, remote sandboxing on ksandbox, rich clickable board, and a
+board where a local model (gemma-4-31b-awq, 0.94) holds ① honestly against priced Claude
+baselines. 132 unit tests + fixture self-tests green. The harness survived three
+review-fix-rerun cycles with strictly diminishing bug severity (token budget → time limit →
+tool output → concurrency), which is the stability signal that says measurement, not
+artifact. Findings distillation and repo restructure move to sprints 09/10.
