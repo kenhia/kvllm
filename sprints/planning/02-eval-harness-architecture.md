@@ -68,7 +68,7 @@ LiveCodeBench subsets) to sanity-check our custom suites against known model ord
 │  (extracted from    │  key K, health-wait, operational gate,    │
 │   eval/runner.py)   │  restore. Emits base_url + gate results.  │
 │                     ▼                                           │
-│  evals/  (Inspect tasks: S1 tools, S2 coding, S3 agentic,       │
+│  suites/  (Inspect tasks: S1 tools, S2 coding, S3 agentic,       │
 │           S4 judged, S5 vision — see 03)                        │
 │      inspect eval_set(tasks, model=openai-api/kvllm/K)          │
 │           │                        │                            │
@@ -113,7 +113,7 @@ re-invoked in the morning continues where it died.
 ## Repo layout changes
 
 ```
-evals/                      # Inspect task definitions + assets (NEW, top-level — tasks are data+code)
+suites/                      # Inspect task definitions + assets (NEW, top-level — tasks are data+code)
   tools/  coding/  agentic/  judged/  vision/
   images/                   # Dockerfiles/compose for task sandboxes
 eval-config.toml            # weights, speed curve, judge model, thresholds (NEW)

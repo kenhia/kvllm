@@ -111,7 +111,7 @@ helper-status:
 helper-logs:
     journalctl --user -u kvllm-helper -f
 
-# --- Eval (kvllm.evalrun + evals/; see model-research/evals/ and sprints/planning/) ---
+# --- Eval (kvllm.evalrun + suites/; see model-research/evals/ and sprints/planning/) ---
 
 # Evaluate registered model(s): serve → operational gate → Inspect suites → scorecard +
 # leaderboard + models.toml. Orchestrates kvllm.service around each model.
@@ -124,12 +124,12 @@ eval-all *flags:
 
 # Prove the Docker sandbox path works (mock model, no GPU). Set DOCKER_HOST to test remote.
 eval-sandbox-smoke:
-    uv run --group eval python evals/sandbox_smoke.py
+    uv run --group eval python suites/sandbox_smoke.py
 
 # Self-test the coding suite: every task's reference solution must pass its hidden tests
 # (needs Docker; no GPU/model). Run before trusting a coding eval.
 test-coding-suite:
-    uv run --group eval python -m evals.coding_selftest
+    uv run --group eval python -m suites.coding_selftest
 
 # Open the HTML leaderboard
 eval-board:
@@ -150,4 +150,4 @@ check: lint test
 # Self-test the agentic suite: planted truths must be discoverable + reference reports
 # must score 1.0 mechanically (needs Docker; no GPU/model/judge).
 test-agentic-suite:
-    uv run --group eval python -m evals.agentic_selftest
+    uv run --group eval python -m suites.agentic_selftest

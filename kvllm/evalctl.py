@@ -3,7 +3,7 @@
 The controller half of the Sprint 7 runner, split out per planning/02: it owns
 "stop kvllm.service → serve model K standalone → health-wait → restore" and the operational
 measurements (cold start, VRAM, TTFT, decode tok/s). It knows nothing about suites or scoring —
-kvllm.evalrun composes this with the Inspect tasks in evals/.
+kvllm.evalrun composes this with the Inspect tasks in suites/.
 
 Speed is measured properly now (v1 gate was one 128-token sample including prefill): streamed
 completions, TTFT recorded separately, decode tok/s = (tokens-1)/(t_last - t_first), median of 3.

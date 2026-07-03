@@ -1,4 +1,4 @@
-"""Unit tests for the S1 tools suite's pure scoring (evals/tools.py).
+"""Unit tests for the S1 tools suite's pure scoring (suites/tools.py).
 
 No network / no vLLM / no inspect run — extract_transcript and score_extract are pure
 functions over fake message histories. Ports the Sprint 8 Phase 0 suite tests to the v2 shapes
@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from types import SimpleNamespace
 
-from evals.tools import CASES, Case, Extract, extract_transcript, score_extract
+from suites.tools import CASES, Case, Extract, extract_transcript, score_extract
 
 
 def _call(name: str, args: dict | None = None, parse_error: str | None = None):
@@ -259,7 +259,7 @@ def test_unknown_kind_fails():
 
 
 def test_all_cases_have_registered_tools():
-    from evals.tools import TOOLS
+    from suites.tools import TOOLS
 
     for case in CASES:
         assert case.tools, f"{case.name} binds no tools"

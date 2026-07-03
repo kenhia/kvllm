@@ -39,7 +39,7 @@ Measured support for the hybrid plan (local monitor + frontier heavy-lifting):
 2. **The controller pattern is cheap and mechanical**: bigger budget + a two-phase
    "investigation → forced wrap-up" loop (inject "stop investigating, report now" with a
    reserved delivery window). This closed 34–86 points of gap. See `assisted_agent` in
-   [`evals/agentic.py`](../../evals/agentic.py).
+   [`suites/agentic.py`](../../suites/agentic.py).
 3. **Pre-structure discovery, spend intelligence on synthesis** (korg #105 pattern): models
    burn most tokens and hit most failure modes in discovery; deterministic collectors
    (pre-work) + one-shot completion is single-digit-cents even at frontier prices.

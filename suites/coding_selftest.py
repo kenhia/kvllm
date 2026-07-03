@@ -19,7 +19,7 @@ from inspect_ai.scorer import Score, Target, mean, scorer
 from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.util import sandbox
 
-from evals.coding import ASSETS, COMPOSE, TASKS, coding_scorer
+from suites.coding import ASSETS, COMPOSE, TASKS, coding_scorer
 
 LOG_DIR = "eval-logs/coding-selftest"
 

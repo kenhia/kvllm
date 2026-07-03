@@ -1,10 +1,10 @@
-"""Unit tests for the agentic suite's pure scoring (evals/agentic.py) — no Docker, no judge."""
+"""Unit tests for the agentic suite's pure scoring (suites/agentic.py) — no Docker, no judge."""
 
 from __future__ import annotations
 
 from dataclasses import asdict
 
-from evals.agentic import (
+from suites.agentic import (
     ATASKS,
     TRIAGE_TRUTH,
     fact_score,
@@ -149,7 +149,7 @@ def test_manifest_shape():
 def test_flood_stats():
     from types import SimpleNamespace as NS
 
-    from evals.agentic import flood_stats
+    from suites.agentic import flood_stats
 
     msgs = [
         NS(role="user"),
@@ -164,21 +164,21 @@ def test_flood_stats():
 
 
 def test_sprint_plan_perfect():
-    from evals.agentic import sprint_plan_score
+    from suites.agentic import sprint_plan_score
 
     r = "Backup reliability sprint. ...\nsprint: #201, #202, #203"
     assert sprint_plan_score(r) == (1.0, [])
 
 
 def test_sprint_plan_missing_line():
-    from evals.agentic import sprint_plan_score
+    from suites.agentic import sprint_plan_score
 
     s_, missing = sprint_plan_score("I'd do the backup stuff first.")
     assert s_ == 0.0 and "closing line" in missing[0]
 
 
 def test_sprint_plan_schedules_blocked_and_done():
-    from evals.agentic import sprint_plan_score
+    from suites.agentic import sprint_plan_score
 
     s_, missing = sprint_plan_score("sprint: 201, 205, 206")
     assert s_ < 1.0
@@ -187,21 +187,21 @@ def test_sprint_plan_schedules_blocked_and_done():
 
 
 def test_sprint_plan_cluster_underrepresented():
-    from evals.agentic import sprint_plan_score
+    from suites.agentic import sprint_plan_score
 
     s_, missing = sprint_plan_score("sprint: 204, 201, 206")
     assert any("cluster" in m for m in missing)
 
 
 def test_sprint_plan_too_many_items():
-    from evals.agentic import sprint_plan_score
+    from suites.agentic import sprint_plan_score
 
     s_, missing = sprint_plan_score("sprint: 201 202 203 204 205 206")
     assert any("3-5" in m for m in missing)
 
 
 def test_sprint_plan_nonexistent_item():
-    from evals.agentic import sprint_plan_score
+    from suites.agentic import sprint_plan_score
 
     s_, missing = sprint_plan_score("sprint: 201, 202, 299")
     assert any("nonexistent" in m for m in missing)
@@ -216,7 +216,7 @@ def test_mechanical_a9_dispatch():
 
 
 def test_assisted_task_same_nine_scenarios():
-    from evals.agentic import ASSISTED_VERSION, ATASKS, agentic_assisted
+    from suites.agentic import ASSISTED_VERSION, ATASKS, agentic_assisted
 
     t = agentic_assisted()
     assert len(t.dataset) == len(ATASKS) == 9
@@ -226,7 +226,7 @@ def test_assisted_task_same_nine_scenarios():
 
 
 def test_assisted_budget_leaves_wrap_reserve():
-    from evals.agentic import (
+    from suites.agentic import (
         ASSISTED_MSG_LIMIT,
         ASSISTED_WRAP_RESERVE,
         MSG_LIMIT,
@@ -239,14 +239,14 @@ def test_assisted_budget_leaves_wrap_reserve():
 
 
 def test_assisted_prompt_raises_step_budget():
-    from evals.agentic import ASSISTED_PROMPT_TEMPLATE, PROMPT_TEMPLATE
+    from suites.agentic import ASSISTED_PROMPT_TEMPLATE, PROMPT_TEMPLATE
 
     assert "~15 tool calls" in PROMPT_TEMPLATE
     assert "~25 tool calls" in ASSISTED_PROMPT_TEMPLATE
 
 
 def test_time_limits_are_solver_scoped_with_task_backstop():
-    from evals.agentic import (
+    from suites.agentic import (
         MAX_TOOL_OUTPUT,
         TASK_TIME_LIMIT_S,
         TIME_LIMIT_S,

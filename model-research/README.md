@@ -47,5 +47,5 @@ profile above:
   `/model-research`.
 
 Neither flips `tested=true` — that needs a real serve on `kai` via the **eval harness**
-([`evals/`](evals/README.md), `just eval <key>`), which scores a model and stamps the verdict into
+([`suites/`](suites/README.md), `just eval <key>`), which scores a model and stamps the verdict into
 `models.toml`.

@@ -3,15 +3,15 @@
 _2026-07-02, planning. Authored by Fable per the model guidance in
 [05-roadmap.md](05-roadmap.md): this spec makes the design decisions; Opus implements against it.
 Read [02-eval-harness-architecture.md](02-eval-harness-architecture.md) first — Phase 1 shipped
-the episode runner (`kvllm/evalrun.py` + `evals/`), and the Docker sandbox path is proven
+the episode runner (`kvllm/evalrun.py` + `suites/`), and the Docker sandbox path is proven
 (`just eval-sandbox-smoke` passes on kai). Where this spec says VERIFY, confirm the Inspect API
 detail before relying on it; if reality disagrees with the spec, note it in the sprint doc and
 pick the closest equivalent — do not redesign silently._
 
 ## Shape of the suite
 
-- **Module:** `evals/coding.py` exporting `@task coding()` and `VERSION = 1`; assets in
-  `evals/coding_assets/<task-id>/`. Register in `kvllm/evalrun.py::_suites()` under the registry
+- **Module:** `suites/coding.py` exporting `@task coding()` and `VERSION = 1`; assets in
+  `suites/coding_assets/<task-id>/`. Register in `kvllm/evalrun.py::_suites()` under the registry
   capability **`code`** — nothing else in the harness changes.
 - **Episode:** Inspect `react()` agent with the `bash()` tool (sandbox-backed), working in
   `/workspace`. Instructions template (same for all tiers):
@@ -22,8 +22,8 @@ pick the closest equivalent — do not redesign silently._
   retries would contaminate that signal.
 - **Limits:** `message_limit=30` (C1/C2) / `40` (C3/C4); `time_limit=600` per sample; bash exec
   timeout 120 s. Config: `GenerateConfig(temperature=0.0)`.
-- **Sandbox:** `sandbox=("docker", "evals/coding_assets/compose.yaml")` — one service, image
-  built from `evals/coding_assets/Dockerfile`: `python:3.12-slim` + `pytest` (pinned), non-root
+- **Sandbox:** `sandbox=("docker", "suites/coding_assets/compose.yaml")` — one service, image
+  built from `suites/coding_assets/Dockerfile`: `python:3.12-slim` + `pytest` (pinned), non-root
   user, `network_mode: none`, `mem_limit: 2g`, `cpus: 2`, `pids_limit: 256`, writable
   `/workspace`. Nothing else installed — tasks are stdlib-only by design.
 - **Workspace seeding:** C3/C4 skeletons ship via `Sample(files={...})` (VERIFY: files land

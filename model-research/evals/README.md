@@ -2,7 +2,7 @@
 
 Our own "worth trying / has issues / skip" testing of models **on `kai`** — not online leaderboard
 scores, but whether a model actually serves, fits, and performs on the 5090. Harness v2 (Sprint 8)
-runs suites as **Inspect AI** tasks ([`evals/`](../../../evals/)); design in
+runs suites as **Inspect AI** tasks ([`suites/`](../../../suites/)); design in
 [`sprints/planning/`](../../../sprints/planning/README.md).
 
 **The human view:** open [`leaderboard.html`](leaderboard.html). Agent-friendly siblings:

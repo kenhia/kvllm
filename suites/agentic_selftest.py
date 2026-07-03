@@ -15,7 +15,7 @@ from inspect_ai.scorer import Score, Target, mean, scorer
 from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.util import sandbox
 
-from evals.agentic import ATASKS, COMPOSE, mechanical_score
+from suites.agentic import ATASKS, COMPOSE, mechanical_score
 
 LOG_DIR = "eval-logs/agentic-selftest"
 

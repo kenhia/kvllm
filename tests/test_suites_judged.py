@@ -1,10 +1,10 @@
-"""Unit tests for the judged suite's pure functions (evals/judged.py) — no live judge."""
+"""Unit tests for the judged suite's pure functions (suites/judged.py) — no live judge."""
 
 from __future__ import annotations
 
 import json
 
-from evals.judged import JTASKS, mechanical_check, parse_judge_json
+from suites.judged import JTASKS, mechanical_check, parse_judge_json
 
 # --- mechanical_check -------------------------------------------------------------------
 

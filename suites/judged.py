@@ -8,7 +8,7 @@ The judge returns structured JSON {score 0-10, rationale, violations}; the ratio
 in the scorecard so every judged number is auditable (planning/03).
 
 The suite is EXCLUDED from the composite until the calibration protocol passes
-([judge].calibrated in eval-config.toml): `python -m evals.judged sheet <log.eval>` renders a
+([judge].calibrated in eval-config.toml): `python -m suites.judged sheet <log.eval>` renders a
 calibration sheet for Ken to hand-score; judge must be within ±1 on >=80%.
 
 Mechanical checks + judge-JSON parsing are pure functions (unit-tested without a live judge).
@@ -398,7 +398,7 @@ def write_calibration_sheet(log_paths: list[str], out_path: Path) -> Path:
                 (s.output.completion or "")[:1500],
                 "```",
                 "",
-                f"**Rubric:** {smeta.get('rubric', '(see evals/judged.py)')}",
+                f"**Rubric:** {smeta.get('rubric', '(see suites/judged.py)')}",
                 "",
                 f"- judge: **{judge10}/10**{capped} — {sc.explanation}",
                 f"- violations: {meta.get('violations') or 'none'}",
@@ -412,18 +412,11 @@ def write_calibration_sheet(log_paths: list[str], out_path: Path) -> Path:
 
 def main() -> int:
     if len(sys.argv) >= 3 and sys.argv[1] == "sheet":
-        out = (
-            REPO
-            / "docs"
-            / "model-research"
-            / "evals"
-            / "calibration"
-            / "judged-sheet.md"
-        )
+        out = REPO / "model-research" / "evals" / "calibration" / "judged-sheet.md"
         path = write_calibration_sheet(sys.argv[2:], out)
         print(f"wrote {path}")
         return 0
-    print("usage: python -m evals.judged sheet <log.eval> [...]")
+    print("usage: python -m suites.judged sheet <log.eval> [...]")
     return 2
 
 
