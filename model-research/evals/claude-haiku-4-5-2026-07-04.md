@@ -8,7 +8,7 @@
 - GPU used: None MiB
 - TTFT: None s
 - decode tok/s: None
-- tokens: 12,776 in / 1,657 out · est cost $0.02
+- tokens: 12,966 in / 1,649 out · est cost $0.02
 - judge overhead: 3,341 in / 692 out · $0.01
 
 ## Suite: tools v2 — 11/11 (100%)
@@ -77,17 +77,18 @@ _Transcript: `eval-logs/claude-haiku-4-5/2026-07-04/judged/2026-07-04T01-56-23-0
 - ✅ `strict-json` — The model output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ✅ `summarize-incident` — All three elements are accurate and concise. The answer correctly identifies the OOM kill, the too many connections failure, and the resolution (max_connections 100→200). No fabricated facts, no contradictions with reference facts, and causality is clear.
 
-## Suite: vision v2 — 13/14 (96%)
-_Transcript: `eval-logs/claude-haiku-4-5/2026-07-04/vision/2026-07-04T01-56-32-00-00_vision_fSTfYvUuLXtva3rpjk9WCK.eval` (open with `inspect view`)._
+## Suite: vision v2 — 13/15 (93%)
+_Transcript: `eval-logs/claude-haiku-4-5/2026-07-04/vision/2026-07-04T02-25-43-00-00_vision_3WRa6R4vnkQLsGF3Qb8BhG.eval` (open with `inspect view`)._
 - ❌ `p1-animal` (50%) — facts 50% (missing: bandana | scarf | kerchief | neckerchief)
 - ✅ `p2-hardware` — facts 100%
 - ✅ `p3-tools` — facts 100%
 - ✅ `p4-count-people` — facts 100%
+- ✅ `p5-activity` — facts 100%
 - ✅ `v1-dashboard-down` — facts 100%
 - ✅ `v10-render-clean` — facts 100%
 - ✅ `v2-gauge-disk` — facts 100%
 - ✅ `v3-chart-peak` — facts 100%
-- ✅ `v4-terminal-df` — facts 100%
+- ❌ `v4-terminal-df` (50%) — facts 50% (missing: /data | nvme1n1)
 - ✅ `v5-journal-error` — facts 100%
 - ✅ `v6-table-registry` — facts 100%
 - ✅ `v7-count-warnings` — facts 100%

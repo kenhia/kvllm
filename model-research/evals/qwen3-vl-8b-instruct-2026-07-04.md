@@ -7,8 +7,8 @@
 - cold start: 50.0 s
 - GPU used: 27764 MiB
 - TTFT: 0.02 s
-- decode tok/s: 99.2
-- tokens: 8,922 in / 208 out
+- decode tok/s: 99.1
+- tokens: 9,068 in / 219 out
 - judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: assisted v1 — 1/9 (50%)
@@ -58,12 +58,13 @@ _Transcript: `eval-logs/qwen3-vl-8b-instruct/2026-07-03/judged/2026-07-03T19-04-
 - ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (70%) — The answer correctly identifies all three required elements (OOM kill, backup failure due to too many connections, resolution via max_connections increase). However, it speculates about causality ('likely from too many concurrent connections') that isn't explicitly stated in the log—the OOM kill and the connection limit issue are separate problems, not causally linked. The log shows OOM as the immediate cause of the crash, not connection count.
 
-## Suite: vision v2 — 12/14 (89%)
-_Transcript: `eval-logs/qwen3-vl-8b-instruct/2026-07-04/vision/2026-07-04T01-19-31-00-00_vision_Rz7rkXR9yTaKfHs2VyPAtv.eval` (open with `inspect view`)._
+## Suite: vision v2 — 13/15 (90%)
+_Transcript: `eval-logs/qwen3-vl-8b-instruct/2026-07-04/vision/2026-07-04T02-18-27-00-00_vision_757FUEaDfwrZQvcmGYLDTw.eval` (open with `inspect view`)._
 - ❌ `p1-animal` (50%) — facts 50% (missing: bandana | scarf | kerchief | neckerchief)
 - ✅ `p2-hardware` — facts 100%
 - ✅ `p3-tools` — facts 100%
 - ✅ `p4-count-people` — facts 100%
+- ✅ `p5-activity` — facts 100%
 - ✅ `v1-dashboard-down` — facts 100%
 - ✅ `v10-render-clean` — facts 100%
 - ✅ `v2-gauge-disk` — facts 100%
@@ -73,4 +74,4 @@ _Transcript: `eval-logs/qwen3-vl-8b-instruct/2026-07-04/vision/2026-07-04T01-19-
 - ✅ `v6-table-registry` — facts 100%
 - ✅ `v7-count-warnings` — facts 100%
 - ✅ `v8-diagram-backup` — facts 100%
-- ❌ `v9-render-broken` (0%) — facts 0% (missing: overflow | outside | spill | beyond | clipped | cut off | extends past | overrun | truncat; integration | third box)
+- ❌ `v9-render-broken` (0%) — facts 0% (missing: overflow | outside | spill | beyond | clipped | cut off | extends past | overrun | truncat | overlap | on top of; integration | third box)

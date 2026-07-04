@@ -8,7 +8,7 @@
 - GPU used: None MiB
 - TTFT: None s
 - decode tok/s: None
-- tokens: 7,441 in / 2,543 out · est cost $0.06
+- tokens: 7,649 in / 2,776 out · est cost $0.06
 - judge overhead: 3,594 in / 804 out · $0.01
 
 ## Suite: tools v2 — 11/11 (100%)
@@ -64,18 +64,19 @@ _Transcript: `eval-logs/claude-sonnet-5/2026-07-04/judged/2026-07-04T01-56-38-00
 - ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (60%) — The answer correctly identifies all three required elements and the sequence of events, but violates the strict accuracy requirement by fabricating a causal claim not present in the log: the model states the OOM was 'likely due to too many open connections consuming resources,' which is speculation not supported by the incident data. The log shows OOM as the primary cause, not connection count. Additionally, the first bullet conflates two separate issues (OOM kill + subsequent connection rejection) into one sentence, reducing clarity.
 
-## Suite: vision v2 — 12/14 (93%)
-_Transcript: `eval-logs/claude-sonnet-5/2026-07-04/vision/2026-07-04T01-56-50-00-00_vision_5tJV5HsYghArhXo59n8roe.eval` (open with `inspect view`)._
-- ❌ `p1-animal` (50%) — facts 50% (missing: corgi)
+## Suite: vision v2 — 14/15 (93%)
+_Transcript: `eval-logs/claude-sonnet-5/2026-07-04/vision/2026-07-04T02-25-47-00-00_vision_PAJy9R4p5StpB9AmRH7W3o.eval` (open with `inspect view`)._
+- ❌ `p1-animal` (0%) — facts 0% (missing: corgi; bandana | scarf | kerchief | neckerchief)
 - ✅ `p2-hardware` — facts 100%
 - ✅ `p3-tools` — facts 100%
 - ✅ `p4-count-people` — facts 100%
+- ✅ `p5-activity` — facts 100%
 - ✅ `v1-dashboard-down` — facts 100%
 - ✅ `v10-render-clean` — facts 100%
 - ✅ `v2-gauge-disk` — facts 100%
 - ✅ `v3-chart-peak` — facts 100%
 - ✅ `v4-terminal-df` — facts 100%
-- ❌ `v5-journal-error` (50%) — facts 50% (missing: oom | out of memory | killed process)
+- ✅ `v5-journal-error` — facts 100%
 - ✅ `v6-table-registry` — facts 100%
 - ✅ `v7-count-warnings` — facts 100%
 - ✅ `v8-diagram-backup` — facts 100%

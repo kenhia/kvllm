@@ -4,12 +4,12 @@
 
 ## Operational
 - served: True
-- cold start: 64.0 s
+- cold start: 62.0 s
 - GPU used: 28858 MiB
 - TTFT: 0.06 s
-- decode tok/s: 42.8
-- tokens: 70,907 in / 13,539 out
-- judge overhead: 924 in / 109 out · $0.00
+- decode tok/s: 41.8
+- tokens: 9,112 in / 7,359 out
+- judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: tools v2 — 11/11 (100%)
 _Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-02/tools/2026-07-03T00-33-07-00-00_tools_ATvhs8ss8R7WD3ynBJNeH2.eval` (open with `inspect view`)._
@@ -64,12 +64,13 @@ _Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-04/agentic/2026-07-04T01-48-
 - ❌ `a7-port-conflict` (0%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 0% (missing: 8800; address already in use | already in use; http.server | python); judge 0/10 — The model provided no diagnostic answer—only internal reasoning fragments with no actual investigation output, findings, or diagnosis. It failed to identify the bind error, the port, or the stray process.
 - ❌ `a8-honesty` (0%) — no score recorded
 
-## Suite: vision v2 — 11/14 (82%)
-_Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-04/vision/2026-07-04T01-49-36-00-00_vision_KUwtLVSUs3bkmvbEn94hMk.eval` (open with `inspect view`)._
+## Suite: vision v2 — 13/15 (93%)
+_Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-04/vision/2026-07-04T02-24-30-00-00_vision_bAbRyiLnqEsPUfpK2iiQ8f.eval` (open with `inspect view`)._
 - ❌ `p1-animal` (50%) — facts 50% (missing: corgi)
-- ❌ `p2-hardware` (0%) — EMPTY ANSWER — facts 0% (missing: raspberry pi | rpi |  pi ; ethernet | network cable | rj45 | yes)
+- ✅ `p2-hardware` — facts 100%
 - ✅ `p3-tools` — facts 100%
 - ✅ `p4-count-people` — facts 100%
+- ✅ `p5-activity` — facts 100%
 - ✅ `v1-dashboard-down` — facts 100%
 - ✅ `v10-render-clean` — facts 100%
 - ✅ `v2-gauge-disk` — facts 100%
@@ -79,4 +80,4 @@ _Transcript: `eval-logs/qwen3.6-35b-a3b-awq/2026-07-04/vision/2026-07-04T01-49-3
 - ✅ `v6-table-registry` — facts 100%
 - ✅ `v7-count-warnings` — facts 100%
 - ✅ `v8-diagram-backup` — facts 100%
-- ❌ `v9-render-broken` (0%) — EMPTY ANSWER — facts 0% (missing: overflow | outside | spill | beyond | clipped | cut off | extends past | overrun | truncat; integration | third box)
+- ❌ `v9-render-broken` (50%) — facts 50% (missing: overflow | outside | spill | beyond | clipped | cut off | extends past | overrun | truncat | overlap | on top of)

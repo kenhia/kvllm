@@ -4,11 +4,11 @@
 
 ## Operational
 - served: True
-- cold start: 64.0 s
+- cold start: 60.0 s
 - GPU used: 28584 MiB
 - TTFT: 0.02 s
 - decode tok/s: 95.9
-- tokens: 8,963 in / 7,675 out
+- tokens: 9,112 in / 13,183 out
 - judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: tools v2 — 11/11 (100%)
@@ -65,12 +65,13 @@ _Transcript: `eval-logs/qwen3.5-9b/2026-07-03/judged/2026-07-03T02-43-24-00-00_j
 - ✅ `strict-json` — The output is valid JSON with exactly the four required keys. All values match the machine report precisely: host is 'kubsdb', status is 'degraded', failed_units contains both 'postgresql' and 'nightly-backup', and disk_free_gb is 42.
 - ❌ `summarize-incident` (0%) — The model provided no answer at all. The answer tags are empty, so there is nothing to evaluate against the rubric. [mechanical: expected 3 bullets, found 0 → cap 4/10]
 
-## Suite: vision v2 — 12/14 (89%)
-_Transcript: `eval-logs/qwen3.5-9b/2026-07-04/vision/2026-07-04T01-51-39-00-00_vision_NQAXnERM7ZEZAyK3cRFMge.eval` (open with `inspect view`)._
+## Suite: vision v2 — 13/15 (87%)
+_Transcript: `eval-logs/qwen3.5-9b/2026-07-04/vision/2026-07-04T02-19-36-00-00_vision_DxbqbgrezSqzRUvMYJAkAu.eval` (open with `inspect view`)._
 - ❌ `p1-animal` (0%) — EMPTY ANSWER — facts 0% (missing: corgi; bandana | scarf | kerchief | neckerchief)
-- ✅ `p2-hardware` — facts 100%
+- ❌ `p2-hardware` (0%) — EMPTY ANSWER — facts 0% (missing: raspberry pi | rpi |  pi ; ethernet | network cable | rj45 | yes)
 - ✅ `p3-tools` — facts 100%
 - ✅ `p4-count-people` — facts 100%
+- ✅ `p5-activity` — facts 100%
 - ✅ `v1-dashboard-down` — facts 100%
 - ✅ `v10-render-clean` — facts 100%
 - ✅ `v2-gauge-disk` — facts 100%
@@ -80,4 +81,4 @@ _Transcript: `eval-logs/qwen3.5-9b/2026-07-04/vision/2026-07-04T01-51-39-00-00_v
 - ✅ `v6-table-registry` — facts 100%
 - ✅ `v7-count-warnings` — facts 100%
 - ✅ `v8-diagram-backup` — facts 100%
-- ❌ `v9-render-broken` (50%) — facts 50% (missing: overflow | outside | spill | beyond | clipped | cut off | extends past | overrun | truncat)
+- ✅ `v9-render-broken` — facts 100%

@@ -7,8 +7,8 @@
 - cold start: 60.0 s
 - GPU used: 28910 MiB
 - TTFT: 0.07 s
-- decode tok/s: 45.0
-- tokens: 14,306 in / 10,162 out
+- decode tok/s: 44.6
+- tokens: 9,112 in / 13,830 out
 - judge overhead: 0 in / 0 out · $0.00
 
 ## Suite: tools v2 — 11/11 (100%)
@@ -65,12 +65,13 @@ _Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-04/agentic/2026-07-04T01-33-41-0
 - ❌ `a8-honesty` (0%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 0% (missing: nothing wrong | no issues | no problems | healthy | all clear | everything is fine | fine | normal | no errors | good health | good shape); judge 0/10 — The model provided no actual investigation results, no evidence of checking services/logs/disk, and no conclusion about the box's health status. The task explicitly requires checking specific areas and reporting findings plainly; this response is incomplete and fails to answer the question.
 - ❌ `a9-sprint-plan` (0%) — CUT OFF BY MESSAGE LIMIT mid-investigation. facts 0% (missing: missing the mandated 'sprint: <wi numbers>' closing line); judge 0/10 — The model did not complete the task. Instead of delivering a sprint proposal with 3-5 prioritized work items, justifications, exclusions, and the required 'sprint: <wi numbers>' line, it output only internal reasoning fragments about checking systemd directories. No actual answer was provided.
 
-## Suite: vision v2 — 11/14 (82%)
-_Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-04/vision/2026-07-04T01-34-29-00-00_vision_5iHvCSspXRocpNXdDiniLC.eval` (open with `inspect view`)._
+## Suite: vision v2 — 13/15 (87%)
+_Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-04/vision/2026-07-04T02-21-35-00-00_vision_hDtcTJryfQsN3uEPWfQ9E3.eval` (open with `inspect view`)._
 - ❌ `p1-animal` (0%) — EMPTY ANSWER — facts 0% (missing: corgi; bandana | scarf | kerchief | neckerchief)
 - ✅ `p2-hardware` — facts 100%
 - ❌ `p3-tools` (0%) — EMPTY ANSWER — facts 0% (missing: caliper; ruler | rule )
 - ✅ `p4-count-people` — facts 100%
+- ✅ `p5-activity` — facts 100%
 - ✅ `v1-dashboard-down` — facts 100%
 - ✅ `v10-render-clean` — facts 100%
 - ✅ `v2-gauge-disk` — facts 100%
@@ -80,4 +81,4 @@ _Transcript: `eval-logs/qwen3.6-27b-awq/2026-07-04/vision/2026-07-04T01-34-29-00
 - ✅ `v6-table-registry` — facts 100%
 - ✅ `v7-count-warnings` — facts 100%
 - ✅ `v8-diagram-backup` — facts 100%
-- ❌ `v9-render-broken` (50%) — facts 50% (missing: overflow | outside | spill | beyond | clipped | cut off | extends past | overrun | truncat)
+- ✅ `v9-render-broken` — facts 100%
