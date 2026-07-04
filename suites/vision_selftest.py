@@ -59,7 +59,9 @@ def main() -> int:
         img_ok = path.is_file()
         if img_ok:
             with Image.open(path) as im:
-                img_ok = im.size[0] >= 250  # p5 is a natively-small photo; the bar catches broken/empty files
+                img_ok = (
+                    im.size[0] >= 250
+                )  # p5 is a natively-small photo; the bar catches broken/empty files
         good, wrong = REFERENCE[t.name]
         gfrac, _ = fact_score(t.groups, good)
         wfrac, _ = fact_score(t.groups, wrong)
