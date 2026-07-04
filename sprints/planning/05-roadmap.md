@@ -94,7 +94,11 @@ once ≥3 vision models are scored.
 
 ## Phase 6+ — later, unscheduled
 
-- **VM layer on the sandbox host** (libvirt + snapshot/revert) for full-machine agentic tasks.
+- **VM layer on the sandbox host** — ✅ **DONE 2026-07-04** (incus on ksandbox, not libvirt —
+  one-liner snapshot/restore). `vmlab-01` is kmon's fault-injection drill range: inject a
+  known fault → kmon reports/investigates/plans → snapshot restore → next run auto-verifies
+  ("not observed, likely resolved"). Also the multi-host-collection pilot. Lives in the kmon
+  repo (`vmlab/`), not here — kvllm's role was proving the model that drives it.
 - **Computer-use episodes** (desktop VM + screenshots) once a vision model earns it.
 - **Real-korg read-only episodes** (the fake-korg fixtures graduate to a sanitized live snapshot).
 - **The controller itself** — the always-on local model monitoring the homelab is a separate
