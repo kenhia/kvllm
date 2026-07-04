@@ -213,6 +213,42 @@ def v8_diagram_backup():
     img.save(HERE / "v8-diagram-backup.png")
 
 
+def _flowchart(name: str, broken: bool):
+    """Deploy-pipeline flowchart; the broken variant's third box has text overflowing
+    its border (the render-defect the model must detect — or NOT invent on the clean one)."""
+    img, d = canvas(880, 460)
+    d.text((20, 14), "deploy pipeline", font=font(20, bold=True), fill=FG)
+    steps = ["build", "unit tests", "integration suite", "deploy"]
+    y = 200
+    for i, label in enumerate(steps):
+        x = 40 + i * 215
+        d.rounded_rectangle([x, y, x + 160, y + 70], 8, fill=PANEL, outline=BLUE)
+        if broken and i == 2:
+            # text drawn wider than its box, spilling past the right border
+            d.text(
+                (x + 12, y + 24),
+                "integration test suite (nightly)",
+                font=font(17),
+                fill=FG,
+            )
+        else:
+            d.text((x + 80, y + 35), label, font=font(17), fill=FG, anchor="mm")
+        if i < 3:
+            d.line([x + 160, y + 35, x + 215, y + 35], fill=MUT, width=2)
+            d.polygon(
+                [(x + 215, y + 35), (x + 203, y + 29), (x + 203, y + 41)], fill=MUT
+            )
+    img.save(HERE / name)
+
+
+def v9_render_broken():
+    _flowchart("v9-render-broken.png", broken=True)
+
+
+def v10_render_clean():
+    _flowchart("v10-render-clean.png", broken=False)
+
+
 def main() -> None:
     for fn in (
         v1_dashboard_down,
@@ -223,9 +259,11 @@ def main() -> None:
         v6_table_registry,
         v7_count_warnings,
         v8_diagram_backup,
+        v9_render_broken,
+        v10_render_clean,
     ):
         fn()
-    print(f"rendered 8 fixtures into {HERE}")
+    print(f"rendered 10 fixtures into {HERE}")
 
 
 if __name__ == "__main__":
