@@ -27,6 +27,28 @@ REFERENCE = {
     "v6-table-registry": ("20 GB", "205 GB total"),
     "v7-count-warnings": ("3 checks show WARN.", "13 warnings"),
     "v8-diagram-backup": ("Backups go to nas-01.", "backups go to kubsdb"),
+    "v9-render-broken": (
+        "No — the third box's text ('integration test suite') overflows outside its border.",
+        "the diagram renders correctly",
+    ),
+    "v10-render-clean": (
+        "Yes, the diagram renders correctly; no defects.",
+        "the deploy box text overflows its border",
+    ),
+    "p1-animal": (
+        "A corgi (dog) wearing a flamingo-print bandana.",
+        "a cat wearing a collar",
+    ),
+    "p2-hardware": (
+        "A Raspberry Pi with a PoE HAT, connected to a network via Ethernet cable.",
+        "a laptop with no cables attached",
+    ),
+    "p3-tools": ("A digital caliper and a steel ruler.", "a tape measure"),
+    "p4-count-people": ("0 — no people are visible.", "2 people"),
+    "p5-activity": (
+        "Road cycling (a triathlon leg); 2 riders visible.",
+        "a running race with 5 runners",
+    ),
 }
 
 
@@ -37,7 +59,7 @@ def main() -> int:
         img_ok = path.is_file()
         if img_ok:
             with Image.open(path) as im:
-                img_ok = im.size[0] >= 600
+                img_ok = im.size[0] >= 250  # p5 is a natively-small photo; the bar catches broken/empty files
         good, wrong = REFERENCE[t.name]
         gfrac, _ = fact_score(t.groups, good)
         wfrac, _ = fact_score(t.groups, wrong)

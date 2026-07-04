@@ -1,14 +1,13 @@
-"""S5 vision suite v1 — read the surfaces the homelab controller will actually look at.
+"""S5 vision suite — read the surfaces the homelab controller will actually look at.
 
-Eight single-generate episodes (no sandbox, no tools): a fixture image + one question with
-a short factual answer. Images are deterministic PIL renderings checked into
-vision_assets/ (regenerate: `python -m suites.vision_assets.generate`). Scoring is
-mechanical fact-groups, agentic-style: every group must be matched by at least one of its
+Single-generate episodes (no sandbox, no tools): an image + one question with a short
+factual answer. v1 (v1-v8): extraction over deterministic PIL renderings (regenerate:
+`python -m suites.vision_assets.generate`). v2 adds classification/captioning over real
+photos (p1-p4, downscaled + EXIF-stripped) and a render-defect QA pair (v9/v10 — detect
+the broken flowchart, do NOT invent defects on the clean control). Scoring is mechanical
+fact-groups, agentic-style: every group must be matched by at least one of its
 alternatives; digits-only alternatives match on word boundaries (so "20" never passes via
 "205"). Partial credit = matched/total; pass = all groups.
-
-Weight starts at 0.0 in eval-config.toml (shown, unranked) per the roadmap rule: bump once
-≥3 vision models are scored.
 """
 
 from __future__ import annotations
@@ -23,7 +22,11 @@ from inspect_ai.model import ChatMessageUser, ContentImage, ContentText, Generat
 from inspect_ai.scorer import Score, Target, mean, scorer, stderr
 from inspect_ai.solver import TaskState, generate
 
-VERSION = 1
+# v2 (2026-07-04): +6 tasks. v1's clean-render extraction hit a ceiling (5 locals 94-100%,
+# baselines 100%): added classification/captioning on real photos (Ken's, downscaled +
+# EXIF-stripped), an absence/honesty count, and a render-defect pair (detect the broken
+# flowchart — and do NOT invent defects on the clean control).
+VERSION = 2
 ASSETS = Path(__file__).resolve().parent / "vision_assets"
 
 PREAMBLE = (
@@ -95,6 +98,89 @@ VTASKS = [
         question="Per this topology diagram, which host receives kai's nightly backups?",
         groups=[["nas"]],
     ),
+    # --- v2: rendering QA pair (detect real defects; don't invent them) ---
+    VTask(
+        name="v9-render-broken",
+        image="v9-render-broken.png",
+        question=(
+            "Quality-check this generated diagram: does it render correctly? "
+            "If not, describe the defect and where it is."
+        ),
+        groups=[
+            [
+                "overflow",
+                "outside",
+                "spill",
+                "beyond",
+                "clipped",
+                "cut off",
+                "extends past",
+                "overrun",
+                "truncat",
+                "overlap",
+                "on top of",
+            ],
+            ["integration", "third box"],
+        ],
+    ),
+    VTask(
+        name="v10-render-clean",
+        image="v10-render-clean.png",
+        question=(
+            "Quality-check this generated diagram: does it render correctly? "
+            "If not, describe the defect and where it is."
+        ),
+        groups=[
+            [
+                "correct",
+                "no defect",
+                "no issue",
+                "fine",
+                "properly",
+                "looks good",
+                "renders well",
+            ]
+        ],
+    ),
+    # --- v2: classification / captioning on real photos ---
+    VTask(
+        name="p1-animal",
+        image="p1-animal.jpg",
+        question="What animal is this (be specific), and what is it wearing?",
+        # "harness" is deliberately NOT accepted (Ken confirmed it's a bandana): the
+        # plausible misread earns partial credit via the group mechanism (1/2 = 50%),
+        # and the precise read is a real differentiator — Sonnet said "Shiba Inu ...
+        # harness or bandana-style", Haiku invented "hair bows". Both first-run 2026-07-04.
+        groups=[["corgi"], ["bandana", "scarf", "kerchief", "neckerchief"]],
+    ),
+    VTask(
+        name="p2-hardware",
+        image="p2-hardware.jpg",
+        question="What device is shown here, and is it connected to a network?",
+        groups=[
+            ["raspberry pi", "rpi", " pi "],
+            ["ethernet", "network cable", "rj45", "yes"],
+        ],
+    ),
+    VTask(
+        name="p3-tools",
+        image="p3-tools.jpg",
+        question="What measuring tools are shown in this scan?",
+        groups=[["caliper"], ["ruler", "rule "]],
+    ),
+    VTask(
+        name="p5-activity",
+        image="p5-activity.jpg",
+        question="What activity is happening in this photo, and how many riders are visible?",
+        groups=[["cycl", "bik", "triathlon", "road race"], ["2", "two"]],
+    ),
+    # absence check: same hardware photo, nobody in frame
+    VTask(
+        name="p4-count-people",
+        image="p2-hardware.jpg",
+        question="How many people are visible in this image? Answer with a number.",
+        groups=[["0", "zero", "none", "no people", "no person"]],
+    ),
 ]
 
 
@@ -163,8 +249,8 @@ def vision() -> Task:
         dataset=MemoryDataset(samples, name="vision"),
         solver=generate(),
         scorer=vision_scorer(),
-        # 2048: room for reasoning-model thinking (the judged-suite 1024 lesson) while
-        # answers stay short.
-        config=GenerateConfig(max_tokens=2048),
+        # 4096: reasoning headroom (the judged-suite lesson; 2048 still cut off the 27B
+        # mid-think on a photo task) while answers stay short.
+        config=GenerateConfig(max_tokens=4096),
         version=VERSION,
     )
