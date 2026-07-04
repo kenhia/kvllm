@@ -45,6 +45,10 @@ REFERENCE = {
     ),
     "p3-tools": ("A digital caliper and a steel ruler.", "a tape measure"),
     "p4-count-people": ("0 — no people are visible.", "2 people"),
+    "p5-activity": (
+        "Road cycling (a triathlon leg); 2 riders visible.",
+        "a running race with 5 runners",
+    ),
 }
 
 
@@ -55,7 +59,7 @@ def main() -> int:
         img_ok = path.is_file()
         if img_ok:
             with Image.open(path) as im:
-                img_ok = im.size[0] >= 600
+                img_ok = im.size[0] >= 250  # p5 is a natively-small photo; the bar catches broken/empty files
         good, wrong = REFERENCE[t.name]
         gfrac, _ = fact_score(t.groups, good)
         wfrac, _ = fact_score(t.groups, wrong)

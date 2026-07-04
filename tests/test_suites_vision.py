@@ -5,10 +5,10 @@ from __future__ import annotations
 from suites.vision import ASSETS, VERSION, VTASKS, fact_score
 
 
-def test_manifest_fourteen_unique_tasks_v2():
+def test_manifest_fifteen_unique_tasks_v2():
     assert VERSION == 2
-    assert len(VTASKS) == 14
-    assert len({t.name for t in VTASKS}) == 14
+    assert len(VTASKS) == 15
+    assert len({t.name for t in VTASKS}) == 15
     for t in VTASKS:
         assert t.groups, f"{t.name} has no fact groups"
 

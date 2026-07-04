@@ -117,6 +117,8 @@ VTASKS = [
                 "extends past",
                 "overrun",
                 "truncat",
+                "overlap",
+                "on top of",
             ],
             ["integration", "third box"],
         ],
@@ -145,6 +147,10 @@ VTASKS = [
         name="p1-animal",
         image="p1-animal.jpg",
         question="What animal is this (be specific), and what is it wearing?",
+        # "harness" is deliberately NOT accepted (Ken confirmed it's a bandana): the
+        # plausible misread earns partial credit via the group mechanism (1/2 = 50%),
+        # and the precise read is a real differentiator — Sonnet said "Shiba Inu ...
+        # harness or bandana-style", Haiku invented "hair bows". Both first-run 2026-07-04.
         groups=[["corgi"], ["bandana", "scarf", "kerchief", "neckerchief"]],
     ),
     VTask(
@@ -161,6 +167,12 @@ VTASKS = [
         image="p3-tools.jpg",
         question="What measuring tools are shown in this scan?",
         groups=[["caliper"], ["ruler", "rule "]],
+    ),
+    VTask(
+        name="p5-activity",
+        image="p5-activity.jpg",
+        question="What activity is happening in this photo, and how many riders are visible?",
+        groups=[["cycl", "bik", "triathlon", "road race"], ["2", "two"]],
     ),
     # absence check: same hardware photo, nobody in frame
     VTask(
@@ -237,8 +249,8 @@ def vision() -> Task:
         dataset=MemoryDataset(samples, name="vision"),
         solver=generate(),
         scorer=vision_scorer(),
-        # 2048: room for reasoning-model thinking (the judged-suite 1024 lesson) while
-        # answers stay short.
-        config=GenerateConfig(max_tokens=2048),
+        # 4096: reasoning headroom (the judged-suite lesson; 2048 still cut off the 27B
+        # mid-think on a photo task) while answers stay short.
+        config=GenerateConfig(max_tokens=4096),
         version=VERSION,
     )
