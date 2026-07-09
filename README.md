@@ -34,7 +34,8 @@ just smoke                          # tool-calling + LangChain smoke tests
 ```
 
 Point any OpenAI client at `base_url="http://localhost:8000/v1"`, `api_key="EMPTY"`,
-`model="<registry key>"`. vLLM holds **one model per process**; `just service-switch <key>`
+`model="<registry key>"` — or use [`client/`](client/), the `kvllm-client` library the
+homelab services share (auto-discovery via `/v1/models` + ChatAnthropic escalation). vLLM holds **one model per process**; `just service-switch <key>`
 changes the model the systemd service serves.
 
 ## Quick start — evaluating

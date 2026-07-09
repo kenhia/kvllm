@@ -19,7 +19,7 @@ weighted leaderboard). Human owner: Ken. Read this, then go straight to what you
 - Sprint work happens on a branch named like the sprint doc (`sprints/sprint-NN-slug.md` →
   branch `NN-slug`), merged to `main` with `--no-ff` at close. korg tracks sprints as work
   items (kvllm project).
-- `just check` (lint + 132 unit tests) must pass before any commit; suite changes also need
+- `just check` (lint + unit tests + client-lib tests) must pass before any commit; suite changes also need
   `just test-agentic-suite` / `just test-coding-suite` (Docker, no GPU).
 - Ranked suites are versioned — changing episode CONDITIONS needs a version bump; fixes
   that only affect would-have-crashed samples don't. Never tune conditions under a ranked
@@ -35,7 +35,9 @@ weighted leaderboard). Human owner: Ken. Read this, then go straight to what you
 
 ## Quick map
 
-`kvllm/` package (registry/serve, evalrun, evalctl, score, helper) · `suites/` Inspect
+`kvllm/` package (registry/serve, evalrun, evalctl, score, helper) · `client/` the
+`kvllm-client` distribution (shared LLM client for kagent/kmon/klams-mind; own pyproject —
+no vLLM dependency) · `suites/` Inspect
 tasks + fixtures · `model-research/` outputs incl. `evals/` scorecards+board · `docs/`
 usage docs + `findings/` · `sprints/` history + `planning/` architecture · `eval-logs/`
 transcripts (gitignored).

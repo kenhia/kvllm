@@ -145,6 +145,12 @@ test-coding-suite:
 eval-board:
     @echo "model-research/evals/leaderboard.html"
 
+# --- Client lib (client/ = the kvllm-client distribution; see client/README.md) ---
+
+# Unit tests for the client lib (own uv project; fakes only — no GPU, no network)
+client-test:
+    cd client && uv run --group dev pytest tests/ -q
+
 # Lint + format-check
 lint:
     uv run --group dev ruff check .
@@ -155,7 +161,7 @@ test:
     uv run --group dev --group eval --group test pytest tests/ -q
 
 # Lint + unit tests (fast — no live model needed)
-check: lint test
+check: lint test client-test
 
 # (Reference reports must score 1.0 mechanically; no GPU/model/judge needed.)
 # Self-test the agentic suite: planted truths discoverable in the fixture (Docker)
