@@ -23,6 +23,10 @@ from pathlib import Path
 DEFAULT_REGISTRY = Path(__file__).resolve().parent.parent / "models.toml"
 
 # Knobs that are deployment choices, not model properties.
+# Loopback by default: tailnet/remote access goes through `tailscale serve`
+# (which proxies to localhost); a wildcard bind collides with tailscaled's
+# <tailscale-ip>:<port> listener (EADDRINUSE on restart).
+DEFAULT_HOST = os.environ.get("KVLLM_HOST", "127.0.0.1")
 DEFAULT_PORT = os.environ.get("KVLLM_PORT", "8000")
 DEFAULT_GPU_UTIL = os.environ.get("KVLLM_GPU_UTIL", "0.90")
 
@@ -63,6 +67,7 @@ def build_serve_argv(
     key: str,
     entry: dict,
     *,
+    host: str = DEFAULT_HOST,
     port: str = DEFAULT_PORT,
     gpu_util: str = DEFAULT_GPU_UTIL,
 ) -> list[str]:
@@ -78,6 +83,8 @@ def build_serve_argv(
         # The registry key is the model id the client passes as model=.
         "--served-model-name",
         key,
+        "--host",
+        str(host),
         "--port",
         str(port),
         "--gpu-memory-utilization",
