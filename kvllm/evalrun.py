@@ -17,9 +17,12 @@ for evaluating whatever is already serving, on this box or another.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
+import urllib.error
+import urllib.request
 from datetime import date
 from pathlib import Path
 
@@ -156,6 +159,60 @@ def _run_suites(
     return results, usage, judge_usage
 
 
+def _vllm_version(base_url: str | None = None) -> str | None:
+    """The vLLM that produced a local row. Every local score is conditional on it — the
+    0.24->0.27 bump in sprint 15 is exactly why a row needs to say which stack measured it.
+
+    Asks the server that actually served the model (`GET /version`), not this box's installed
+    package: under --endpoint the model may be served by a different machine at a different
+    version, and recording ours would be a confident lie. Falls back to the local package.
+    """
+    if base_url:
+        root = base_url.rstrip("/").removesuffix("/v1")
+        try:
+            with urllib.request.urlopen(f"{root}/version", timeout=5) as r:
+                v = json.loads(r.read()).get("version")
+            if v:
+                return v
+        except (urllib.error.URLError, OSError, ValueError):
+            pass  # older vLLM, or a proxy that doesn't expose /version
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("vllm")
+    except PackageNotFoundError:
+        return None
+
+
+def _resolve_model(provider: str) -> dict | None:
+    """What a provider model string actually points at right now: `{"id", "created_at"}`.
+
+    Inspect's log records only the string we asked for (verified on the 2026-07-04 sonnet
+    logs), so nothing on disk says which model produced a baseline row. The Models API is the
+    authoritative answer and costs no tokens.
+
+    `created_at` is the load-bearing half. Current-generation ids like `claude-sonnet-5` are
+    complete as-is — they never carry a date suffix — so the id alone cannot reveal drift;
+    `created_at` moving is what says the model behind the name was republished. (Older
+    generations differ: `claude-haiku-4-5` does resolve to a dated `-20251001` snapshot.)
+    """
+    vendor, _, model = provider.partition("/")
+    if vendor != "anthropic":
+        return None
+    try:
+        import anthropic
+
+        m = anthropic.Anthropic().models.retrieve(model)
+        created = getattr(m, "created_at", None)
+        return {
+            "id": m.id,
+            "created_at": created.date().isoformat() if created else None,
+        }
+    except Exception as exc:  # provenance is best-effort — never fail an eval over it
+        print(f"[provenance] could not resolve {provider}: {exc}", file=sys.stderr)
+        return None
+
+
 def _total_usage(log_root: Path, model_str: str) -> tuple[dict, dict]:
     """Sum (subject, judge) usage over the latest .eval log in every suite subdir under
     log_root — the whole model/date, regardless of which suites this invocation executed."""
@@ -216,7 +273,7 @@ def evaluate(
                 shutil.rmtree(sdir)
 
     card: dict = {
-        "schema": 2,
+        "schema": 3,
         "model": key,
         "date": today,
         "hf_repo": entry.get("hf_repo"),
@@ -229,6 +286,11 @@ def evaluate(
         # Frontier baseline: no serving, no gate — straight to the suites via the API.
         card["baseline"] = True
         card["provider"] = entry["provider"]
+        # What the provider string actually points at — the provenance a Claude row is
+        # pinned by, since nothing in this repo determines it.
+        resolved = _resolve_model(entry["provider"]) or {}
+        card["model_id"] = resolved.get("id")
+        card["model_created_at"] = resolved.get("created_at")
         card["operational"]["served"] = True
         card["suites"], _, _ = _run_suites(
             entry["provider"], to_run, log_root, local=False
@@ -247,6 +309,7 @@ def evaluate(
 
     if endpoint:
         card["operational"]["served"] = True
+        card["vllm_version"] = _vllm_version(endpoint)
         card["operational"] |= evalctl.measure_speed(endpoint, served_name)
         card["suites"], usage, judge_usage = _run_suites(
             f"openai-api/kvllm/{served_name}",
@@ -281,6 +344,7 @@ def evaluate(
                     f"GPU {card['operational']['gpu_used_mib']} MiB"
                 )
                 base_url = f"http://localhost:{port}/v1"
+                card["vllm_version"] = _vllm_version(base_url)
                 card["operational"] |= evalctl.measure_speed(base_url, key)
                 ctx_ok = evalctl.context_probe(
                     base_url, key, int(entry.get("max_model_len", 8192))

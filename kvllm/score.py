@@ -5,11 +5,24 @@ suite `version` and the Inspect `.eval` log path per suite, operational gains tt
 and the leaderboard marks scores from older suite versions as stale (†). Weighted composite
 ranking lands in Phase 3; verdict logic is unchanged from v1 (threshold + speed floor).
 
-Scorecard schema (v2):
-    {"schema": 2, "model", "date", "hf_repo",
+Scorecard schema (v3):
+    {"schema": 3, "model", "date", "hf_repo",
      "operational": {"served", "cold_start_s", "gpu_used_mib", "ttft_s", "decode_tok_s", "error"?},
      "suites": {"tools": {"version", "passed", "total", "pass_rate", "cases": [...], "log"}},
-     "verdict", "notes"}
+     "verdict", "notes",
+     "vllm_version"?,        # local rows: the stack that measured them
+     "model_id"?,            # baseline rows: what the provider string resolved to
+     "model_created_at"?}    # baseline rows: when that model was published
+
+v3 adds provenance (sprint 15). The two row types drift for unrelated reasons and are pinned
+by different things: a local score is only meaningful against the vLLM that produced it, while
+a Claude row is pinned by the resolved API model id, since nothing in this repo determines it.
+A `date` column alone let both kinds of drift hide. v2 cards have none of these fields and
+render as "—" — correctly marking them as unprovenanced rather than pretending otherwise.
+
+For current-generation Claude ids the id is complete as-is (`claude-sonnet-5` is never
+date-suffixed), so `model_created_at` — not the id — is what actually moves when the model
+behind the name is republished.
 """
 
 from __future__ import annotations
@@ -413,6 +426,9 @@ def _row(card: dict, current_versions: dict[str, int] | None, cfg: dict) -> dict
         "ttft_s": op.get("ttft_s"),
         "cold_s": op.get("cold_start_s"),
         "est_cost_usd": card.get("est_cost_usd"),
+        "vllm_version": card.get("vllm_version"),
+        "model_id": card.get("model_id"),
+        "model_created_at": card.get("model_created_at"),
         "suites": suites,
     }
 
@@ -463,6 +479,21 @@ def _weights_note(cfg: dict) -> str:
     )
 
 
+def _prov_cell(r: dict) -> str:
+    """What produced this row. Local rows are pinned by the vLLM that measured them; baseline
+    rows by the model id their floating alias resolved to. A v2 card has neither, so it renders
+    "—": unprovenanced, and visibly so, rather than silently assumed current."""
+    if r.get("vllm_version"):
+        return f"vllm {r['vllm_version']}"
+    mid = r.get("model_id")
+    if not mid:
+        return "—"
+    # The id alone is stable for current-generation models; the publish date is the half
+    # that moves, so a row is only really pinned when both are shown.
+    created = r.get("model_created_at")
+    return f"{mid} @{created}" if created else mid
+
+
 def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Path]:
     cfg = load_config()
     cards = _latest_scorecards()
@@ -496,6 +527,7 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
         "cold s",
         "est $/run",
         "date",
+        "provenance",
     ]
     md = [
         "# kvllm eval leaderboard",
@@ -521,6 +553,7 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
             str(r["cold_s"] or "—"),
             f"${r['est_cost_usd']:.2f}" if r.get("est_cost_usd") is not None else "—",
             r["date"],
+            _prov_cell(r),
         ]
         md.append("| " + " | ".join(cells) + " |")
     md += ["", f"_{_weights_note(cfg)}_"]
@@ -802,6 +835,7 @@ def _html(
         "cold s",
         "est $/run",
         "date",
+        "provenance",
     ]
     th = "".join(f"<th>{html.escape(h)}</th>" for h in head)
     ncols = len(head)
@@ -826,6 +860,7 @@ def _html(
             f'<td class="num">{r["cold_s"] or "—"}</td>',
             f'<td class="num">{"$" + format(r["est_cost_usd"], ".2f") if r.get("est_cost_usd") is not None else "—"}</td>',
             f"<td>{html.escape(r['date'])}</td>",
+            f"<td>{html.escape(_prov_cell(r))}</td>",
         ]
         trs.append(
             f'<tr class="row" tabindex="0" role="button" aria-expanded="false">'
