@@ -481,3 +481,72 @@ def test_html_detail_panel_registry_notes_and_eq(tmp_path, monkeypatch):
     assert "registry-note-text" in h
     assert "old OOM trace" in h
     assert "speed ×" in h  # composite equation rendered
+
+
+# --- provenance (schema v3, sprint 15) ----------------------------------------------------
+
+
+def test_row_carries_local_provenance():
+    row = score._row(_card(vllm_version="0.27.1"), {"tools": 2}, score.load_config())
+    assert row["vllm_version"] == "0.27.1"
+    assert row["model_id"] is None
+
+
+def test_row_carries_baseline_provenance():
+    card = _card(
+        baseline=True, model_id="claude-sonnet-5", model_created_at="2026-06-29"
+    )
+    row = score._row(card, {"tools": 2}, score.load_config())
+    assert row["model_id"] == "claude-sonnet-5"
+    assert row["model_created_at"] == "2026-06-29"
+
+
+def test_prov_cell_local_shows_vllm_version():
+    assert score._prov_cell({"vllm_version": "0.27.1"}) == "vllm 0.27.1"
+
+
+def test_prov_cell_baseline_shows_model_id_and_publish_date():
+    # A current-generation id never carries a date suffix, so the publish date is the only
+    # part that moves when the model behind the name is republished — show both.
+    row = {"model_id": "claude-sonnet-5", "model_created_at": "2026-06-29"}
+    assert score._prov_cell(row) == "claude-sonnet-5 @2026-06-29"
+
+
+def test_prov_cell_baseline_without_publish_date_shows_bare_id():
+    assert score._prov_cell({"model_id": "claude-sonnet-5"}) == "claude-sonnet-5"
+
+
+def test_prov_cell_unprovenanced_v2_card_renders_dash():
+    # A v2 card predates provenance. It must read as unknown, never as "current" —
+    # that silent assumption is what let the vLLM bump hide in the date column.
+    assert score._prov_cell({}) == "—"
+
+
+def test_leaderboard_has_provenance_column(tmp_path, monkeypatch):
+    monkeypatch.setattr(score, "EVALS", tmp_path)
+    monkeypatch.setattr(score, "REGISTRY", tmp_path / "models.toml")
+    score.write_scorecard(_card(model="local-m", vllm_version="0.27.1"))
+    score.write_scorecard(
+        _card(
+            model="api-m",
+            date="2026-07-03",
+            model_id="claude-sonnet-5",
+            model_created_at="2026-06-29",
+        )
+    )
+    score.write_leaderboard({"tools": 2})
+
+    md = (tmp_path / "leaderboard.md").read_text()
+    assert "| provenance |" in md
+    assert "vllm 0.27.1" in md
+    assert "claude-sonnet-5 @2026-06-29" in md
+
+    rows = {
+        r["model"]: r
+        for r in json.loads((tmp_path / "leaderboard.json").read_text())["rows"]
+    }
+    assert rows["local-m"]["vllm_version"] == "0.27.1"
+    assert rows["api-m"]["model_id"] == "claude-sonnet-5"
+    assert rows["api-m"]["model_created_at"] == "2026-06-29"
+
+    assert "provenance" in (tmp_path / "leaderboard.html").read_text()

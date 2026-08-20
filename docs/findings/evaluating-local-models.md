@@ -28,6 +28,56 @@ theorizing. `stop_reason`, sample `error`, and message counts diagnose faster th
 A stability signal worth tracking: successive review cycles should find strictly less severe
 bugs. When they do, you're measuring; when they don't, you're still debugging.
 
+**Two more artifacts, added 2026-08-20 (sprint 15). Neither is in the model, and neither is
+in the suite — they are in the layers nobody thinks of as "the harness".**
+
+5. **The dependency graph is part of the harness.** Bumping vLLM 0.24 → 0.27 crash-looped
+   the engine, failing at *kernel warm-up* — long after model load, so it presented as a
+   serving fault. The actual cause was `uv lock --upgrade-package vllm` upgrading only vllm:
+   vLLM hard-pins `nvidia-cutlass-dsl==X` but floors `quack-kernels` with no ceiling, so the
+   resolver moved one and froze the other into an incompatible pair. When a bump breaks
+   serving, diff the *lockfile* before reading engine tracebacks.
+6. **Cost accounting silently under-reported by up to 44×.** `est $/run` summed usage by
+   globbing one date directory, while cards carry suites forward from earlier dates — so
+   every carried-forward suite's tokens went uncounted. The board read $0.02 for a frontier
+   baseline that costs $0.93. Nothing looked wrong: the number was plausible, monotone, and
+   never crashed. **A derived column with no test is an assertion nobody checked** — and this
+   one was load-bearing for "is local good enough to stop paying".
+
+## What an eval actually measures (and why a frontier baseline is less reproducible)
+
+An eval never measures a model. It measures the model **plus its entire extended
+environment** — harness, instructions, tools, sampling settings, system prompt, and the
+prompt itself. Everything determining the context that reaches the model is part of the
+measurement.
+
+That cuts asymmetrically:
+
+- **Local models:** we own the whole environment and can version it. This is why scorecards
+  now record `vllm_version`, read from the serving endpoint rather than the local package.
+- **Hosted models:** we own only our half. The provider's half — system prompt, sampling
+  defaults, safety and classifier layers, tool-call formatting — moves without notice and
+  without a version number. `created_at` from the Models API pins the *model artifact*; it
+  says nothing about the environment serving it.
+
+**A frontier baseline is therefore structurally less reproducible than a local one, and the
+board should not pretend otherwise.** Note the trap this creates: it is tempting to reason
+"the model id and publish date are unchanged, therefore nothing changed." That infers
+"nothing changed" from "nothing I can see changed" — the prime rule's error pointed outward
+instead of inward.
+
+### Corollary: know the noise floor before reading any gap
+
+Re-running `claude-sonnet-5` with every variable *we control* held constant — same suite
+versions, judge pinned to a dated snapshot, model not republished — still moved `agentic`
+**+0.14** (judged +0.07, vision +0.04). A single re-run cannot separate harness noise from
+provider-side environment change, but either way the movement is real and large.
+
+At 25% weight, ±0.14 on one suite is ±0.035 on the composite. The #1/#2 gap it was being
+used to adjudicate was **0.01**. Point estimates on a 9-episode partial-credit judged suite
+cannot support that comparison, and no amount of re-baselining fixes it — only repeated runs
+and a stated confidence band do. **Rank ordering inside the noise floor is not a result.**
+
 ## Design rules that earned their keep
 
 - **Frozen ranked suite + labeled alternate conditions.** Never tune conditions under a
@@ -70,6 +120,14 @@ baselines on our fixture-homelab board, and under a controller-scaffolding condi
 agent-tuned 24B hit 97% — above every model's raw score. The frontier premium concentrated
 in **self-pacing and trustworthiness-under-freedom**, not analysis quality. Full numbers:
 [local-model-guidance-2026-07.md](local-model-guidance-2026-07.md).
+
+> **Superseded in part, 2026-08-20 (sprint 15).** On re-baselining under vLLM 0.27.1,
+> `claude-sonnet-5` retook ① (0.97) over the 31B local (0.95) — **but do not read that as a
+> reversal.** The same re-run measured single-run movement of ±0.14 on a 25%-weighted suite,
+> which is far larger than the 0.02 gap. The honest statement is that the top two are
+> indistinguishable at this measurement precision, and were probably indistinguishable in
+> July too. Also corrected: the cost side of the comparison. The frontier baselines cost
+> **~$0.85–0.93 per run**, not the $0.02–0.06 this snapshot was written against.
 
 ## Deep links
 
