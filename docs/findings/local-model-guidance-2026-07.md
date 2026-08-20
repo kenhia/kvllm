@@ -5,6 +5,25 @@ this reflects the July 2026 open-weight landscape on a single RTX 5090 (32 GB, v
 decays as models ship. Methodology + how to regenerate: run `just eval-all`, read
 [evaluating-local-models.md](evaluating-local-models.md)._
 
+> **Superseding note — 2026-08-20 (kvllm sprint 15).** Two claims below have moved; the
+> rest of this guide stands.
+>
+> 1. **The headline no longer holds as stated.** Re-baselined under vLLM 0.27.1,
+>    `claude-sonnet-5` took ① at 0.97 with gemma-4-31b-awq ② at 0.95 (agentic 91% vs 88%).
+>    But do **not** invert the conclusion either: the same re-run showed single-run movement
+>    of ±0.14 on a 25%-weighted suite, which dwarfs the 0.02 gap. The defensible statement is
+>    that **the top two are indistinguishable at this measurement precision** — and probably
+>    were in July too. Noise floor is being measured under korg #1499.
+> 2. **The cost anchors below were right and the leaderboard was wrong.** "Sonnet $0.81,
+>    Haiku $0.68" matches reality; the board's `est $/run` column read $0.06 / $0.02 because
+>    usage was summed by globbing one date directory while cards carry suites forward from
+>    earlier dates. Fixed in sprint 15 — the board now reads $0.89 / $0.93. If you took a
+>    cost figure from the board rather than from this section before 2026-08-20, it was
+>    understated by up to 44×.
+>
+> The role guidance, the local-vs-frontier qualitative split, and the hybrid architecture
+> readout are unaffected — none of them turned on the 0.01 board gap.
+
 ## Headline
 
 **Local models now win our homelab board outright.** gemma-4-31b (AWQ) holds ① at composite
