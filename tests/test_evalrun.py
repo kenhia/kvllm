@@ -201,3 +201,59 @@ def test_resolve_model_returns_none_when_api_unreachable(monkeypatch):
     monkeypatch.setattr(anthropic.resources.models.Models, "retrieve", boom)
     # Best-effort: an unresolvable model yields no provenance, not a failed eval.
     assert evalrun._resolve_model("anthropic/claude-sonnet-5") is None
+
+
+# --- cost accounting (sprint 15 bugfix) ---------------------------------------------------
+
+
+def test_total_usage_counts_suites_carried_forward_from_other_dates(
+    tmp_path, monkeypatch
+):
+    """The bug: totals were globbed from ONE date dir, so suites carried forward by
+    merge_prior_suites (which live under an earlier date) were never counted — the board
+    reported a partial-run cost as the full-suite cost."""
+    monkeypatch.setattr(evalrun, "REPO", tmp_path)
+    seen = []
+
+    def fake_usage_from_log(path, model_str):
+        seen.append(str(path))
+        return {"input": 10, "output": 1}, {"input": 2, "output": 0}
+
+    monkeypatch.setattr(evalrun.score, "usage_from_log", fake_usage_from_log)
+
+    # Two suites from an older date (carried forward) + one from today, as a real card looks.
+    suites = {}
+    for cap, date in [
+        ("agentic", "2026-07-02"),
+        ("code", "2026-07-02"),
+        ("judged", "2026-07-04"),
+    ]:
+        rel = f"eval-logs/m/{date}/{cap}/run.eval"
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x")
+        suites[cap] = {"log": rel}
+
+    usage, judge = evalrun._total_usage(suites, "anthropic/claude-sonnet-5")
+    assert len(seen) == 3, f"every suite on the card must be counted, got {seen}"
+    assert usage == {"input": 30, "output": 3}
+    assert judge == {"input": 6, "output": 0}
+
+
+def test_total_usage_skips_missing_logs_without_failing(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(evalrun, "REPO", tmp_path)
+    monkeypatch.setattr(
+        evalrun.score, "usage_from_log", lambda p, m: ({"input": 5}, {"input": 1})
+    )
+    present = "eval-logs/m/2026-08-20/tools/run.eval"
+    (tmp_path / present).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / present).write_text("x")
+    suites = {
+        "tools": {"log": present},
+        "code": {"log": "eval-logs/m/2026-08-20/code/gone.eval"},  # deleted transcript
+        "vision": {},  # no log recorded at all
+    }
+    usage, _ = evalrun._total_usage(suites, "m")
+    # Cost accounting is best-effort: a pruned transcript must not crash a run, but it must
+    # say so rather than silently under-reporting.
+    assert usage == {"input": 5}
+    assert "not counted" in capsys.readouterr().err

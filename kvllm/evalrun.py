@@ -213,16 +213,31 @@ def _resolve_model(provider: str) -> dict | None:
         return None
 
 
-def _total_usage(log_root: Path, model_str: str) -> tuple[dict, dict]:
-    """Sum (subject, judge) usage over the latest .eval log in every suite subdir under
-    log_root — the whole model/date, regardless of which suites this invocation executed."""
+def _total_usage(suites: dict, model_str: str) -> tuple[dict, dict]:
+    """Sum (subject, judge) usage over the log each suite ON THE CARD actually points at.
+
+    Follow the card's own `log` paths rather than globbing one date directory. The card is
+    assembled by merge_prior_suites, which carries suites forward from EARLIER dates — so a
+    date-dir glob silently omits every carried-forward suite and reports a partial-run cost
+    as if it were the full-suite cost. That is not hypothetical: on the 2026-07-04
+    claude-sonnet-5 card, agentic/code/tools all pointed at 2026-07-02 logs, their tokens
+    were never counted, and the board showed $0.06 for a run that actually costs ~$0.89.
+
+    Call this AFTER merge_prior_suites, so the total describes the card that gets written.
+    """
     usage: dict = {}
     judge_usage: dict = {}
-    for sdir in sorted(log_root.glob("*/")):
-        logs = sorted(sdir.glob("*.eval"))
-        if not logs:
+    for _cap, entry in sorted(suites.items()):
+        log = entry.get("log")
+        if not log:
             continue
-        subject, other = score.usage_from_log(logs[-1], model_str)
+        path = Path(log)
+        if not path.is_absolute():
+            path = REPO / path
+        if not path.is_file():
+            print(f"[usage] suite log missing, not counted: {log}", file=sys.stderr)
+            continue
+        subject, other = score.usage_from_log(path, model_str)
         score.add_usage(usage, subject)
         score.add_usage(judge_usage, other)
     return usage, judge_usage
@@ -296,9 +311,9 @@ def evaluate(
             entry["provider"], to_run, log_root, local=False
         )
         card["suites"] = score.merge_prior_suites(key, card["suites"])
-        # Usage/cost totals span ALL current suite logs for this model/date (a partial
-        # --suite rerun must not shrink the reported full-suite cost).
-        usage, judge_usage = _total_usage(log_root, entry["provider"])
+        # Totals are taken from the merged card's own suite logs, so a partial --suite rerun
+        # reports the full-suite cost rather than only what this invocation happened to run.
+        usage, judge_usage = _total_usage(card["suites"], entry["provider"])
         card["usage"], card["judge_usage"] = usage, judge_usage
         card["est_cost_usd"] = score.estimate_cost(usage, entry["provider"])
         card["judge_cost_usd"] = score.estimate_cost(

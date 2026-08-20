@@ -140,20 +140,42 @@ sends. I recommended skipping it; Ken ran it anyway. That was the right call.
 | code | 1.00 | 1.00 | 0 |
 | tools | 1.00 | 1.00 | 0 |
 
-**Every variable was held constant and the score still moved 0.14 on agentic.** The model
-was not republished, suite versions are unchanged, the judge is a pinned dated snapshot, and
-the vLLM bump is irrelevant to a hosted endpoint. There is nothing left for the delta to be
-except run-to-run variance.
+**Every variable *we control* was held constant, and the score still moved 0.14 on agentic.**
+Suite versions are unchanged, the judge is a pinned dated snapshot, and the vLLM bump cannot
+touch a hosted endpoint.
 
-That is the sprint's most important result, and it is bad news for the premise. The proposal
-opened with "a 0.01 gap cannot absorb two kinds of drift" — correct, but the drift that
-matters is not versions on either side, it is **suite noise**, and at ±0.14 on a
-25%-weighted suite (±0.035 on the composite from agentic alone) it dwarfs the gap by an
-order of magnitude. Re-baselining does not fix that; repeated runs and a variance estimate do.
+What that does **not** establish is that nothing changed. An unchanged `created_at` pins the
+**model artifact** — it says nothing about the environment Anthropic serves it in: the system
+prompt, sampling defaults, safety and classifier layers, tool-call formatting, anything that
+shapes the context the model actually receives. None of that is observable from outside, and
+none of it is versioned for us. (The first draft of this record claimed "every variable was
+held constant, so the delta can only be run-to-run variance." That was wrong — it inferred
+"nothing changed" from "nothing I can see changed," which is the prime rule's error pointed
+outward instead of inward. Ken caught it.)
+
+So the honest reading of +0.14 is that it is **unattributable from a single observation**. It
+could be harness noise, it could be provider-side environment change, and one re-run cannot
+separate them — which is precisely why the re-run was worth doing and why a noise floor is
+needed before any delta can be read.
+
+**The generalisable lesson, and the reason this sprint mattered more than its scope:** an eval
+never measures a model. It measures the model *plus its entire extended environment* — harness,
+instructions, tools, settings, sampling config, system prompt, the prompt itself. Everything
+that determines the context reaching the model is part of the measurement. For a local model we
+own that environment and can version it (which is what `vllm_version` now does). For a hosted
+model we own only our half, and the provider's half moves without notice and without a version
+number. A frontier baseline is therefore **structurally less reproducible than a local one**,
+and the board should not pretend otherwise.
+
+Either way the proposal's premise needs restating. It opened with "a 0.01 gap cannot absorb
+two kinds of drift" — right to worry, but the gap cannot absorb the **measurement uncertainty**
+either, and that is the larger term: ±0.14 on a 25%-weighted suite is ±0.035 on the composite
+from agentic alone. Re-baselining does not fix that. Repeated runs and a stated confidence
+band do.
 
 Consequence for the board as it stands: **claude-sonnet-5 retook #1 at 0.97, over gemma's
-0.95.** That ordering should not be read as meaningful — it is well inside the noise this
-same run measured.
+0.95.** That ordering should not be read as meaningful — the gap is far smaller than the
+single-run movement this very re-run exhibited.
 
 ### Bug found: `est $/run` has been undercounting
 
@@ -168,14 +190,33 @@ counted — only `judged` and `vision` were. Old usage was 7,649 in / 2,776 out,
 implausibly small for five suites; the full run is 31,381 in / 50,527 out / 322,568
 cache-read / 101,463 cache-write.
 
-The code comment states the opposite intent — "Usage/cost totals span ALL current suite logs
+The code comment stated the opposite intent — "Usage/cost totals span ALL current suite logs
 for this model/date (a partial --suite rerun must not shrink the reported full-suite cost)" —
-so this is a comment asserting a property the implementation does not deliver. The fix is to
-follow each suite's recorded `log` path from the card rather than globbing one date dir.
+a comment asserting a property the implementation did not deliver.
 
-This matters beyond tidiness: the cost column is what answers "is the local model good enough
-to stop paying for the frontier one", and it has been understating the frontier side for any
-model assembled across multiple dates.
+**Fixed:** `_total_usage` now follows each suite's recorded `log` path from the merged card
+instead of globbing one date directory, and is called after `merge_prior_suites` so the total
+describes the card that actually gets written. A missing transcript is skipped with a warning
+on stderr rather than silently under-reporting. Two regression tests cover the
+carried-forward-suite case and the pruned-log case.
+
+Recomputing the stored cards from their own logs — no re-runs, no spend — showed how far off
+the board was:
+
+| card | stored | recomputed | |
+|---|---|---|---|
+| claude-sonnet-5 2026-07-04 | $0.0578 | $0.8514 | 15× |
+| claude-haiku-4-5 2026-07-03 | $0.2327 | $0.9144 | 4× |
+| claude-haiku-4-5 2026-07-04 | $0.0212 | $0.9298 | **44×** |
+
+The sonnet recomputation ($0.85) lands next to today's independent full run ($0.89), which is
+the confirmation that the new number is the right one — the same workload costs about the same
+twice. Those three baseline cards were recosted in place and the board rebuilt.
+
+This matters well beyond tidiness. The cost column is what answers "is the local model good
+enough to stop paying for the frontier one", and it was understating the frontier side by up
+to 44×. A board that said haiku costs $0.02 per run was quietly making the frontier look
+nearly free in exactly the comparison meant to justify running local at all. It is $0.93.
 
 ## Tests / gate
 
@@ -190,4 +231,17 @@ again on 0.27.1.
 - `just loaded` calls bare `python`, which isn't on PATH in a non-login shell. Use `python3`
   or `uv run python`.
 - The other 15 local rows on the board remain unprovenanced (`—`) and were measured under
-  0.24.0. Whether they need re-running is the decision gated on gemma's result.
+  0.24.0. Per the gemma control they do **not** need re-running.
+- `eval-config.toml` references `uv run python -m kvllm.evalrun --rescore`, which does not
+  exist. The flag is `--rebuild-board`.
+- **korg #1499** — establish the suite's noise floor with N repeated runs, scoped to
+  contending models and the high-variance suites. Carries a required cost gate: ask Ken to
+  check his Anthropic balance before any API-model eval, since the true per-run cost is
+  ~$0.85–0.93.
+- **korg #1500** — eval monitor: a small view (likely in `kvllm.helper`) of which model is
+  being evaluated, how long it has run, and when it exits. Prompted by an agent misreporting
+  a finished run as "still running" for ~36 minutes: the watcher used
+  `pgrep -f "kvllm.evalrun <model>"` from a shell whose own command line contained that
+  string, so it matched itself and never exited. Ken caught it from the idle GPU on the
+  dashboard. The lesson to encode: have `evalrun` **write** run state rather than have a
+  monitor infer it from the outside, and never key liveness on a command-line pattern.
