@@ -183,3 +183,62 @@ def test_write_is_atomic_leaving_no_partial_file(tmp_path):
     assert (
         json.loads((tmp_path / "run.json").read_text())["current"]["suite"] == "agentic"
     )
+
+
+# --- a finished run must stop ageing -------------------------------------------------
+
+
+def _finished_state(**over) -> dict:
+    """The real shape observed on 2026-08-20: an 8m36s run whose `current` still named the
+    suite it exited during."""
+    st = {
+        "pid": _dead_pid(),
+        "status": "done",
+        "started": "2026-08-21T00:40:07Z",
+        "finished": "2026-08-21T00:48:43Z",
+        "heartbeat": "2026-08-21T00:48:43Z",
+        "exit_code": 0,
+        "completed": [],
+        "current": {
+            "model": "gemma-4-31b-it-awq",
+            "index": 3,
+            "total": 3,
+            "started": "2026-08-21T00:45:21Z",
+            "suite": "judged",
+            "suite_started": "2026-08-21T00:47:00Z",
+        },
+    }
+    return {**st, **over}
+
+
+def test_describe_freezes_current_elapsed_at_the_finish():
+    """The bug: only the top-level elapsed stopped at `finished`, so `current` kept counting
+    wall-clock forever and reported 95 minutes for an 8m36s run."""
+    d = runstate.describe(_finished_state())
+    assert d["elapsed_s"] == 516.0  # 00:40:07 -> 00:48:43
+    assert d["current"]["elapsed_s"] == 202.0  # 00:45:21 -> 00:48:43
+    assert d["current"]["suite_elapsed_s"] == 103.0  # 00:47:00 -> 00:48:43
+
+
+def test_describe_freezes_a_killed_run_at_its_last_heartbeat():
+    """A SIGKILLed runner never wrote `finished`, so the last moment it was known alive is
+    the honest stopping point — otherwise its elapsed grows forever too."""
+    d = runstate.describe(
+        _finished_state(
+            status="running",  # nothing got to write a terminal status
+            finished=None,
+            exit_code=None,
+            heartbeat="2026-08-21T00:47:00Z",
+        )
+    )
+    assert d["alive"] is False
+    assert d["elapsed_s"] == 413.0  # 00:40:07 -> 00:47:00, not to now
+    assert d["current"]["suite_elapsed_s"] == 0.0
+
+
+def test_describe_still_ages_a_live_run():
+    runstate.begin(models=["a"], argv=[])
+    runstate.set_model("a", 1, 1)
+    d = runstate.describe(runstate.read())
+    assert d["alive"] is True
+    assert d["elapsed_s"] is not None and d["current"]["elapsed_s"] is not None

@@ -217,11 +217,17 @@ def describe(state: dict | None) -> dict | None:
     if not state:
         return None
     out = dict(state)
-    out["alive"] = is_alive(state)
-    out["elapsed_s"] = _elapsed_s(state.get("started"), state.get("finished"))
+    alive = is_alive(state)
+    out["alive"] = alive
+    # A run that is over must stop ageing, and that applies to `current` too — it names the
+    # model and suite the runner exited during, so measuring it against wall-clock reports
+    # 95 minutes for an 8m36s run. `finished` is the exit moment; a runner that was killed
+    # never wrote one, so its last heartbeat is the last instant it was known to be alive.
+    stop = None if alive else (state.get("finished") or state.get("heartbeat"))
+    out["elapsed_s"] = _elapsed_s(state.get("started"), stop)
     if out.get("current"):
         cur = dict(out["current"])
-        cur["elapsed_s"] = _elapsed_s(cur.get("started"))
-        cur["suite_elapsed_s"] = _elapsed_s(cur.get("suite_started"))
+        cur["elapsed_s"] = _elapsed_s(cur.get("started"), stop)
+        cur["suite_elapsed_s"] = _elapsed_s(cur.get("suite_started"), stop)
         out["current"] = cur
     return out
