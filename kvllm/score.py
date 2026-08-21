@@ -454,10 +454,62 @@ def _ranked(rows: list[dict]) -> list[dict]:
     return ranked
 
 
+def _noise_band(cfg: dict) -> float | None:
+    """The measured run-to-run band on the composite, or None until one exists."""
+    band = (cfg.get("noise") or {}).get("composite_band")
+    return float(band) if band else None
+
+
+def mark_tied(rows: list[dict], cfg: dict) -> list[dict]:
+    """Flag each row whose composite is within the measured noise band of the row above it.
+
+    Sprint 15 left the board reporting `claude-sonnet-5` 0.97 over `gemma-4-31b-it-awq` 0.95
+    — a 0.02 gap adjudicated by a suite that moved 0.14 between two runs of the SAME model.
+    A rank number renders that as a result. This marks it as what it is: two models the
+    harness cannot tell apart.
+
+    Ties chain: three rows each within a band of their predecessor are one cluster, even
+    though the first and last differ by more than the band. Inert with no `[noise]` config,
+    so the board is unchanged until the band has actually been measured (korg:1499).
+    """
+    band = _noise_band(cfg)
+    prev = None
+    for r in rows:
+        comp = r.get("composite")
+        r["tied_with_prev"] = bool(
+            band is not None
+            and comp is not None
+            and prev is not None
+            and prev - comp <= band
+        )
+        if comp is not None:
+            prev = comp
+    return rows
+
+
+def _noise_note(cfg: dict) -> str:
+    """The sentence that stops a 0.02 gap being read as a ranking. Empty until measured."""
+    noise = cfg.get("noise") or {}
+    band = _noise_band(cfg)
+    if not band:
+        return ""
+    n = noise.get("n")
+    measured = noise.get("measured")
+    when = f", {measured}" if measured else ""
+    who = f"N={n}{when}" if n else measured or ""
+    return (
+        f"≈ marks a model within **{band:.3f}** composite of the one above — the measured "
+        f"run-to-run band ({who}). Differences that small are **not meaningful** and are "
+        "not a ranking. The band is a within-night figure, so treat it as a **lower bound** "
+        "on real variance across days, not the total uncertainty."
+    )
+
+
 def _comp_cell(r: dict) -> str:
     if r["composite"] is None:
         return "—"
-    return f"{r['medal']} {r['composite']:.2f}".strip()
+    tie = "≈ " if r.get("tied_with_prev") else ""
+    return f"{r['medal']} {tie}{r['composite']:.2f}".strip()
 
 
 def _cell(row: dict, cap: str) -> str:
@@ -497,7 +549,7 @@ def _prov_cell(r: dict) -> str:
 def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Path]:
     cfg = load_config()
     cards = _latest_scorecards()
-    rows = _ranked([_row(c, current_versions, cfg) for c in cards])
+    rows = mark_tied(_ranked([_row(c, current_versions, cfg) for c in cards]), cfg)
     suite_keys = sorted({k for r in rows for k in r["suites"]})
     any_stale = any(s["stale"] for r in rows for s in r["suites"].values())
 
@@ -557,6 +609,8 @@ def write_leaderboard(current_versions: dict[str, int] | None = None) -> list[Pa
         ]
         md.append("| " + " | ".join(cells) + " |")
     md += ["", f"_{_weights_note(cfg)}_"]
+    if note := _noise_note(cfg):
+        md += ["", note]
     if any_stale:
         md += ["", "† scored on an older suite version — re-run `just eval <key>`."]
     mpath = EVALS / "leaderboard.md"
@@ -870,6 +924,9 @@ def _html(
         panel = _detail_panel(card, r, cfg, reg) if card else ""
         trs.append(f'<tr class="detail"><td colspan="{ncols}">{panel}</td></tr>')
     notes = f'<div class="sub">{html.escape(_weights_note(cfg))}</div>'
+    if note := _noise_note(cfg):
+        # Strip the markdown emphasis the .md version carries; the HTML has its own styling.
+        notes += f'<div class="sub">{html.escape(note.replace("**", ""))}</div>'
     if any_stale:
         notes += (
             '<div class="sub">† scored on an older suite version — '

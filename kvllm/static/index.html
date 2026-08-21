@@ -27,6 +27,11 @@
   .controls { margin-top: 18px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   input { font: inherit; background: #0f1115; color: #e6e6e6; border: 1px solid #3a4255; border-radius: 6px; padding: 5px 10px; }
   .muted { color: #7b8494; font-size: 13px; }
+  .panel { border: 1px solid #232733; border-radius: 8px; padding: 10px 14px 14px; margin-top: 18px; background: #131722; }
+  .phead { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .panel .status { margin-bottom: 0; }
+  ol.done { margin: 8px 0 0; padding-left: 20px; font-size: 13px; color: #9aa4b2; }
+  ol.done .bad { color: #d97477; }
   #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #2a3142; border: 1px solid #3a4255; padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; }
   #toast.show { opacity: 1; }
 </style>
@@ -38,6 +43,15 @@
     <b>serving</b><span id="served">…</span>
     <b>service</b><span id="svc">…</span>
     <b>GPU</b><span id="gpu">…<div class="bar"><i id="gpubar" style="width:0"></i></div></span>
+  </div>
+
+  <div class="panel" id="evalpanel" hidden>
+    <div class="phead"><span id="edot" class="dot"></span> <b>eval</b> <span class="tag" id="elabel"></span></div>
+    <div class="status">
+      <b>running</b><span id="ewhat">…</span>
+      <b>elapsed</b><span id="eelapsed">…</span>
+    </div>
+    <ol class="done" id="edone"></ol>
   </div>
 
   <table>
@@ -139,8 +153,59 @@ async function refresh() {
   $("host").textContent = location.host;
 }
 
+// --- eval monitor ---------------------------------------------------------------
+// Everything below renders what kvllm.evalrun wrote about itself. It infers nothing:
+// a run reads as finished because the runner said so (or because its PID is gone),
+// never because a process listing looked a certain way. See korg:1500.
+
+function dur(s) {
+  if (s == null) return "—";
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
+}
+
+function when(iso) { return iso ? new Date(iso).toLocaleTimeString() : ""; }
+
+async function refreshEval() {
+  let r;
+  try { r = (await (await fetch("/api/eval")).json()).run; } catch { return; }
+  $("evalpanel").hidden = !r;
+  if (!r) return;
+
+  const cur = r.current;
+  $("edot").className = "dot " + (r.alive ? "busy" : r.status === "done" ? "ok" : "off");
+  $("elabel").textContent = r.label || "";
+
+  if (r.alive && cur) {
+    $("ewhat").textContent =
+      `${cur.model} (${cur.index}/${cur.total})` +
+      (cur.suite ? ` · ${cur.suite} for ${dur(cur.suite_elapsed_s)}` : " · starting up");
+  } else if (r.alive) {
+    $("ewhat").textContent = `${r.models.join(", ")} · starting up`;
+  } else {
+    // Terminal. `interrupted` is the atexit backstop: the process left without saying
+    // how it went — which is worth showing plainly rather than rounding to "done".
+    const code = r.exit_code == null ? "" : ` (exit ${r.exit_code})`;
+    $("ewhat").textContent = `${r.status}${code} at ${when(r.finished)}`;
+  }
+
+  $("eelapsed").textContent =
+    dur(r.elapsed_s) + (r.alive ? "" : ` · started ${when(r.started)}`);
+
+  $("edone").innerHTML = (r.completed || [])
+    .map((c) => {
+      const bad = c.error ? ' class="bad"' : "";
+      const what = c.error ? `error: ${c.error}` : c.verdict;
+      return `<li${bad}>${c.model} — ${what} <span class="tag">${when(c.finished)}</span></li>`;
+    })
+    .join("");
+}
+
 loadModels().then(refresh);
 setInterval(refresh, 2000);
+refreshEval();
+setInterval(refreshEval, 2000);
 </script>
 </body>
 </html>

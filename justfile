@@ -132,6 +132,12 @@ eval key *flags:
 eval-all *flags:
     uv run --group eval python -m kvllm.evalrun --all {{flags}}
 
+# (NOT a `for i in 1 2 3` loop over `just eval` — that resumes and reports a spread of
+#  0.00. Each run gets its own log dir; --publish decides which run the board shows.)
+# Repeat one model N times to measure the noise floor under its score
+eval-repeat key *flags:
+    uv run --group eval python -m kvllm.repeat {{key}} {{flags}}
+
 # Prove the Docker sandbox path works (mock model, no GPU). Set DOCKER_HOST to test remote.
 eval-sandbox-smoke:
     uv run --group eval python suites/sandbox_smoke.py
@@ -157,8 +163,9 @@ lint:
     uv run --group dev ruff format --check .
 
 # Run the unit test suite (pure functions only — no network / no vLLM)
+# --group helper is here so the helper's routes are covered too (fastapi import).
 test:
-    uv run --group dev --group eval --group test pytest tests/ -q
+    uv run --group dev --group eval --group test --group helper pytest tests/ -q
 
 # Lint + unit tests (fast — no live model needed)
 check: lint test client-test

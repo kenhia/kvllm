@@ -68,15 +68,45 @@ instead of inward.
 
 ### Corollary: know the noise floor before reading any gap
 
-Re-running `claude-sonnet-5` with every variable *we control* held constant — same suite
-versions, judge pinned to a dated snapshot, model not republished — still moved `agentic`
-**+0.14** (judged +0.07, vision +0.04). A single re-run cannot separate harness noise from
-provider-side environment change, but either way the movement is real and large.
+**Measured, 2026-08-20 (sprint 16, N=3 repeats of the same model on the same night):**
 
-At 25% weight, ±0.14 on one suite is ±0.035 on the composite. The #1/#2 gap it was being
-used to adjudicate was **0.01**. Point estimates on a 9-episode partial-credit judged suite
-cannot support that comparison, and no amount of re-baselining fixes it — only repeated runs
-and a stated confidence band do. **Rank ordering inside the noise floor is not a result.**
+| suite | `claude-sonnet-5` | `gemma-4-31b-it-awq` |
+| --- | --- | --- |
+| `agentic` | 0.73 – 0.88 (**0.150**) | 0.74 – 0.77 (**0.030**) |
+| `judged` | 0.88 – 0.92 (**0.040**) | 0.77 – 0.77 (**0.000**) |
+| composite | 0.927 – 0.963 (**0.036**) | 0.923 – 0.930 (**0.007**) |
+
+**The two composite ranges overlap.** The board's #1/#2 ordering is not a result; it is a
+coin landing. `eval-config.toml`'s `[noise]` section now carries the band, and the board
+marks any model within it of the one above with `≈`.
+
+Three things this measurement says that a single re-run could not:
+
+1. **A hosted baseline is an order of magnitude noisier than a local model** — 0.150 vs
+   0.030 on `agentic`, 0.036 vs 0.007 on the composite. This is the structural asymmetry
+   above, now with numbers: we hold a local model at `temperature=0.0` and it is nearly
+   deterministic; we control no equivalent knob on the provider's side.
+2. **A 0.000 spread can be real** — but audit it before believing it, because it is also
+   exactly what a resuming harness produces. gemma's `judged` scored 0.77 three times; the
+   three `.eval` files have distinct ids and *differently worded* judge rationales, so the
+   judge genuinely ran three times and simply agreed with itself.
+3. **A single run reports a draw, not a score.** Every repeated number came in *below* the
+   single-draw value the board carried from the day before (sonnet `agentic` 0.91 → median
+   0.86; gemma 0.88 → 0.76). Publish a chosen run — the median — not whichever finished last.
+
+The band is a **lower bound**, twice over: all repeats ran in one night, which holds
+provider-side drift roughly constant, and only `agentic` and `judged` were repeated
+(`tools`/`code` were bit-identical across two runs; `vision` has never been repeated). So
+the honest board language is "differences below X are definitely not meaningful," never "X
+is the total uncertainty."
+
+**Rank ordering inside the noise floor is not a result.**
+
+The harness that produces this is `kvllm.repeat` (`just eval-repeat`), and it is a separate
+entry point for a reason: `inspect_ai.eval_set` **resumes from completed logs**, so a plain
+`for i in 1 2 3; do just eval ...; done` re-reports run 1 and yields a spread of exactly
+0.00. That is not an error — it is the number a hopeful reader wants, and it would invalidate
+the whole exercise while appearing to satisfy it. See the prime lesson.
 
 ## Design rules that earned their keep
 

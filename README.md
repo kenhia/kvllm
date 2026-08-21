@@ -23,6 +23,12 @@ and per-case judge rationales).
 > encode that intent, so treat rankings as an answer to "which model should *I* run?",
 > not as a public benchmark. The [methodology](docs/findings/methodology-2026-07.html) is
 > the transferable part; fork it and point it at *your* use case.
+>
+> **And rows marked `≈` are tied, not ranked.** The suites have a measured run-to-run
+> band — repeat the *same* model and the composite moves — so a gap smaller than that band
+> is a coin landing, not a result. The board states the band under the table; the numbers
+> behind it are in
+> [evaluating-local-models.md](docs/findings/evaluating-local-models.md#corollary-know-the-noise-floor-before-reading-any-gap).
 
 ## Quick start — serving
 
@@ -45,6 +51,7 @@ just eval <key>                     # serve → gate → suites → scorecard + 
 just eval-all                       # sweep the registry (resumable; skips current scores)
 just eval <key> --suite assisted    # the unranked controller-scaffolding condition
 just eval claude-haiku-4-5          # frontier baseline through the same suites ($)
+just eval-repeat <key> --suite agentic --n 3   # N runs of ONE model → the noise floor
 just test-coding-suite              # suite self-tests (Docker only, no GPU)
 just test-agentic-suite
 ```

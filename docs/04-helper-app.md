@@ -15,6 +15,7 @@ kvllm`. vLLM holds one model per process, so this is the single-GPU switch story
 | `GET /` | — | dashboard (single static HTML page) |
 | `GET /api/models` | — | the registry (`models.toml`) |
 | `GET /api/status` | — | service state + live `/v1` model + GPU memory |
+| `GET /api/eval` | — | what `kvllm.evalrun` is doing (run-state the runner wrote) |
 | `POST /api/switch` `{key}` | token | rewrite env + restart onto `<key>` |
 | `POST /api/service/{start,stop,restart}` | token | control the model service |
 | `GET /api/docs` | — | FastAPI's interactive docs |
@@ -59,6 +60,30 @@ on a model to switch (it restarts the server and shows "loading…" until `/v1` 
 | `just helper-enable` / `helper-disable` | start+enable / stop+disable the service |
 | `just helper-restart` | restart the panel |
 | `just helper-status` / `helper-logs` | systemd status / follow journald |
+
+## Eval monitor
+
+The panel also shows **what the eval runner is doing** — which model, which suite, how long, and how
+it exited. Evals run for tens of minutes to hours, so this is the difference between an unattended
+overnight run and a black box until morning.
+
+Everything it renders is **written by the runner** ([`kvllm/runstate.py`](../kvllm/runstate.py)),
+never inferred here. That is a correction, not a preference: sprint 15's watcher ran
+`pgrep -f "kvllm.evalrun <model>"` from a shell whose own command line contained that string,
+matched itself, and reported a finished eval as running for ~36 minutes.
+
+Two rules follow, and both are tested:
+
+- **Liveness keys on the recorded PID** (`os.kill(pid, 0)`), never a command-line match. A record can
+  say `running` and still be dead — the SIGKILL case — and the panel shows that correctly.
+- **A finished run stops ageing.** Elapsed is measured to the exit moment, or for a killed run to its
+  last heartbeat.
+
+The state file lives at `eval-logs/.run-state.json` (override with `KVLLM_RUN_STATE`). It is written
+atomically, so polling never catches a half-written document. `GET /api/eval` returns `{"run": null}`
+until an eval has run at least once, and the panel stays hidden.
+
+No GPU metrics here — those are on the main dashboard already.
 
 ## Notes
 
