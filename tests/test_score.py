@@ -654,7 +654,12 @@ def test_leaderboard_renders_the_noise_band_and_marks_tied_rows(tmp_path, monkey
 
 
 def test_leaderboard_without_a_measured_band_has_no_tie_markers(tmp_path, monkeypatch):
+    """Pins its own config: the real eval-config.toml now HAS a [noise] section, and this
+    test is about what the board looks like before one is measured."""
     monkeypatch.setattr(score, "EVALS", tmp_path)
+    cfg = tomllib.loads((score.REPO / "eval-config.toml").read_text())
+    cfg.pop("noise", None)
+    monkeypatch.setattr(score, "load_config", lambda: cfg)
     hi = _card(model="leader", date="2026-08-20")
     lo = _card(model="runner-up", date="2026-08-20")
     lo["suites"]["tools"]["pass_rate"] = 0.90

@@ -108,8 +108,83 @@ Sonnet's true per-run cost is $0.89 (sprint 15's measurement, after the cost-acc
 
 ## Results
 
-_(pending — the run has not happened yet)_
+N=3, both models, `agentic` then `judged`, all on the night of 2026-08-20. Raw per-run cards
+in `model-research/evals/noise-floor/`.
+
+| suite | `claude-sonnet-5` | `gemma-4-31b-it-awq` |
+| --- | --- | --- |
+| `agentic` | 0.73, 0.88, 0.86 → band **0.150** | 0.74, 0.77, 0.76 → band **0.030** |
+| `judged` | 0.90, 0.92, 0.88 → band **0.040** | 0.77, 0.77, 0.77 → band **0.000** |
+| composite | 0.927 – 0.963 → **0.036** | 0.923 – 0.930 → **0.007** |
+
+**The two composite ranges overlap.** The board's #1/#2 ordering was never a result. That is
+the sprint's answer to the question it was created to ask.
+
+### Three things worth keeping
+
+**A hosted baseline is an order of magnitude noisier than a local one.** 0.150 vs 0.030 on
+`agentic`; 0.036 vs 0.007 on the composite. The findings doc already argued frontier
+baselines are *structurally* less reproducible because we own only half the environment —
+this is that claim with numbers attached. A local model pinned at `temperature=0.0` is very
+nearly deterministic.
+
+**gemma's `judged` spread of 0.000 is real, and was audited before being believed.** A 0.000
+is precisely what a resuming harness fabricates, so it got the prime rule applied to it: the
+three `.eval` files have distinct ids, distinct byte sizes (42288/42104/42215) and timestamps
+~156s apart, and the judge's *rationales* differ between runs while the *scores* do not. The
+judge genuinely ran three times and agreed with itself. `spread()` labels it `identical`
+rather than dropping it — a real 0.00 is a result, it just must never be read without the
+label.
+
+**A single run reports a draw, not a score.** Every repeated number landed *below* the
+single-draw value the board carried from sprint 15 the day before — sonnet `agentic`
+0.91 → median 0.86, gemma 0.88 → 0.76. Nothing was wrong with those runs; they were draws
+from a wide distribution, reported as points.
+
+### What the board says now
+
+`eval-config.toml` gained a `[noise]` section, and `≈` marks any model within the band of the
+one above. The top three are now one cluster:
+
+```
+1  claude-sonnet-5      ① 0.96
+2  gemma-4-31b-it-awq   ② ≈ 0.93
+3  claude-haiku-4-5     ③ ≈ 0.91
+```
+
+`composite_band = 0.036` is the *larger* of the two measured composite ranges: a comparison
+involves both models, so the noisier one governs. It is driven by the frontier baseline —
+local-vs-local is roughly 0.007, and the config comment says so, because applying sonnet's
+band to two local models would call distinguishable models tied.
+
+The published scorecard for each model is the **median** run of its three, chosen by value.
+Worth noting the mechanism actually bites: `judged` published run 1 for sonnet and run 2 for
+gemma, so this is not the naive last-run behaviour wearing a different name.
+
+### The monitor, in production
+
+It reported the live run correctly throughout — `claude-sonnet-5 (1/3) · agentic for 2m 14s`,
+and `suite: null` during gemma's serve/gate phase, because `set_model` clears the previous
+suite rather than carrying a stale one for tens of minutes.
+
+It also earned its keep immediately in an unplanned way: python's stdout is **block-buffered
+when redirected to a file**, so the run log lagged minutes behind reality and showed nothing
+for run 1 while run 2 was already underway. The run-state file was correct the whole time.
+That is the same class of error as sprint 15's `pgrep` watcher — trusting a derived signal
+over the one the runner writes. (`PYTHONUNBUFFERED=1` fixes the log; the state file never
+needed it.)
 
 ## Follow-ups
 
-_(pending)_
+- **Repeat `vision`.** It moved +0.04 for sonnet in sprint 15 and has never been repeated, so
+  the composite band is a lower bound on that axis too. It carries 15% weight.
+- **Re-measure across days, not one night.** Tonight's figure holds provider drift roughly
+  constant by construction. A cross-day repeat on sonnet would say how much of the 0.150 is
+  harness noise and how much is the provider moving under us.
+- **Slice 3 (korg:1478/1479) can now read its own numbers.** The floor also answers the
+  question that motivated running it first: a single run of a candidate is *not* sufficient
+  for a local model at this margin — gemma's 0.030 `agentic` band is small but the candidate
+  will be compared against models inside a 0.036 composite band, so N>1 is required for any
+  claim about ordering.
+- **`--publish median` should probably become the default path for baselines generally**, not
+  just repeat runs. Any single `just eval` still writes a draw to the board as *the* number.
