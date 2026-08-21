@@ -10,6 +10,7 @@ Endpoints:
     GET  /                      dashboard (static HTML)
     GET  /api/models            the registry (models.toml)
     GET  /api/status            service + /v1 + GPU status
+    GET  /api/eval              what kvllm.evalrun is doing (run-state it wrote itself)
     POST /api/switch            {key}  — rewrite env + restart onto a model   (token)
     POST /api/service/{action}  start | stop | restart                         (token)
 
@@ -32,6 +33,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from kvllm import runstate
 from kvllm.registry import load_registry
 
 REPO = Path(__file__).resolve().parent.parent
@@ -132,6 +134,18 @@ def api_status() -> dict:
         "control_enabled": bool(os.environ.get("KVLLM_HELPER_TOKEN")),
         "gpu": _gpu_memory(),
     }
+
+
+@app.get("/api/eval")
+def api_eval() -> dict:
+    """What the eval runner is doing — as the runner itself reported it.
+
+    Deliberately a thin reader over `kvllm.runstate`: every field here was written by
+    `kvllm.evalrun`, none of it inferred. Sprint 15's monitor inferred, matched its own
+    command line with `pgrep -f`, and reported a finished eval as running for ~36 minutes
+    (korg:1500). `run` is null when no eval has ever run on this box.
+    """
+    return {"run": runstate.describe(runstate.read())}
 
 
 @app.post("/api/switch", dependencies=[Depends(require_token)])

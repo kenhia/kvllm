@@ -26,7 +26,7 @@ import urllib.request
 from datetime import date
 from pathlib import Path
 
-from kvllm import evalctl, score
+from kvllm import evalctl, runstate, score
 from kvllm.registry import load_registry
 
 REPO = Path(__file__).resolve().parent.parent
@@ -105,6 +105,7 @@ def _run_suites(
     judge_usage: dict = {}
     for cap, (factory, version) in to_run.items():
         sdir = log_root / cap
+        runstate.set_suite(cap)
         print(f"[suite] {cap} via inspect eval_set → {sdir}")
         kwargs = {"temperature": 0.0} if local else {}
         if local and cap in ("agentic", "assisted"):
@@ -268,7 +269,18 @@ def evaluate(
     endpoint: str | None,
     model_name: str | None,
     force: bool = False,
+    run_tag: str | None = None,
 ) -> dict:
+    """Evaluate one model and return its scorecard. Writes nothing — the caller decides.
+
+    `run_tag` gives this run its own log directory (`<date>-<tag>` instead of `<date>`),
+    which is what makes N repeated runs of the same model on the same night possible.
+    Without it every repeat shares one directory, where two things bite together: eval_set
+    RESUMES from completed logs (so repeats re-report run 1 — a spread of exactly 0.00),
+    and the --force that does re-execute rmtree's the previous run's transcripts. A tagged
+    directory is fresh, so nothing resumes and nothing is destroyed. `card["date"]` is
+    unaffected: the tag is a log-path detail, not a claim about when the run happened.
+    """
     suites = _suites()
     to_run = _suites_for(entry, only_suite, suites)
     if not force and not only_suite:
@@ -278,7 +290,9 @@ def evaluate(
         # card. --force and an explicit --suite bypass the filter.
         to_run = _stale_suites(to_run, score.latest_scorecard(key))
     served_name = model_name or key
-    log_root = LOG_ROOT / key.replace("/", "_") / today
+    log_root = (
+        LOG_ROOT / key.replace("/", "_") / (f"{today}-{run_tag}" if run_tag else today)
+    )
     if force:
         # eval_set resumes from completed logs — a --force rerun must re-execute. Only clear
         # the suites we're about to run, so `--force --suite code` keeps the tools transcript.
@@ -458,6 +472,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--force", action="store_true", help="rerun even if already current")
     p.add_argument(
+        "--label",
+        default=None,
+        help="free-text label for this run, shown by the eval monitor "
+        "(e.g. 'noise-floor r2/3')",
+    )
+    p.add_argument(
         "--retry-skips", action="store_true", help="retest models the gate skipped"
     )
     p.add_argument(
@@ -504,10 +524,18 @@ def main(argv: list[str] | None = None) -> int:
     if manage_service:
         evalctl.stop_service()
 
+    # Say what this process is doing, so nothing has to guess from the outside (korg:1500).
+    runstate.begin(
+        models=selected,
+        argv=list(argv) if argv is not None else sys.argv[1:],
+        label=args.label,
+    )
+
     failures = 0
     try:
         for i, key in enumerate(selected, 1):
             print(f"\n=== [{i}/{len(selected)}] {key} ===")
+            runstate.set_model(key, i, len(selected))
             try:
                 card = evaluate(
                     key,
@@ -523,12 +551,14 @@ def main(argv: list[str] | None = None) -> int:
                 raise
             except Exception as e:  # one broken model must not kill an overnight sweep
                 print(f"[error] {key}: {e}")
+                runstate.finish_model(key, None, error=str(e))
                 failures += 1
                 continue
             print(f"=== {key}: {card['verdict'].upper()} ===")
             if not args.no_write:
                 paths = score.write_all(card, current_versions)
                 print("wrote:", ", ".join(str(p) for p in paths))
+            runstate.finish_model(key, card["verdict"])
     finally:
         if manage_service:
             evalctl.start_service()
@@ -540,6 +570,9 @@ def main(argv: list[str] | None = None) -> int:
                     f"check `journalctl --user -u kvllm` and nvidia-smi (port {args.port})"
                 )
                 failures += 1
+    # Reached only on a clean exit; a KeyboardInterrupt propagates past this and the
+    # atexit backstop records it as `interrupted` — which is the honest label for it.
+    runstate.end("failed" if failures else "done", 1 if failures else 0)
     return 1 if failures else 0
 
 
