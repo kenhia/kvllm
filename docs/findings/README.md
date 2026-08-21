@@ -10,6 +10,12 @@ or planning local-agent projects, and for sharing.
 - [`local-model-guidance-2026-07.md`](local-model-guidance-2026-07.md) — which local model
   for which role, hybrid local+frontier architecture readout, serving configs, cost anchors.
   **Dated — decays with the model landscape**; regenerate via `just eval-all`.
+- [`controller-vs-model-2026-08-21.md`](controller-vs-model-2026-08-21.md) — **the
+  scaffolding is worth more than the model.** Same model, same tasks, same judge: changing
+  only the harness's budget shape moved one model +86 points, against a frontier-vs-local
+  capability gap of 20–30. Includes why the gains are uneven (delivery-limited vs
+  capability-limited models), and the `claude-sonnet-5` "+0.14 improvement" that turned out
+  to sit inside a 0.150 noise band. Self-contained; safe to share.
 - [`kai-5090-gpc9-fault-2026-08-21.md`](kai-5090-gpc9-fault-2026-08-21.md) — **hardware
   incident, and the rung below the prime rule.** kai's RTX 5090 faults on basic CUDA work
   ~50% of the time, always on the same SM (GPC 9 / TPC 4 / SM 1), surviving a power cycle.
