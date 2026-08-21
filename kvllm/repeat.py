@@ -301,7 +301,10 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(f"error: {args.key} has no suites matching --suite {args.suite}")
     print(f"[repeat] {args.key} ×{args.n} · suites: {', '.join(fresh)}")
 
-    out_dir = RESULTS / f"{score._slug(args.key)}-{args.date}"
+    # Keyed by suite as well as model: `--suite agentic` and `--suite judged` are separate
+    # invocations of the same model on the same night, and sharing a directory would let
+    # the second silently overwrite the first's per-run cards and summary.
+    out_dir = RESULTS / f"{score._slug(args.key)}-{args.suite or 'all'}-{args.date}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     local = not entry.get("provider")

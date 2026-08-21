@@ -262,3 +262,16 @@ def test_main_keeps_completed_runs_when_a_later_one_dies(tmp_path, monkeypatch):
         )
     out = next((tmp_path / "noise-floor").iterdir())
     assert {p.name for p in out.iterdir()} == {"run-1.json", "run-2.json"}
+
+
+def test_main_keys_the_output_directory_by_suite(tmp_path, monkeypatch):
+    """agentic and judged are separate invocations of the same model on the same night;
+    a shared directory would let the second overwrite the first's per-run cards."""
+    for suite in ("agentic", "tools"):
+        _stub_run(monkeypatch, tmp_path, [0.90, 0.95, 0.92])
+        repeat.main(
+            ["gemma-4-31b-it-awq", "--suite", suite, "--n", "3", "--settle", "0"]
+        )
+    dirs = sorted(p.name for p in (tmp_path / "noise-floor").iterdir())
+    assert len(dirs) == 2
+    assert any("agentic" in d for d in dirs) and any("tools" in d for d in dirs)

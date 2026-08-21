@@ -550,3 +550,77 @@ def test_leaderboard_has_provenance_column(tmp_path, monkeypatch):
     assert rows["api-m"]["model_created_at"] == "2026-06-29"
 
     assert "provenance" in (tmp_path / "leaderboard.html").read_text()
+
+
+# --- noise band on the board (sprint 16 / korg:1499) ---------------------------------
+
+
+def _rows(*composites):
+    return [
+        {"model": f"m{i}", "composite": c, "medal": "", "rank": i + 1}
+        for i, c in enumerate(composites)
+    ]
+
+
+def test_no_noise_config_leaves_the_board_exactly_as_it_was():
+    """The band is inert until it has been measured — no note, no markers."""
+    rows = _rows(0.97, 0.95, 0.60)
+    score.mark_tied(rows, {})
+    assert all(r["tied_with_prev"] is False for r in rows)
+    assert score._noise_note({}) == ""
+
+
+def test_rows_inside_the_band_are_marked_tied():
+    """0.97 vs 0.95 is a 0.02 gap against a 0.035 band — exactly the comparison sprint 15
+    left the board making, and the one that must stop reading as a ranking."""
+    rows = _rows(0.97, 0.95, 0.60)
+    cfg = {"noise": {"composite_band": 0.035, "n": 3, "measured": "2026-08-20"}}
+    score.mark_tied(rows, cfg)
+    assert [r["tied_with_prev"] for r in rows] == [False, True, False]
+
+
+def test_a_gap_wider_than_the_band_is_a_real_ordering():
+    rows = _rows(0.97, 0.90)
+    score.mark_tied(rows, {"noise": {"composite_band": 0.035}})
+    assert [r["tied_with_prev"] for r in rows] == [False, False]
+
+
+def test_a_gap_exactly_at_the_band_is_tied_not_ranked():
+    rows = _rows(0.97, 0.935)
+    score.mark_tied(rows, {"noise": {"composite_band": 0.035}})
+    assert rows[1]["tied_with_prev"] is True
+
+
+def test_ties_chain_from_each_row_to_the_one_above_it():
+    """Three rows each within the band of their predecessor are all one cluster, even
+    though the first and last differ by more than the band."""
+    rows = _rows(0.97, 0.94, 0.91)
+    score.mark_tied(rows, {"noise": {"composite_band": 0.035}})
+    assert [r["tied_with_prev"] for r in rows] == [False, True, True]
+
+
+def test_unranked_rows_are_never_marked():
+    rows = _rows(0.97, None)
+    score.mark_tied(rows, {"noise": {"composite_band": 0.035}})
+    assert rows[1]["tied_with_prev"] is False
+
+
+def test_noise_note_states_the_band_and_that_it_is_a_lower_bound():
+    note = score._noise_note(
+        {"noise": {"composite_band": 0.035, "n": 3, "measured": "2026-08-20"}}
+    )
+    assert "0.035" in note
+    assert "N=3" in note
+    assert "2026-08-20" in note
+    assert "not meaningful" in note
+    assert "lower bound" in note
+
+
+def test_comp_cell_marks_a_tied_row():
+    r = {"composite": 0.95, "medal": "②", "tied_with_prev": True}
+    assert "≈" in score._comp_cell(r)
+    assert "0.95" in score._comp_cell(r)
+
+
+def test_comp_cell_of_an_untied_row_is_unchanged():
+    assert score._comp_cell({"composite": 0.97, "medal": "①"}) == "① 0.97"
