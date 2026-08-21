@@ -10,6 +10,12 @@ or planning local-agent projects, and for sharing.
 - [`local-model-guidance-2026-07.md`](local-model-guidance-2026-07.md) — which local model
   for which role, hybrid local+frontier architecture readout, serving configs, cost anchors.
   **Dated — decays with the model landscape**; regenerate via `just eval-all`.
+- [`kai-5090-gpc9-fault-2026-08-21.md`](kai-5090-gpc9-fault-2026-08-21.md) — **hardware
+  incident, and the rung below the prime rule.** kai's RTX 5090 faults on basic CUDA work
+  ~50% of the time, always on the same SM (GPC 9 / TPC 4 / SM 1), surviving a power cycle.
+  It masqueraded as an upstream vLLM bug with a real file and line number. Carries the
+  five-line reproduction and the lesson: once a *second, unrelated* model fails the same
+  way, drop to bare metal instead of investigating further inside the stack.
 - [`local-vs-frontier-2026-07.html`](local-vs-frontier-2026-07.html) — rich self-contained
   report (charts, findings, methodology overview) prepared for the All-The-Vibes community.
   Open in a browser; safe to share as a single file. Generated from live board data by a

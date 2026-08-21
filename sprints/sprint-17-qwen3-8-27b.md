@@ -167,59 +167,85 @@ findings doc.
 The `xhigh` run is kept as evidence, quarantined and never published, under
 `model-research/evals/noise-floor/qwen3.8-27b-nvfp4-xhigh-artifact-2026-08-20/`.
 
-## The blocker: vLLM 0.27.1's Gated DeltaNet path is not stable on this model
+## The blocker: kai's GPU is faulty — and the wrong diagnosis first
 
-The corrected re-run never produced a ranked score, and this is why.
+**Corrected 2026-08-21.** This section originally read "vLLM 0.27.1's Gated DeltaNet path is
+not stable on this model" and blamed an upstream kernel. That was wrong. The cause is
+failing hardware. Full incident record:
+[`docs/findings/kai-5090-gpc9-fault-2026-08-21.md`](../docs/findings/kai-5090-gpc9-fault-2026-08-21.md).
 
-With `reasoning_effort: medium` pinned, the eval was attempted four times. It failed every
+With `reasoning_effort: medium` pinned, the eval was attempted four times and failed every
 time, in one of two ways:
 
 1. **Loud** — `CUDA error: an illegal memory access was encountered`
-   (`cudaErrorIllegalAddress`) during engine init. Localised exactly:
+   (`cudaErrorIllegalAddress`), which localised neatly to
+   `vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py:1058` in
+   `_warmup_prefill_kernels`.
+2. **Silent** — the engine stops with **nothing logged**: 100% GPU utilisation,
+   `num_requests_running` 0, `generation_tokens_total` frozen, HTTP frontend still answering.
 
-   ```
-   vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py:1058
-     in _warmup_prefill_kernels
-   ← qwen_gdn_attention_core ← Qwen3_5 forward ← profile_run ← determine_available_memory
-   ```
+That file and line number were real, and they were a red herring. The Gated DeltaNet kernel
+was simply what happened to be running when the bad SM was scheduled.
 
-2. **Silent** — the engine stops making progress with **nothing logged**: 100% GPU
-   utilisation, `num_requests_running` 0, `num_requests_waiting` 0, and
-   `generation_tokens_total` frozen (observed at 34,775 once and at 384 another time) while
-   the HTTP frontend still answers `/v1/models` and `/metrics` instantly.
+### What it actually is
 
-It is **not** OOM (the loud failure is an illegal address, not an allocation failure), not
-the quantization config, and not the `--default-chat-template-kwargs` flag — that only
-alters the rendered prompt string and cannot reach a CUDA kernel. It is intermittent: the
-very first batch completed 3 full runs × 5 suites on this exact serve command.
+kai's RTX 5090 faults on basic CUDA work. Five lines of PyTorch — allocate 2 GiB of fp16,
+`torch.nn.init.normal_`, synchronise — fail **6 times out of 12**, each trial in a fresh
+process. No vLLM, no model, no quantization. The kernel log names the same silicon every
+time:
 
-### How the silent mode was caught, and why it matters
+```
+Xid 31: MMU Fault: ENGINE GRAPHICS GPC9 GPCCLIENT_T1_9              x4
+Xid 13: Graphics SM Warp Exception on (GPC 9, TPC 4, SM 1): Out Of Range Address   x2
+Xid 43: channel teardown                                            x2
+```
 
-The silent hang is the dangerous one, and finding it needed the disagreement between two
-signals. Sprint 16's monitor said `status: running`, and `nvidia-smi` said 100% utilisation
-— both of which read as healthy. The engine's own counters said otherwise: zero requests
-in flight and a frozen token total. **A busy GPU is not evidence of progress.** Sprint 15
-learned not to trust `pgrep`; sprint 16 learned not to trust a buffered log; this run adds
-that GPU utilisation is a derived signal too, and `vllm:generation_tokens_total` is the one
-the engine actually writes.
+Every fault on **GPC 9**; every warp exception on the identical **SM (GPC 9, TPC 4, SM 1)**;
+`Xid 13` ESR registers byte-identical across events seven minutes apart — while the faulting
+virtual addresses differ wildly, the processes differ (`VLLM::EngineCor`, bare `python3`) and
+the workloads differ completely. It survived a reboot and a full power-off.
 
-Worth adding to the monitor: a stall detector keying on that counter would have caught this
-in two minutes instead of twenty-five.
+`gemma-4-31b-it-awq` — different model, architecture and quantization — fails with the same
+error inside `torch.nn.init.normal_` during weight init. **That was the clue that should have
+ended the software theory**, and it is the correction worth keeping from this sprint.
 
-### It wedged the card
+### The rung below the prime rule
 
-After the repeated failures and the SIGKILLs needed to clear them, `nvidia-smi` reported
-`ERR!` for fan/temp/power and **`Channel Repair Pending: GPU requires reset`** — with 2 MiB
-allocated and no compute processes. `gemma-4-31b-it-awq` then hung on its own restart at the
-encoder-profiling step, which is how the wedge was noticed. Plain CUDA still worked
-throughout (20× 8192³ bf16 matmul in 0.21 s), so this is the GSP-class wedge the project has
-history with (2026-07-02, Xid 119) rather than a dead card — no Xid was logged this time.
+The project's prime rule is *audit the harness before blaming the model*. This adds a rung
+beneath it. A plausible, well-localised software explanation — a real upstream file, a real
+line, a real function — is **not evidence that the cause is software**. The moment a
+*second, unrelated* model failed the same way, the correct move was a bare-metal
+reproduction outside all project code, not more investigation inside the stack. Five lines of
+PyTorch would have reached the answer in minutes instead of hours.
 
-The GPU was left idle at 2 MiB with `kvllm.service` stopped-but-enabled, so gemma returns on
-its own after the reset. **A contributing factor was mine**: several serve attempts followed
-a SIGKILL within seconds, which is exactly the rapid kill/serve cycling `CLAUDE.md` warns
-against. A killed engine needs ~60 s for the driver to tear its CUDA context down — observed
-directly, when a `<defunct>` EngineCore held 25,750 MiB for a full minute after exiting.
+### The silent mode, and the monitor
+
+The silent failure is still worth its own note, because catching it needed the disagreement
+between two signals. Sprint 16's monitor said `status: running` and `nvidia-smi` said 100%
+utilisation — both read as healthy. The engine's own counters said otherwise: zero requests
+in flight, frozen token total. **A busy GPU is not evidence of progress.** Sprint 15 learned
+not to trust `pgrep`; sprint 16 learned not to trust a buffered log; this run adds GPU
+utilisation to the list of derived signals, with `vllm:generation_tokens_total` as the one
+the engine actually writes. A stall detector on that counter would have caught it in two
+minutes rather than twenty-five — and it would have been just as useful for a hardware fault
+as for a software one.
+
+### The wedge, and my part in it
+
+After the failures and the SIGKILLs needed to clear them, `nvidia-smi` reported `ERR!` for
+fan/temp/power and `Channel Repair Pending: GPU requires reset`. Gemma then hung on its own
+restart, which is how the scope of the problem became visible. That flag has since cleared
+on its own and the card idles normally at ~13 W — the fault is intermittent, not a permanent
+brick.
+
+Two things were genuinely mine, independent of the hardware:
+
+- Several serve attempts followed a SIGKILL within seconds, which is exactly the rapid
+  kill/serve cycling `CLAUDE.md` warns against. A killed engine needs ~60 s for the driver to
+  tear its CUDA context down — observed directly, when a `<defunct>` EngineCore held
+  25,750 MiB for a full minute after exiting.
+- `kvllm.service` was left **enabled** while gemma was unable to load, so every boot
+  auto-started a model that hung and pegged the card. It is now stopped and disabled.
 
 ## Results
 
@@ -240,9 +266,13 @@ though it dropped one frame to temporal subsampling, which a future video suite 
 to account for.
 
 **#1475 — blocked, not delivered.** There is no trustworthy ranked row for this model, and
-publishing one from an engine that intermittently stalls would be worse than publishing
-none. `models.toml` records `eval_verdict = "has issues"` with the failure signature in
-`eval_notes`; the leaderboard carries **no** qwen3.8 row.
+none was published: the leaderboard carries **no** qwen3.8 row. `models.toml` records
+`eval_verdict = "has issues"` with the failure signature in `eval_notes`.
+
+The verdict is about **the box, not the model** — it is not evidence against Qwen3.8, and
+the `eval_notes` should be re-read (and probably rewritten) once the card is trusted again.
+Nothing measured on this hardware on 2026-08-20 is reliable, including the operational
+numbers above: a fault that corrupts a weight fill can corrupt an output that never throws.
 
 The one thing the suites did establish, from the quarantined `xhigh` batch, is that nothing
 is wrong with the model's *competence*: `tools` 100%, `code` 100% across all three runs, and
@@ -253,14 +283,20 @@ the contaminated numbers implied**, and the resident-slot question stays open.
 
 ## Follow-ups
 
-- **Re-run #1475 once the card is reset**, and treat the GDN instability as the gating risk
-  rather than an incident: try `max_model_len` well below 131072 first (the loud failure is
-  in a *warmup* kernel, so the profiling shapes are the obvious variable), and consider the
-  AWQ build `cyankiwi/Qwen3.8-27B-AWQ-INT4` — now 154K downloads, up from the 58 the research
-  recorded — as a path that avoids the NVFP4 kernels entirely.
-- **Report the GDN bug upstream.** `qwen_gdn_linear_attn.py:1058` in
-  `_warmup_prefill_kernels`, vLLM 0.27.1, sm_120, NVFP4 compressed-tensors, `--enforce-eager`,
-  `--kv-cache-dtype fp8`. Both signatures are reproducible enough to describe.
+- **Fix the hardware before re-running anything.** Test the proprietary driver module
+  (`nvidia-driver-595`, currently the **open** variant is installed) as the one remaining
+  software variable, then RMA if it still faults. Details and the reproduction:
+  [`docs/findings/kai-5090-gpc9-fault-2026-08-21.md`](../docs/findings/kai-5090-gpc9-fault-2026-08-21.md).
+  **Do not re-run #1475 until the card is trusted** — and re-baseline gemma when it is,
+  because the current gemma row was measured on this box too.
+- **Do NOT report a vLLM bug.** An earlier version of this record proposed filing
+  `qwen_gdn_linear_attn.py:1058` upstream. That would have been a false report against a
+  healthy project.
+- **Re-try #1475 on healthy hardware without pre-emptive workarounds.** The `max_model_len`
+  and AWQ-fallback ideas were mitigations for a bug that does not exist; start from the
+  registry entry as it stands. `cyankiwi/Qwen3.8-27B-AWQ-INT4` remains a reasonable
+  comparison point on its own merits (now 154K downloads, up from the 58 the research
+  recorded), not as a workaround.
 - **Add a stall detector to the eval monitor** keyed on `vllm:generation_tokens_total` +
   `num_requests_running`, not on GPU utilisation. It would have turned a 25-minute silent
   hang into a 2-minute alarm, and it generalises to every model.
