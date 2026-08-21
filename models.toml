@@ -11,6 +11,12 @@
 #   reasoning_parser  vLLM --reasoning-parser (separates <think> for reasoning models).
 #   max_model_len     context window to serve (KV-cache sized to this; trim to fit VRAM).
 #   quantization      vLLM --quantization (e.g. "awq", "gptq"); omit for bf16/fp16 weights.
+#                     Omit too when the checkpoint self-describes (compressed-tensors NVFP4
+#                     carries quantization_config; vLLM detects it and an explicit value can
+#                     only disagree with the weights).
+#   kv_cache_dtype    vLLM --kv-cache-dtype (e.g. "fp8"). Independent of weight quantization:
+#                     halves KV bytes/token, which is what buys context when weights already
+#                     fill most of the card.
 #   trust_remote_code true ⇒ pass --trust-remote-code (needed by some models, e.g. InternVL).
 #   enforce_eager     true ⇒ pass --enforce-eager (skip CUDA-graph capture: saves VRAM, slower).
 #   gated             true ⇒ needs a HuggingFace token / license acceptance.
@@ -237,11 +243,31 @@ capabilities = ["chat", "code", "vision", "tools"]
 tested = true
 notes = "Gemma 4 dense 31B via AWQ (~19 GB). Google claims tau2-bench 86.4 (would beat GLM-4.7-Flash) — unverified; our harness is the verifier. Multimodal. NEVER serve with on-the-fly FP8 quantization (vllm#39049 gibberish); AWQ-marlin is the safe sm_120 path."
 
+eval_verdict = "worth trying"
+eval_date = "2026-08-20"
+
+# --- Candidate (2026-08-20, sprint 17 / korg:1474) — first NVFP4 and first video-capable
+# entry in the registry. Research on korg:946.
+
+[models."qwen3.8-27b-nvfp4"]
+hf_repo = "unsloth/Qwen3.8-27B-NVFP4"
+tool_parser = "qwen3_xml"
+reasoning_parser = "qwen3"
+# No `quantization`: the checkpoint is compressed-tensors "mixed-precision" and vLLM reads
+# quant_method from quantization_config. NVFP4 on the MLPs, FP8 on attention + the last 8
+# MLP blocks, vision tower left bf16 (it is in the config's `ignore` list).
+kv_cache_dtype = "fp8"
+max_model_len = 262144
+enforce_eager = true
+gated = false
+est_vram_gb = 28
+capabilities = ["chat", "code", "vision", "tools", "reasoning"]
+tested = false
+notes = "Qwen3.8 hybrid 27B (2026-08-14, Apache 2.0): Gated DeltaNet linear attention on 48 of 64 layers, full attention every 4th — which is why 262K context is affordable here where the dense 3.6-27B needed 8K. Weights ~21 GiB. Also takes video, which nothing else here does — NOT claimed in capabilities because the vision suite is image-only (sprint 17). MTP draft head ships in a separate model_mtp.safetensors and only loads under --speculative-config; left off so tok/s stays comparable with gemma."
+
 # --- Frontier baselines (Sprint 8) — API models, not served on kai. Evaluated through the
 # same suites for a local-vs-frontier comparison; token usage + est cost captured per run.
 # `just eval <key>` runs them (needs ANTHROPIC_API_KEY via .env); `--all` skips them.
-eval_verdict = "worth trying"
-eval_date = "2026-08-20"
 
 [models."claude-haiku-4-5"]
 provider = "anthropic/claude-haiku-4-5"

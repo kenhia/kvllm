@@ -102,6 +102,11 @@ def build_serve_argv(
         argv += ["--reasoning-parser", entry["reasoning_parser"]]
     if entry.get("quantization"):
         argv += ["--quantization", entry["quantization"]]
+    if entry.get("kv_cache_dtype"):
+        # Quantize the KV cache itself (e.g. "fp8"), independent of weight
+        # quantization — the lever that buys context on a long-context model
+        # whose weights already fill most of the card.
+        argv += ["--kv-cache-dtype", entry["kv_cache_dtype"]]
     if entry.get("trust_remote_code"):
         argv += ["--trust-remote-code"]
     if entry.get("enforce_eager"):
@@ -160,6 +165,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "tool_parser",
         "reasoning_parser",
         "quantization",
+        "kv_cache_dtype",
         "trust_remote_code",
         "enforce_eager",
         "max_model_len",
