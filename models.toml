@@ -257,17 +257,33 @@ reasoning_parser = "qwen3"
 # quant_method from quantization_config. NVFP4 on the MLPs, FP8 on attention + the last 8
 # MLP blocks, vision tower left bf16 (it is in the config's `ignore` list).
 kv_cache_dtype = "fp8"
-max_model_len = 262144
+# 131072, not the 262144 native window: measured on the card, weights take 21.34 GiB and
+# leave a 4.26 GiB KV pool at gpu_util 0.90. At ~32 KiB/token (16 full-attention layers,
+# 4 kv heads x 256 head_dim, fp8) 262144 wants 8.18 GiB; vLLM's own estimate of the
+# ceiling was 134848. Still 16x the dense 3.6-27B's 8192.
+max_model_len = 131072
+# The chat template defaults reasoning_effort to 'xhigh' (its maximum). Against the judged
+# and vision suites' frozen 4096-token budget that is not a capability measurement: the
+# model spends the whole budget inside <think> and returns an EMPTY answer, which the judge
+# grades as 0. Measured on this card at 4096: xhigh leaves plan-migration empty, medium
+# answers it in 3078 tokens, low in 2948. `medium` is the highest effort that reliably fits,
+# so it measures the model rather than the ceiling. The budget is the frozen ranked
+# condition (judged v2 raised it 1024->4096 for exactly this reason with the 3.5/3.6
+# family) and cannot move without invalidating every score on the board — so the knob that
+# moves is the serve config, not the suite.
 enforce_eager = true
+extra_args = ["--default-chat-template-kwargs", "{\"reasoning_effort\": \"medium\"}"]
 gated = false
 est_vram_gb = 28
 capabilities = ["chat", "code", "vision", "tools", "reasoning"]
-tested = false
-notes = "Qwen3.8 hybrid 27B (2026-08-14, Apache 2.0): Gated DeltaNet linear attention on 48 of 64 layers, full attention every 4th — which is why 262K context is affordable here where the dense 3.6-27B needed 8K. Weights ~21 GiB. Also takes video, which nothing else here does — NOT claimed in capabilities because the vision suite is image-only (sprint 17). MTP draft head ships in a separate model_mtp.safetensors and only loads under --speculative-config; left off so tok/s stays comparable with gemma."
+tested = true
+notes = "Qwen3.8 hybrid 27B (2026-08-14, Apache 2.0): Gated DeltaNet linear attention on 48 of 64 layers, full attention every 4th — which is why a 128K window is affordable here where the dense 3.6-27B needed 8K. Weights ~21 GiB. Also takes video, which nothing else here does: the path was verified by hand on this serve config (sprint 17) but is NOT claimed in capabilities, because the vision suite is image-only and an unscored capability must not ride on a scored row. MTP draft head ships in a separate model_mtp.safetensors and only loads under --speculative-config; left off so tok/s stays comparable with gemma."
 
 # --- Frontier baselines (Sprint 8) — API models, not served on kai. Evaluated through the
 # same suites for a local-vs-frontier comparison; token usage + est cost captured per run.
 # `just eval <key>` runs them (needs ANTHROPIC_API_KEY via .env); `--all` skips them.
+eval_verdict = "worth trying"
+eval_date = "2026-08-20"
 
 [models."claude-haiku-4-5"]
 provider = "anthropic/claude-haiku-4-5"
