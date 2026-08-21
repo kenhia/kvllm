@@ -227,9 +227,15 @@ def repeat_model(
         )
         card["run_index"] = i
         cards.append(card)
+        scored = []
         for cap, s in sorted(card.get("suites", {}).items()):
             if suite in (None, cap):
                 print(f"[run {i}] {cap}: {s.get('pass_rate', 0.0):.3f}")
+                scored.append(f"{cap} {s.get('pass_rate', 0.0):.3f}")
+        # Give the monitor a per-run line. Without this its "completed" list stays empty
+        # for the whole batch and the only visible progress is which run is in flight —
+        # which is the half of korg:1500 about seeing what already finished.
+        runstate.finish_model(key, f"run {i}/{n} · {', '.join(scored) or 'no score'}")
         if local and not endpoint and i < n:
             # One model per process is already the rule; give VRAM time to drain before
             # the next serve rather than stop/serve cycling (GSP wedge, 2026-07-02).

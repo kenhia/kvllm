@@ -275,3 +275,23 @@ def test_main_keys_the_output_directory_by_suite(tmp_path, monkeypatch):
     dirs = sorted(p.name for p in (tmp_path / "noise-floor").iterdir())
     assert len(dirs) == 2
     assert any("agentic" in d for d in dirs) and any("tools" in d for d in dirs)
+
+
+def test_main_records_each_finished_run_for_the_monitor(tmp_path, monkeypatch):
+    """korg:1500 wants to see what already finished, not just what is in flight."""
+    from kvllm import runstate
+
+    _stub_run(monkeypatch, tmp_path, [0.90, 0.95, 0.92])
+    runstate.reset()
+    try:
+        repeat.main(
+            ["gemma-4-31b-it-awq", "--suite", "agentic", "--n", "3", "--settle", "0"]
+        )
+        done = runstate.read()["completed"]
+    finally:
+        runstate.reset()
+    assert [c["verdict"] for c in done] == [
+        "run 1/3 · agentic 0.900",
+        "run 2/3 · agentic 0.950",
+        "run 3/3 · agentic 0.920",
+    ]
