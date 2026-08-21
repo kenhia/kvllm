@@ -624,3 +624,43 @@ def test_comp_cell_marks_a_tied_row():
 
 def test_comp_cell_of_an_untied_row_is_unchanged():
     assert score._comp_cell({"composite": 0.97, "medal": "①"}) == "① 0.97"
+
+
+def test_leaderboard_renders_the_noise_band_and_marks_tied_rows(tmp_path, monkeypatch):
+    """End-to-end: two models 0.02 apart, a 0.035 measured band. The .md and .html must
+    say the gap is not a ranking — this is the whole point of korg:1499."""
+    monkeypatch.setattr(score, "EVALS", tmp_path)
+    cfg = tomllib.loads((score.REPO / "eval-config.toml").read_text())
+    cfg["noise"] = {"composite_band": 0.035, "n": 3, "measured": "2026-08-20"}
+    monkeypatch.setattr(score, "load_config", lambda: cfg)
+
+    hi = _card(model="leader", date="2026-08-20")
+    hi["suites"]["tools"]["pass_rate"] = 0.97
+    lo = _card(model="runner-up", date="2026-08-20")
+    lo["suites"]["tools"]["pass_rate"] = 0.95
+    (tmp_path / "leader-2026-08-20.json").write_text(json.dumps(hi))
+    (tmp_path / "runner-up-2026-08-20.json").write_text(json.dumps(lo))
+
+    score.write_leaderboard({"tools": 2})
+
+    md = (tmp_path / "leaderboard.md").read_text()
+    assert "≈" in md
+    assert "not meaningful" in md
+    assert "0.035" in md
+    assert "≈" in (tmp_path / "leaderboard.html").read_text()
+    rows = json.loads((tmp_path / "leaderboard.json").read_text())["rows"]
+    assert rows[0]["tied_with_prev"] is False
+    assert rows[1]["tied_with_prev"] is True
+
+
+def test_leaderboard_without_a_measured_band_has_no_tie_markers(tmp_path, monkeypatch):
+    monkeypatch.setattr(score, "EVALS", tmp_path)
+    hi = _card(model="leader", date="2026-08-20")
+    lo = _card(model="runner-up", date="2026-08-20")
+    lo["suites"]["tools"]["pass_rate"] = 0.90
+    (tmp_path / "leader-2026-08-20.json").write_text(json.dumps(hi))
+    (tmp_path / "runner-up-2026-08-20.json").write_text(json.dumps(lo))
+
+    score.write_leaderboard({"tools": 2})
+
+    assert "≈" not in (tmp_path / "leaderboard.md").read_text()
