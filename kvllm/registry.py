@@ -111,6 +111,17 @@ def build_serve_argv(
         argv += ["--trust-remote-code"]
     if entry.get("enforce_eager"):
         argv += ["--enforce-eager"]  # skip CUDA-graph capture (saves VRAM; slower)
+    if entry.get("max_num_batched_tokens"):
+        # Opt-in ONLY. vLLM computes this per model and the computed value can be
+        # far below any figure that looks like a sane global: gemma-4-31b-it-awq
+        # resolves to 2496 (2048 raised to fit a video input on a prefix-LM model),
+        # and forcing it to 8192 inflates activation memory enough to fail engine
+        # startup outright — 7.42 GiB of KV cache becomes 6.35 GiB, under what
+        # 16384 context needs. Set this only for a model measured to need it.
+        argv += [
+            "--max-num-batched-tokens",
+            str(entry["max_num_batched_tokens"]),
+        ]
     # Escape hatch for model-specific vllm flags with no dedicated field
     # (e.g. Devstral's --tokenizer-mode/--config-format/--load-format mistral).
     argv += [str(a) for a in entry.get("extra_args", [])]
@@ -169,6 +180,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "trust_remote_code",
         "enforce_eager",
         "max_model_len",
+        "max_num_batched_tokens",
         "gated",
         "est_vram_gb",
         "capabilities",
