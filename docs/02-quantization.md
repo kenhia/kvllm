@@ -52,6 +52,12 @@ method from the model config; setting `quantization` is belt-and-suspenders and 
 For **dynamic** FP8 on an unquantized checkpoint, `quantization = "fp8"` is required (it tells vLLM
 to quantize at load).
 
+`max_num_batched_tokens` is also a registry field, and it is deliberately **opt-in**: emitted only
+when an entry sets it, absent otherwise. Leave it unset. vLLM derives the value per model and the
+derived value can be far below anything that looks like a sane global — `gemma-4-31b-it-awq`
+resolves to **2496** (2048, raised to fit a video input on a prefix-LM model). See the rule of thumb
+below before setting it on anything.
+
 ## Rules of thumb for this box
 
 - **Coding / agentic quality, ≤14B:** bf16 (≤8B) or FP8 (14B) — quality first, Blackwell makes FP8
@@ -59,5 +65,18 @@ to quantize at load).
 - **Want a 32B at all:** AWQ/GPTQ 4-bit (~18–20 GB weights) with a modest `max_model_len`.
 - **Running low on VRAM:** lower `max_model_len` before reaching for a heavier quant — KV cache is
   often the thing that doesn't fit, not the weights.
+- **Never pin `max_num_batched_tokens` to "restore" a previous default.** vLLM computes it per
+  model; pinning replaces a correct per-model number with a plausible-looking constant. Sprint 18
+  set it to 8192 (the pre-0.28.0 default, on advice from the 0.28.0 release notes) and gemma — whose
+  derived value is 2496 — stopped serving outright on *both* 0.27.1 and 0.28.0: the extra activation
+  memory cost ~1.1 GiB of KV pool, dropping it under what a 16384 context needs. A release note
+  announcing a default change describes the fallback for models with no derived value, not a number
+  that applies to yours.
+- **KV cost per token varies ~10× across architectures**, and it dominates the context you can
+  afford. Measured on this card: `gemma-4-31b-it-awq` (dense full attention, head dims 256/512,
+  fp16 KV) holds **20,765 KV tokens in 7.42 GiB** — ~375 KiB/token; `qwen3.8-27b-nvfp4` (hybrid,
+  only 16 of 64 layers keep a per-token cache, `kv_cache_dtype = "fp8"`) holds **129,615 in
+  4.27 GiB** — ~34.5 KiB/token. A hybrid model with fp8 KV buys context a dense one cannot, at the
+  same VRAM.
 - The `est_vram_gb` in the registry is a **sanity figure**, not a guarantee — confirm with
   `nvidia-smi` after the first serve and adjust.

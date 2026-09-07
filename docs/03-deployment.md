@@ -49,6 +49,28 @@ just service-disable     # stop now + don't start at boot
 | `just service-logs` | follow journald (`journalctl --user -u kvllm -f`) |
 | `just loaded` | what `/v1/models` currently reports |
 
+## Shipping a sprint restarts the service
+
+The unit sets `WorkingDirectory` to this checkout and execs
+`python -m kvllm.registry serve`, so the running server keeps executing whatever code it loaded at
+start. A merge to `main` does not change that — only a restart does.
+
+`.sprint-deploy` therefore declares the `deploy-kvllm` skill, which `/sprint-ship` runs in Phase 7
+after the merge, so what is running is what landed. It:
+
+- **no-ops** unless the merge touched something the served process actually executes
+  (`kvllm/registry.py`, `kvllm/helper.py`, `models.toml`, `deploy/`, `pyproject.toml`, `uv.lock`) —
+  most sprints here change suites, eval code or docs and need no restart;
+- **refuses** while `just eval` / `just eval-repeat` is running, since those orchestrate this
+  service themselves and a restart would fight them for the GPU mid-run;
+- re-runs `deploy/install.sh` only when a unit template changed;
+- stops, **waits for VRAM to drain to ~0** (the GSP-wedge rule), starts, then verifies `/v1/models`
+  reports `KVLLM_MODEL_KEY` and that the running `vllm serve` argv matches what the registry now
+  produces.
+
+To deploy by hand at any other time, invoke the same skill rather than restarting directly — it
+carries the drain wait and the verification.
+
 ## Single-GPU note
 
 The 5090 holds **one model per process**, and this service is the canonical holder (~16 GB for a 7B).
