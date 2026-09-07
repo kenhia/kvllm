@@ -508,3 +508,29 @@ Policy (Ken's call): restart with guardrails, rather than report-only.
 ## Gate
 
 `just check` green: ruff clean, 221 unit tests, 14 client-lib tests.
+
+## Deployed
+
+**2026-09-07, kai, from merged `main` `8566c0d`** — the first run of `deploy-kvllm`,
+added by this sprint.
+
+No stamp existed (first run), so the skill treated the tree as changed rather than
+guessing. `deploy/` was unchanged, so the unit templates were not re-rendered; four
+serve-path files had landed (`kvllm/registry.py`, `models.toml`, `pyproject.toml`,
+`uv.lock`), which is exactly the case the restart exists for.
+
+- **Eval guard:** clear, nothing in flight.
+- **Drain:** 2 MiB / 0 compute processes within 10 s of stop.
+- **Restart:** `kvllm.service` up in ~90 s, `kvllm-helper.service` restarted.
+- **Verified:** `/v1/models` reports `gemma-4-31b-it-awq`, matching `KVLLM_MODEL_KEY`;
+  `NRestarts=0`; 30,846 MiB, the expected band for gemma; and the running `vllm serve`
+  argv is **byte-identical** to what `registry show` now produces — the check that
+  proves this sprint's `max_num_batched_tokens` change is live and correctly emitting
+  nothing for gemma.
+- **Smoke:** answered `OK`, `finish_reason: stop`.
+- Stamped `8566c0d`.
+
+The box was already running equivalent code (the service was restarted by hand during
+the sprint), so this restart changed no behaviour. It was still worth doing: it
+establishes the stamp, and it exercised the deploy path end to end on its first use
+rather than leaving it unproven until a sprint that depended on it.
