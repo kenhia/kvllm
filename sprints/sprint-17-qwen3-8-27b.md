@@ -265,8 +265,8 @@ and the **video** path end-to-end — a 4-frame encoded clip came back described
 though it dropped one frame to temporal subsampling, which a future video suite would have
 to account for.
 
-**#1475 — blocked, not delivered.** There is no trustworthy ranked row for this model, and
-none was published: the leaderboard carries **no** qwen3.8 row. `models.toml` records
+**#1475 — blocked, not delivered; carried to sprint 18.** There is no trustworthy ranked row
+for this model, and none was published: the leaderboard carries **no** qwen3.8 row. `models.toml` records
 `eval_verdict = "has issues"` with the failure signature in `eval_notes`.
 
 The verdict is about **the box, not the model** — it is not evidence against Qwen3.8, and
@@ -314,3 +314,53 @@ the contaminated numbers implied**, and the resident-slot question stays open.
 - **Video needs a suite before it can be a capability.** The path works; the image-only
   vision suite cannot score it, and adding cases means a `VISION_VERSION` bump plus a
   re-score of every model on the board.
+
+## Close-out (2026-09-06)
+
+Shipped with **#1474 done and #1475 carried forward**, which is why this sprint closes at
+half its nominal scope: the hardware it was measuring on turned out to be broken, and
+finding that out became the sprint's real output.
+
+**The card was replaced.** ASUS reflowed the GPU successfully but could not source a
+replacement heatsink, so they swapped the whole card under warranty — no
+customer-induced-damage finding. The replacement (`GPU-bb68141d-0bca-b64f-8c91-42a248f7d4f6`,
+serial `T7YVCM026219KG6`) passed the 12-trial PyTorch repro **12/12 with zero Xid**, on
+driver `595.58.03` / VBIOS `98.02.2E.40.E0` — *unchanged from the faulty card*, so it passed
+on exactly the stack that failed. See the correction at the head of
+[`../docs/findings/kai-5090-gpc9-fault-2026-08-21.md`](../docs/findings/kai-5090-gpc9-fault-2026-08-21.md):
+the mechanism was a solder interconnect under the package, not defective silicon.
+
+**#1474 is closed.** The registry entry, the `kv_cache_dtype` field and the serve recipe all
+stand as shipped.
+
+**#1475 moves to sprint 18 with widened scope**, driven by handoff **korg:1953**:
+
+1. **WI-1736** — bump vLLM 0.27.1 → 0.28.0. (Watch `max_num_batched_tokens`, default 8192 →
+   16384; gemma sat at 30,846 of 32,607 MiB, so pin it rather than discover it mid-suite.)
+2. **Re-baseline gemma on 0.28.0** — not on 0.27.1. The baseline has to sit on the same stack
+   the candidate is scored against.
+3. **Then serve and score Qwen3.8**, five ranked suites plus `assisted`, speculative decoding
+   off.
+
+The re-baseline is not housekeeping. The faulty card was in kai from at least 2026-07-01
+(korg:1514 pairs a July 1 fault with an Aug 20–21 fault on the identical SM, byte-identical
+ESR), so **every local row on the board from that window was measured on defective
+hardware** — including gemma's current 2026-08-20 row. If the 0.28.0 gemma row differs
+materially, hardware is at least as good an explanation as the version bump; the two are
+confounded and cannot be separated after the fact. Say so rather than crediting vLLM.
+
+**Proposal korg:1478 deliberately stays `active` across both sprints** — it covers #1474 and
+#1475, and only the first is done. The `.korg-sprint-proposal` marker was removed as part of
+this close-out so that shipping this branch does not auto-close the proposal.
+
+### One correction to carry into sprint 18
+
+Handoff korg:1953 and WI-1736 both state that **Qwen3.8 requires vLLM 0.28.0**. This sprint's
+own record contradicts that: `qwen3.8-27b-nvfp4` served on **0.27.1** at 28,554 MiB and
+completed three full N=3 passes across all five suites (`tools` and `code` at 100% in every
+one), which is what #1474 was closed on.
+
+This does not change the plan — 0.28.0 is the target Ken chose, with 0.27.1 as the stated
+fallback. It changes the *risk*: the fallback is **proven rather than hypothetical**, and the
+bump is a preference, not a gate. If 0.28.0 misbehaves, sprint 18 is not blocked; it can
+score on 0.27.1 and say so.
