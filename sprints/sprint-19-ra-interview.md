@@ -603,3 +603,22 @@ So gemma's gloves come off for the cost of a ~5× longer answer that still lands
 seconds. What its thinking cannot buy is context: the window is the constraint, and that
 is the fp8-KV phase.
 
+#### gemma, context at 16k (fp16 KV, thinking off)
+
+| tokens | needle | absence | contradiction | count | order | TTFT Q1 | wall/Q |
+|---|---|---|---|---|---|---|---|
+| 3,950 | 3/3 | 3/3 | 3/3 | 4/5 | 3/3 | 1.5 s | 0.9 s |
+| 8,238 | 3/3 | 3/3 | 3/3 | 3/5 | 2/3* | 2.9 s | 1.6 s |
+| 12,580 | 3/3 | 3/3 | 3/3 | 3/5 | 1/3* | 4.7 s | 2.8 s |
+
+Retrieval and both cross-reference questions are perfect at every length the window
+allows, and answered in 40–350 tokens with no reasoning phase — under six seconds a
+question where Qwen3.8 at `medium` takes 26–40. **Aggregation is where gemma slips:** the
+count question (six `df` blocks, which hosts are over 80%) came back with three of the
+four hosts every time, a different host missing each time. (*The order answers name the
+right event first on every run; the "misses" are that gemma quotes the `Started` line at
+14:19:58 rather than `Stopping` at 14:19:53, and the `alert queued` line at 12:55:38
+rather than the WARN at :37 — adjacent lines, defensible readings, counted against it by
+a strict expectation.) Whether thinking fixes the count is measured in the fp8-KV phase,
+where the window is big enough to ask at 24k with thinking on.
+
