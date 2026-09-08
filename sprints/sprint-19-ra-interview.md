@@ -543,3 +543,22 @@ configuration; the prompt names no host, no service, no failure class. What the 
 cannot fully fix is the second-order call, *now* versus *handoff*, which is real judgment
 and movable by a sentence. The gemma numbers on the same ladder follow below.
 
+#### Qwen3.8 context ceilings, with and without the draft head
+
+Each probe is a refused engine start, and the refusal carries vLLM's own estimate of the
+ceiling from the measured pool — a data point, not a failure:
+
+| configuration | GPU fraction | KV pool | asked for | vLLM's estimated ceiling |
+|---|---|---|---|---|
+| no head | 0.90 | 4.51 GiB | 196,608 | **137,984** |
+| head (MTP ×3) | 0.90 | 3.23 GiB | 98,304 | **75,200** |
+| head (MTP ×3) | 0.95 | 4.80 GiB | 131,072 | **123,200** (missed by 0.23 GiB) |
+
+So the registry's 131,072 without the head sits 5% under the card's ceiling — right where
+it should be. With the head, 65,536 at 0.90 is the honest number (72,557 KV tokens,
+1.11× concurrency, no prefix-cache headroom), and **a third configuration exists that
+nobody has served: head on at ~120k with the GPU fraction at 0.95** — 2× decode and most
+of the window, at the cost of leaving ~1.6 GB on a headless card for everything that is
+not the engine. Queued behind the gemma phases: serve it and run the long-context probe
+at 100k against it, because an estimate is not a serve.
+
