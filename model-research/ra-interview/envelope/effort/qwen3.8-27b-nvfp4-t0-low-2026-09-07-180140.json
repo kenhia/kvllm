@@ -1,0 +1,81 @@
+{
+ "model": "qwen3.8-27b-nvfp4",
+ "kwargs": {
+  "reasoning_effort": "low"
+ },
+ "max_tokens": 16384,
+ "temperature": "0.0",
+ "n": 1,
+ "runs": [
+  {
+   "answer": "## PostgreSQL Migration: Machine A \u2192 Machine B\n\n**Downtime window:** Step 3 only (target: ~60\u201390 seconds).\n\n---\n\n1. **Establish streaming replication (A \u2192 B) \u2014 done days/weeks ahead.**\n   Configure B as a hot standby of A (`pg_basebackup` + `standby.signal`). Verify `pg_stat_replication` shows B connected and `replay_lag` near zero. This step has **zero downtime**.\n\n2. **Pre-flight validation \u2014 done immediately before the window.**\n   Confirm B's `replay_lag` < 1 s, run a `SELECT count(*)` on a key table on both nodes to confirm parity, and stage the DNS/config change (e.g., a new A-record or a `pgbouncer` pool update) so it can be applied in one atomic action.\n\n3. **Switchover (the < 5 min downtime window).**\n   a. Stop the application (or enable maintenance mode).\n   b. On A: `SELECT pg_is_in_recovery();` \u2192 confirm B caught up (`SELECT pg_last_wal_receive_lsn()` on B matches `pg_current_wal_lsn()` on A).\n   c. On B: `pg_ctl promote` (or `SELECT pg_promote();`).\n   d. Update DNS / connection pool to point to B.\n   e. Restart the application.\n   f. Confirm the app is serving traffic.\n   *Total elapsed: typically 30\u201390 s.*\n\n4. **Rollback (explicit).**\n   If B fails to promote, is unreachable, or the application errors after switchover:\n   a. Re-point DNS / connection pool back to A.\n   b. On A: remove `standby.signal` (if it was demoted) and restart PostgreSQL as primary.\n   c. Restart the application.\n   A was never destroyed, so it remains a fully valid primary. Downtime for rollback is the same order as step 3.\n\n5. **Post-migration verification.**\n   Run application smoke tests, check `pg_stat_activity` on B for expected connections, confirm WAL archiving (if used) is writing to the new location, and monitor for 24 h.\n\n6. **Decommission A (after a 48\u201372 h soak period).**\n   Take a final `pg_dump` of B as a safety net, then shut down and power off A. Retain the disk image for one additional week before wiping.",
+   "reasoning": "The user wants a migration plan for a PostgreSQL database from machine A to machine B in a homelab environment. Key constraints:\n\n1. Total downtime < 5 minutes\n2. Must include an explicit rollback step\n3. At most 6 numbered steps\n\nLet me think about what makes a good PostgreSQL migration plan with minimal downtime:\n\nThe standard approach for near-zero-downtime PostgreSQL migration:\n- Use `pg_basebackup` or logical replication (streaming replication) to keep B in sync with A\n- The downtime window is only the final switchover: stop writes on A, take a final sync, promote B, update DNS/config\n\nLet me think about the steps:\n\n1. **Preparation / Setup replication** \u2014 Set up streaming replication from A to B. This runs in the background with zero downtime. B becomes a hot standby.\n\n2. **Pre-migration validation** \u2014 Verify B is healthy, check replication lag is near zero, test application connectivity to B (if possible), prepare rollback.\n\n3. **Final switchover (the downtime window)** \u2014 This is where the <5 min constraint matters:\n   - Stop the application (or put it in maintenance mode)\n   - Stop writes on A (or just stop the app)\n   - Wait for B to catch up (should be near-instant if lag is low)\n   - Promote B to primary\n   - Update DNS / connection strings to point to B\n   - Restart application\n\n4. **Rollback step** \u2014 Explicit: if B fails, re-point DNS back to A, restart A as primary. Since A was never destroyed, this is straightforward.\n\n5. **Post-migration verification** \u2014 Check B is accepting connections, verify data integrity, monitor.\n\n6. **Decommission A** \u2014 After a soak period, shut down A.\n\nLet me refine to exactly 6 steps, making sure the downtime window is clearly bounded and the rollback is explicit.\n\nActually, let me reconsider. The user said \"at most 6 numbered steps.\" I should be concise and practical. Let me structure it:\n\n1. Set up streaming replication (A \u2192 B) \u2014 zero downtime, done ahead of time\n2. Validate B is in sync and ready \u2014 zero downtime\n3. Switchover (the <5 min window): stop app, wait for sync, promote B, update DNS, restart app\n4. Rollback (explicit): if B is unhealthy, re-point DNS to A, restart A as primary\n5. Post-migration verification\n6. Decommission A after soak period\n\nThat's 6 steps. The downtime is contained in step 3. Let me write this up clearly.\n",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.21,
+   "wall_s": 37.9,
+   "completion_tokens": 1110,
+   "prompt_tokens": 89,
+   "id": "plan-migration",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "It's a user-level service that launches a vLLM OpenAI-compatible inference server (model chosen via `KVLLM_MODEL_KEY` from an env file) using `uv` in the `kvllm` project directory. It auto-restarts after a crash with a 5-second delay, but not on clean exits. Caveat: because it's a user unit (`WantedBy=default.target`), it only runs while ken's session is active unless `loginctl enable-linger ken` is set \u2014 otherwise it stops on logout.",
+   "reasoning": "The user wants a concise, plain-English explanation of this systemd user unit for a colleague. I need to cover: what runs, when it restarts, and one operational caveat. Keep it to 2-4 sentences.\n\nLet me parse the unit:\n- It's a user unit (WantedBy=default.target, not multi-user.target)\n- Runs a vLLM OpenAI-compatible server via `uv run python -m kvllm.registry serve` with a model key from an env file\n- Working directory is /home/ken/src/ai/kvllm\n- Restart=on-failure with 5s delay\n- TimeoutStartSec=900 (15 min to start \u2014 makes sense for loading a large model onto an RTX 5090)\n- KillSignal=SIGTERM, TimeoutStopSec=30\n- After=network-online.target\n\nOperational caveats to consider:\n- It's a user unit, so it only runs while ken's user session is active (or with lingering enabled). If ken logs out and lingering isn't set, it stops.\n- TimeoutStartSec=900 means systemd will consider it failed if it doesn't start within 15 minutes \u2014 if the model is huge or the GPU is busy, this could be tight.\n- Restart=on-failure means it won't restart on clean exits (exit code 0).\n- The env file path is hardcoded to a specific user's home.\n\nI think the most useful caveat for a colleague is the user-session dependency (lingering) or the 900s start timeout. I'll go with the user-session one since it's the most likely to bite someone operationally.\n\nLet me draft 2-4 sentences:\n\n\"It's a user-level service that starts a vLLM OpenAI-compatible inference server (model selected via KVLLM_MODEL_KEY from an env file) using `uv` in the kvllm project directory. It auto-restarts after a crash with a 5-second delay, but not on clean exits. Caveat: because it's a user unit (WantedBy=default.target), it only runs while ken's session is active unless `loginctl enable-linger ken` is set \u2014 otherwise it dies on logout.\"\n\nThat's 3 sentences. Clean and covers all three points.\n",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.09,
+   "wall_s": 20.6,
+   "completion_tokens": 604,
+   "prompt_tokens": 218,
+   "id": "explain-config",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "**Arithmetic**\n\n**(a)** Allowed budget = 0.90 \u00d7 32 = 28.8 GiB\nUsed = 21.3 + 3.6 = 24.9 GiB\nKV-cache budget = 28.8 \u2212 24.9 = **3.9 GiB**\n\n**(b)** 3.9 GiB = 3.9 \u00d7 1 048 576 KiB = 4 089 446.4 KiB\nTokens = \u230a4 089 446.4 / 34.5\u230b = **118 534**\n\n**(c)** New KV-cache budget = 3.9 \u2212 1.3 = 2.6 GiB\n2.6 GiB = 2 726 297.6 KiB\nTokens = \u230a2 726 297.6 / 34.5\u230b = **79 023**\n\na=3.9 b=118534 c=79023",
+   "reasoning": "Let me work through this step by step.\n\nGiven:\n- GPU: 32 GiB\n- Weights: 21.3 GiB\n- Activations and CUDA context: 3.6 GiB\n- Engine allowed: 90% of the card\n- KV cache cost: 34.5 KiB per token\n\n(a) Memory left for KV cache:\n- 90% of 32 GiB = 0.9 \u00d7 32 = 28.8 GiB\n- Used by weights + activations + CUDA context = 21.3 + 3.6 = 24.9 GiB\n- Left for KV cache = 28.8 - 24.9 = 3.9 GiB\n\n(b) Largest single-request context in tokens:\n- 3.9 GiB = 3.9 \u00d7 1024 MiB = 3.9 \u00d7 1024 \u00d7 1024 KiB = 3.9 \u00d7 1,048,576 KiB\n- Let me compute: 3.9 \u00d7 1,048,576 = 4,089,446.4 KiB\n- Tokens = 4,089,446.4 / 34.5 = 118,534.68...\n\nLet me be more precise:\n3.9 GiB = 3.9 \u00d7 1024 \u00d7 1024 KiB = 3.9 \u00d7 1,048,576 KiB = 4,089,446.4 KiB\n\n4,089,446.4 / 34.5 = 118,534.68...\n\nSo the largest context that fits is 118,534 tokens (floor).\n\nWait, let me double-check: 118,534 \u00d7 34.5 = 4,089,423 KiB. And 118,535 \u00d7 34.5 = 4,089,457.5 KiB. Since 4,089,446.4 < 4,089,457.5, we can only fit 118,534 tokens.\n\n(c) If a draft head adds 1.3 GiB:\n- New memory left for KV cache = 3.9 - 1.3 = 2.6 GiB\n- 2.6 GiB = 2.6 \u00d7 1,048,576 KiB = 2,726,297.6 KiB\n- Tokens = 2,726,297.6 / 34.5 = 79,023.12...\n\nSo 79,023 tokens.\n\nLet me verify: 79,023 \u00d7 34.5 = 2,726,293.5 KiB. 79,024 \u00d7 34.5 = 2,726,328 KiB. Since 2,726,297.6 < 2,726,328, we can only fit 79,023 tokens.\n\nFinal answers:\na = 3.9 GiB\nb = 118,534 tokens\nc = 79,023 tokens\n",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.09,
+   "wall_s": 35.9,
+   "completion_tokens": 1048,
+   "prompt_tokens": 182,
+   "id": "kv-arith",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "**What's wrong:** `node_exporter` on `kubs0` is being OOM-killed (\u22481 GB RSS \u2014 wildly abnormal for a ~30 MB daemon), causing its `:9101/metrics` endpoint to go down and kmon to log repeated \"connection refused\" warnings; the restart counter at 4 confirms this is a recurring crash loop.\n\n**Red herring:** The `dockerd` warning about an unknown manifest type (`application/vnd.docker.plugin.v1+json`) is benign noise from a multi-arch or plugin image pull and is unrelated to the OOM event.\n\n**Next command:**\n```bash\nssh kubs0 \"systemctl cat node-exporter.service\"\n```\nThis reveals the `ExecStart` flags so I can identify the misbehaving collector (most likely `--collector-processes` or `--collector-devicemapper`) and disable or cap it.",
+   "reasoning": "Let me analyze this journal excerpt carefully.\n\n**What's wrong:**\n- `kubs0` node-exporter is being OOM-killed (kernel OOM killer, signal 9). It's using ~1GB of RSS (1090744kB \u2248 1.04 GB) which is abnormally high for node_exporter (normally uses ~20-50MB).\n- This causes the metrics endpoint on port 9101 to be down, which is why kmon (the monitoring scraper) gets \"connection refused\" on `http://kubs0:9101/metrics`.\n- The restart counter is at 4, meaning this is a recurring problem \u2014 it keeps getting OOM-killed and restarting.\n\n**What's the red herring:**\n- The `dockerd` warning about \"reference for unknown type: application/vnd.docker.plugin.v1+json\" is unrelated noise. It's a benign Docker warning about an image manifest type it doesn't recognize (likely a multi-arch or plugin image). It has nothing to do with the node_exporter OOM issue.\n\n**Single command to run next:**\nI need to figure out why node_exporter is consuming ~1GB of RAM. The most likely cause is a collector that's pulling in too much data \u2014 commonly the `process` collector on a system with many processes, or the `devicemapper` collector, or a large number of network interfaces/filesystems. \n\nThe best next step is to check what's actually consuming memory on kubs0 and specifically look at node_exporter's collector configuration. I'd want to check the current memory state and the node_exporter arguments/config.\n\nA good single command: `ssh kubs0 \"systemctl cat node-exporter.service\"` to see what collectors are enabled, or `ssh kubs0 \"ps aux --sort=-rss | head\"` to see current memory hogs.\n\nActually, the most actionable single command that directly addresses the root cause would be to check the node_exporter service configuration to identify which collector is misbehaving:\n\n`ssh kubs0 \"systemctl cat node-exporter.service\"`\n\nThis will show the ExecStart line with all `--collector-*` flags, letting me identify the offending collector (likely `--collector-processes` or `--collector-devicemapper` or similar).\n\nLet me keep this to 5 sentences max.\n",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.1,
+   "wall_s": 24.1,
+   "completion_tokens": 704,
+   "prompt_tokens": 534,
+   "id": "log-diagnosis",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "{\"host\":\"kubsdb\",\"status\":\"degraded\",\"services\":[\"postgresql\",\"nightly-backup\"],\"disk_free_gb\":42}",
+   "reasoning": "The user wants a JSON object with exactly these keys: host, status, services, disk_free_gb.\n- host: \"kubsdb\"\n- status: \"degraded\"\n- services: [\"postgresql\", \"nightly-backup\"]\n- disk_free_gb: 42\n\nThey want ONLY the JSON object, no prose, no code fence.\n",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.09,
+   "wall_s": 3.7,
+   "completion_tokens": 107,
+   "prompt_tokens": 101,
+   "id": "constrained-json",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  }
+ ]
+}

@@ -152,3 +152,110 @@ model. The judge works, the local provider works, the harness on the new stack i
 **#1962's stack move is landed and verified.** Its re-baselines are deferred to the tail,
 as planned above.
 
+### Step 2 — the envelope (WI-1954)
+
+Each candidate at its own best; asymmetry is the signal. Order chosen so the cheap facts
+come first: the Qwen3.8 effort screen on the as-is 131k serve (per-request overrides, no
+re-serve), the long-context sweep on the same serve, then the draft-head arms, then gemma
+with and without fp8 KV and with its thinking mode on for the first time.
+
+#### Qwen3.8, room to think (`interview.effort`, five probes, `max_tokens` 16384, T=0)
+
+`medium` — the board's setting — first, as the anchor. Every probe answered and stopped
+on its own well inside the old 4096 ceiling (119–1,662 output tokens, of which reasoning
+was 77–895): at `medium` the model does not *use* extra room, so the 4096 budget was never
+clipping it. The one mechanical "fail" was the check, not the answer: it paraphrased
+`Restart=on-failure` as "if the process exits with a non-zero code … a clean exit will
+*not* trigger a restart", which is exactly right (the check now accepts that). Its
+operational caveat — that a user unit dies with the login session — is wrong for a
+lingering user but a fair guess without that fact. The kv-arith probe (a=3.9 GiB,
+b≈118k, c≈79k, with a trap in the 90% fraction) came back correct.
+
+Then the other three settings, and `xhigh` again at the model's own sampling
+(`generation_config.json`: T=1.0, top-p 0.95, top-k 20 — what vLLM applies when a request
+omits `temperature`), three times:
+
+| setting | plan-migration | explain-config | kv-arith | log-diagnosis | strict-json | wall (5 probes) |
+|---|---|---|---|---|---|---|
+| `off` | 347 tok, **wrong** | 107, ok | 608, ok | 120, ok | 29, ok | 42 s |
+| `low` | 1,110, ok | 604, ok | 1,048, ok | 704, ok | 107, ok | 122 s |
+| `medium` | 1,098, ok | 1,062, ok | 1,662, ok | 926, ok | 119, ok | 166 s |
+| `xhigh` T=0 | **7,727**, ok | 600, ok | 1,639, ok | 1,015, ok | 126, ok | **379 s** |
+| `xhigh` T=model ×3 | 1,887 / 3,482 / 6,326 | 452 / 458 / 3,545 | 1,727–3,844 | 383–1,492 | 134–160 | 64–217 s per plan |
+
+(tokens are total output; reasoning is 60–97% of it whenever thinking is on. Every run
+finished with `stop` — nothing hit the 16,384 ceiling.)
+
+Three things, in order of how much they change the plan:
+
+1. **Sprint 17's `xhigh` "spiral" was a clip, not a loop.** At a 16k budget `xhigh`
+   terminated on all five probes at T=0; the plan-migration answer that came back EMPTY at
+   4,096 in sprint 17 needed 7,727 tokens and 4.4 minutes here. Sprint 17's prediction
+   ("if the variance collapses once the budget fits, the explanation is confirmed") is
+   half-confirmed: the *termination* variance collapses; the *length* variance does not.
+   At the model's own sampling the same plan prompt used 1,887, 3,482 and 6,326 tokens on
+   three draws — a 3.4× spread in wall-clock on one task with no change in input.
+2. **More thinking did not buy a better answer on any of these probes, and less bought a
+   worse one.** Read side by side, `low` and `medium` produced the best migration plans:
+   explicit lag checks (`pg_last_wal_receive_lsn` against `pg_current_wal_lsn`), parity
+   checks, a rollback that works because A was never destroyed. `xhigh` spent 7× the time
+   and returned a terser plan — correct, with `pg_rewind` and a DNS-TTL step the others
+   lacked, but less of a runbook. **Thinking off is the one setting that failed in
+   substance:** a dump-then-restore plan that freezes writes *after* the restore, so any
+   write between the dump and the freeze is lost, and a rollback note that says so as
+   though it were fine. The mechanical checks called two `xhigh` config explanations and
+   the thinking-off log diagnosis wrong; all three were right (the check wanted
+   `on-failure` literally and `node-exporter` with a hyphen) — a reminder that the
+   checks catch gross failures only, and the reading is the grade.
+3. **`medium` is the right resident default for Qwen3.8, and `xhigh` is a per-request
+   lever, not a serve setting.** Per-request `chat_template_kwargs` works on the plain
+   OpenAI client, so an RA (or its controller) can ask for `xhigh` on the task it judges
+   to deserve it and pay four minutes there rather than everywhere. Whether a candidate
+   can *make* that judgment is the same question the interview asks about escalation,
+   one rung down — worth a scenario of its own.
+
+Ken's floor check: the slowest thing on the table is 4.4 minutes for a migration plan at
+maximum effort, at 29.9 tok/s without the draft head. Inside "a great result that takes 2
+minutes" territory for `medium` (37 s), outside it for `xhigh` on planning tasks — which
+is another reason `xhigh` stays per-request.
+
+#### Qwen3.8, context: does inference stay solid at length? (`interview.longctx`, 131k serve, `medium`)
+
+A synthetic day of interleaved tool results — journal excerpts, `ss -tlnp` listings, `df`
+blocks, a manifest excerpt, a work-item list, across six hosts — sized with the served
+model's own `/tokenize`, with five facts planted at fixed depths and five questions asked
+one request each. `max_tokens` 2048 on the first pass.
+
+| tokens | needle | absence | contradiction | count | order | TTFT Q1 | TTFT Q2–5 | clipped at 2048 |
+|---|---|---|---|---|---|---|---|---|
+| 8,402 | 3/3 | 3/3 | 3/3 | 5/5 | 3/3 | 1.1 s | 0.13 s | — |
+| 16,814 | 3/3 | 3/3 | 3/3 | 5/5 | 3/3 | 2.1 s | 0.21 s | — |
+| 34,347 | 3/3 | **0/3** | 3/3 | 5/5 | 3/3 | 5.1 s | 0.35 s | absence |
+| 68,527 | 3/3 | **0/3** | **0/3** | 5/5 | 3/3 | 13.3 s | 0.42 s | absence, contradiction |
+| 103,204 | 3/3 | **0/3** | 3/3 | 5/5 | 3/3 | 24.8 s | 0.67 s | absence |
+| 128,805 | 3/3 | 3/3 | 3/3 | 5/5 | 3/3 | 35.4 s | 0.32 s | — |
+
+(The `order` column was 2/3 on the first scoring pass at every length: the expectation
+was a phrase the model never used — it wrote "the disk-high alert from kmon on kubsdb
+happened first", with both timestamps right, six times out of six. The rule is now "which
+event keyword the answer names first" and the stored run was re-scored; the JSON says so.)
+
+Read the columns, not the composite. **Retrieval and aggregation hold across the entire
+window**: the needle (user, IP and time of one SSH login) and the count (six `df` blocks,
+which hosts are over 80%) are perfect at every length to 128,805 tokens, and so is the
+chronology across two blocks 60k tokens apart. **Every failure in the table is the same
+artifact**: `finish_reason: length`, reasoning still running at 2,048 output tokens,
+answer empty. The cross-reference questions — "which listener appears in no manifest
+entry and no work item", "which service's live port disagrees with the manifest" — make
+`medium` think for 1,700–2,000 tokens at 8k and 16k and past the budget at 32k–96k; at
+128k the same absence question answered in 1,672 tokens. The findings doc's artifact
+class 1, on the answer side rather than the score side: a real operational constraint for
+an RA whose answer budget is set too low, and not a comprehension ceiling. The two
+clipped questions are re-run at a 6,144 budget below.
+
+**Prefix caching is the practical headline.** The first question at 129k costs 35 s of
+prefill (eager mode, ~3.6k tok/s); the next four, carrying the identical 129k transcript,
+start in a third of a second. On 0.27.1 prefix caching was off for this architecture; on
+0.28.0 it is on by default. An RA loop re-sends a growing transcript every turn — this is
+the difference between a 100k-context agent being usable and being a demo.
+

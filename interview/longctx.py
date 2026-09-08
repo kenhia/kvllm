@@ -247,11 +247,8 @@ class Day:
         return out
 
     def questions(self) -> list[dict]:
-        first = (
-            "the kvllm restart on kai"
-            if self.restart_t < self.alert_t
-            else "the disk alert on kubsdb"
-        )
+        # "first:<kw>" is scored by which of the two event keywords the answer names first
+        first = "first:restart" if self.restart_t < self.alert_t else "first:alert"
         return [
             {
                 "id": "needle",
@@ -313,8 +310,19 @@ def tokenize(base_url: str, model: str, text: str) -> int:
 
 
 def score(answer: str, expect: list[str]) -> tuple[int, int]:
+    """Substring hits, plus the `first:<kw>` rule for the order question: the event
+    keyword the answer mentions first (of alert/restart) must be the true first event."""
     a = answer.lower()
-    hits = sum(1 for e in expect if e.lower() in a)
+    hits = 0
+    for e in expect:
+        if e.startswith("first:"):
+            want = e.split(":", 1)[1]
+            pos = {k: a.find(k) for k in ("alert", "restart")}
+            found = [k for k, v in pos.items() if v >= 0]
+            if found and min(found, key=lambda k: pos[k]) == want:
+                hits += 1
+        elif e.lower() in a:
+            hits += 1
     return hits, len(expect)
 
 
@@ -327,6 +335,7 @@ def run_length(
     max_tokens: int,
     base_url: str,
     temperature: float | None,
+    only: list[str] | None = None,
 ) -> dict:
     day = Day(seed)
     # size the filler by measuring: one block ≈ tokens/blocks from a 40-block sample
@@ -352,6 +361,8 @@ def run_length(
         ntok = tokenize(base_url, model, transcript)
     rows = []
     for q in day.questions():
+        if only and q["id"] not in only:
+            continue
         msgs = [
             {"role": "system", "content": SYSTEM},
             {
@@ -448,6 +459,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--tag", default="")
+    p.add_argument(
+        "--questions", nargs="*", default=None, help="subset of question ids"
+    )
     p.add_argument("--out", default=str(OUT))
     a = p.parse_args(argv)
     kwargs = json.loads(a.kwargs) if a.kwargs else {}
@@ -460,7 +474,15 @@ def main(argv: list[str] | None = None) -> int:
     for target in a.tokens:
         print(f"[longctx] {a.model} target {target} tokens (kwargs {kwargs or '-'})")
         r = run_length(
-            client, a.model, target, a.seed, kwargs, a.max_tokens, a.base_url, temp
+            client,
+            a.model,
+            target,
+            a.seed,
+            kwargs,
+            a.max_tokens,
+            a.base_url,
+            temp,
+            a.questions,
         )
         results.append(r)
         print(f"[longctx] {target}: {r['tokens']} tokens → score {r['score']}")
@@ -484,6 +506,9 @@ def main(argv: list[str] | None = None) -> int:
         + " | ".join(q["id"] for q in results[0]["questions"])
         + " | TTFT Q1 | TTFT Q2 | wall/Q |"
     )
+    for r in results:
+        while len(r["questions"]) < 2:
+            r["questions"].append({"hits": 0, "of": 0, "ttft_s": None, "wall_s": 0})
     for r in results:
         qs = r["questions"]
         print(
