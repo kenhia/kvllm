@@ -777,3 +777,23 @@ configurations on this card, and the choice between them is the RA's design choi
 The long-context probe at 32k/64k/96k against the last of these follows; an engine that
 starts is not yet an engine that answers at 96k under the head.
 
+**And it answers at 103k under the head.** Long-context on the head-on 122,880/0.95
+serve, `medium`, 6,144 answer budget: **1.00 at 34,347 and at 103,204 tokens**, 14–16 s
+a question with prefix caching holding (Q2–5 start in ~1 s at 103k). The one miss, the
+absence question at 68,527, is a different and rarer event than the budget clips above:
+**6,095 output tokens, `finish_reason: stop`, and an empty answer** — the reasoning
+ended 49 tokens short of the 6,144 budget and no answer followed. The same question
+passed at 34k in 2,558 tokens and at 103k in 1,486. Whether the model closed its
+thinking and stopped, or the reasoning parser swallowed an answer the draft head
+mangled at the boundary, one transcript cannot say; it is one cell in nine on this serve
+and none in the thirty on the no-head serve, and it is the thing to watch if the head
+becomes resident. Either way the practical rule stands: carry ~8k as the RA's per-turn
+output ceiling on this model, and treat an empty answer after long reasoning as a
+retry, not a result.
+
+That makes the head-on 120k/0.95 configuration the most complete Qwen3.8 serve on this
+card: the full window in practice, 2× decode, and it started in 54 s with 1.5 GB to
+spare. What it gives up is concurrency (exactly one full-length request) and the
+comfort margin gemma's OOM at the same fraction shows is real on a different weight
+footprint; it should be watched under load before it becomes the resident config.
+
