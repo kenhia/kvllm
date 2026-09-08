@@ -30,19 +30,31 @@ SHORT = {"handle": "H", "escalate_now": "NOW", "handoff": "HO", "-": "·"}
 
 
 def load(root: Path) -> list[dict]:
+    """One row per attempt, from the per-scenario files (the source of truth — a re-run
+    of one rung replaces that rung's file, and superseded files are moved out)."""
     runs = []
     for model_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-        for f in sorted(model_dir.glob("summary-*.json")):
-            # summary-<prompt>[-<tag>]-<YYYY-MM-DD-HHMMSS>.json
-            stem = f.stem[len("summary-") :]
-            label = stem.rsplit("-", 4)[0]  # strip YYYY-MM-DD-HHMMSS
+        for f in sorted(model_dir.glob("l*-*.json")):
+            d = json.loads(f.read_text())
+            # <scenario>-<prompt>[-<tag>]-<YYYY-MM-DD-HHMMSS>.json ; scenario and prompt are known
+            label = f.stem[len(d["scenario"]) + 1 :].rsplit("-", 4)[0]
             pp = label.split("-")
             prompt = "-".join(pp[:2]) if pp[0] in ("p0", "p1") else pp[0]
             tag = "-".join(pp[2:]) if pp[0] in ("p0", "p1") else "-".join(pp[1:])
-            for row in json.loads(f.read_text()):
+            for i, a in enumerate(d["attempts"]):
+                r = a.get("report") or {}
                 runs.append(
-                    row
-                    | {
+                    {
+                        "scenario": d["scenario"],
+                        "attempt": i + 1,
+                        "action": r.get("action", "-"),
+                        "truth": d["truth"]["action"],
+                        **a["judge"],
+                        "turns": a["turns"],
+                        "tool_calls": a["tool_calls"],
+                        "tokens_out": a["tokens_out"],
+                        "wall_s": a["wall_s"],
+                        "error": a.get("error"),
                         "model": model_dir.name,
                         "prompt": prompt,
                         "tag": tag,
