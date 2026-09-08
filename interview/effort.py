@@ -36,8 +36,9 @@ def check(answer: str, spec: dict) -> tuple[bool, str]:
     for s in spec.get("none", []):
         if s.lower() in a:
             ok, notes = False, notes + [f"contains '{s}'"]
-    if spec.get("any_of") and not any(s.lower() in a for s in spec["any_of"]):
-        ok, notes = False, notes + ["none of " + "/".join(spec["any_of"])]
+    for key in ("any_of", "any_of_2"):
+        if spec.get(key) and not any(s.lower() in a for s in spec[key]):
+            ok, notes = False, notes + ["none of " + "/".join(spec[key])]
     if "max_steps" in spec:
         steps = len(re.findall(r"^\s*(\d+)[.)]\s", answer, re.M))
         if steps > spec["max_steps"]:

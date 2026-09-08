@@ -562,3 +562,44 @@ of the window, at the cost of leaving ~1.6 GB on a headless card for everything 
 not the engine. Queued behind the gemma phases: serve it and run the long-context probe
 at 100k against it, because an estimate is not a serve.
 
+#### gemma-4-31b-it-awq on 0.28.0, and its thinking mode switched on for the first time
+
+Served as the registry has it (fp16 KV, 16,384): 7.42 GiB KV pool, 20,765 KV tokens,
+1.27× concurrency, 30,846 MiB, 84 s cold start, 72.9 tok/s — the 0.27.1 numbers to the
+digit. Then the same serve with `chat_template_kwargs: {"enable_thinking": true}` on the
+request: the `gemma4` reasoning parser returns a populated `reasoning` field (238
+characters on a one-line arithmetic question, 128 output tokens against 4 without),
+tool calls parse unchanged, decode unchanged at 73.0 tok/s. **gemma has a working
+thinking mode on this stack and every board row was measured with it off.** What it is
+worth is the effort screen and the ladder, below.
+
+#### gemma, room to think — a binary, and a cheap one
+
+Five probes, T=0, thinking off (the board's configuration) against thinking on, then on
+at the model's own sampling three times:
+
+| setting | plan-migration | explain-config | kv-arith | log-diagnosis | strict-json | wall (5 probes) |
+|---|---|---|---|---|---|---|
+| thinking **off** | 302 tok, ok | 71, ok | 367, **arithmetic slips** | 77, ok* | 57, ok | 13 s |
+| thinking **on**, T=0 | 904, ok | 655, ok | 1,260, **exact** | 1,037, ok | 333, ok | 60 s |
+| on, model sampling ×3 | 854–972 | 631–720 | 1,219–2,026 | 710–852 | 326–334 | ~57 s/set |
+
+(*`node_exporter` with an underscore; the check wanted a hyphen. Fixed.)
+
+Three things. **Thinking on fixes gemma's arithmetic**: thinking off computed
+3.9 GiB × 1024 × 1024 as 4,128,768 KiB (it is 4,089,446) and carried the slip into both
+context figures — inside the check's tolerance, wrong by 1%; thinking on produced
+118,534 / 79,023, the exact numbers Qwen3.8 produced at every setting. On an overwatch
+agent that reads disk and memory figures, that is the difference that matters. **It is
+cheap**: gemma thinks in 440–850 tokens where Qwen3.8 at `medium` uses 500–900 and at
+`xhigh` up to 7,500, and at 73 tok/s the whole five-probe set costs 60 s against
+Qwen3.8's 166 s without the head and 74 s with it. **And it is stable**: three draws at
+the model's own sampling stayed within 15% of each other on every probe (Qwen3.8's
+`xhigh` spread 3.4× on the same plan prompt). The plans read as equivalent — gemma
+reaches for logical replication with thinking off and streaming replication with it on,
+both correct, both with a rollback.
+
+So gemma's gloves come off for the cost of a ~5× longer answer that still lands in
+seconds. What its thinking cannot buy is context: the window is the constraint, and that
+is the fp8-KV phase.
+
