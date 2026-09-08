@@ -921,3 +921,60 @@ removed (a resume from those logs would have been artifact number three), and bo
 re-baselines ran a third time. Two guards from one night; both belong to the class the
 findings doc calls "the layers nobody thinks of as the harness".
 
+### The re-baselines, third time, clean (WI-1962 closed)
+
+Both models, N=3, five ranked suites, on vLLM 0.28.0 / inspect-ai 0.3.263, each on its
+own engine this time, published as the median run under the `2026-09-08` key:
+
+| suite | gemma, sprint 18 (0.27.1) | **gemma, 0.28.0** | band | Qwen3.8, sprint 18 (0.27.1) | **Qwen3.8, 0.28.0** | band |
+|---|---|---|---|---|---|---|
+| tools | 100% | 100% | 0.000 | 100% | 100% | 0.000 |
+| code | 100% | 100% | 0.000 | 100% | 100% | 0.070 |
+| agentic | 77% (band 0.110) | **74%** | **0.140** | 80% (band 0.140) | **72%** | **0.280** |
+| judged | 77% | 77% | 0.000 | 95% (band 0.190) | 95% | 0.030 |
+| vision | 100% | 100% | 0.000 | 93% (band 0.040) | 93% | 0.000 |
+| composite | ≈ 0.93 (rank 2) | **≈ 0.92 (rank 2)** | | ≈ 0.78 (rank 9) | **≈ 0.76 (rank 10)** | |
+| cold start | 90 s | 80 s | | 58 s | 48 s | |
+| VRAM | 30,846 MiB | 30,846 MiB | | 28,554 MiB | 28,858 MiB | |
+
+**The stack move did not change the board.** Every suite either reproduces sprint 18 to
+the digit or moves inside its own band; the composite shifts are `agentic` medians moving
+within noise. The one number worth a sentence is Qwen3.8's **`agentic` band of 0.280**
+(0.66–0.94 on three runs) against 0.140 in sprint 18 — the widest band the board has
+recorded. Three runs cannot say whether 0.28.0's default-on prefix caching changed the
+episodes' behaviour or the suite simply drew wide; the findings doc already calls
+`agentic` the noisy suite, and this is more of that. Its `judged` band, by contrast,
+collapsed from 0.190 to 0.030 (92–95%) — the single-run 78% of sprint 18 did not recur.
+
+**What was re-measured and what was not.** The local per-suite bands above are the new
+floor for local-vs-local comparisons on this stack; `eval-config.toml`'s `[noise]`
+composite band (0.036) is driven by the frontier baseline, which was **not** re-run — a
+sonnet round costs ~$0.9 a run and needs Ken's confirmation at launch, per the standing
+gate — so that figure stays as measured on 2026-08-20 and is now a lower bound on a
+different harness. `assisted` was not repeated either (weight 0, band 0.250; its board
+values carry forward from 2026-09-07). **WI-1502 gets larger, as predicted:** two rows now
+sit on 0.28.0 and sixteen on 0.24–0.27.
+
+**Two harness guards came out of getting here** (recorded above): `kvllm.repeat` refuses
+a noise-floor key that already holds a finished repeat, and `evalctl.serving` refuses to
+start behind a port that already answers. The first cost sprint 18's gemma per-case logs
+under `eval-logs/`; the second cost an evening. Neither will recur.
+
+## Gate
+
+`just check` green: ruff clean, 252 unit tests, 14 client-lib tests. The service was
+restarted by the overnight queue from the working tree and is serving
+`gemma-4-31b-it-awq` at 30,846 MiB with `NRestarts=0` — but four serve-path files changed
+this sprint (`kvllm/registry.py`, `models.toml`, `pyproject.toml`, `uv.lock`), so
+`deploy-kvllm` should run from merged `main` at ship time as usual; it will restart the
+same configuration on committed code and stamp it.
+
+## Not done, on purpose
+
+- **Changing the resident model.** The recommendation is Qwen3.8; the switch is Ken's
+  call (WI-1973). gemma's registry entry should also change (fp8 KV, 32k+, thinking on) —
+  a one-line edit that changes what the board measures, so it belongs to the sprint that
+  re-scores it, not this one.
+- **Building the RA.** WI-1977 (kyac budgets) and WI-1978 (the ladder's next rungs) carry
+  what this sprint learned into it.
+- **The frontier baseline on the new harness.** Needs Ken's go, ~$3 for N=3.
