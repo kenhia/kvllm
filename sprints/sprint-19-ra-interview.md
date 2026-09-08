@@ -259,3 +259,101 @@ start in a third of a second. On 0.27.1 prefix caching was off for this architec
 0.28.0 it is on by default. An RA loop re-sends a growing transcript every turn — this is
 the difference between a 100k-context agent being usable and being a demo.
 
+**Re-run of the clipped questions at a 6,144 budget: 3/3 everywhere.**
+
+| tokens | absence | contradiction | output tokens (absence / contradiction) |
+|---|---|---|---|
+| 34,347 | 3/3 | 3/3 | 2,822 / 1,589 |
+| 68,527 | 3/3 | 3/3 | 3,805 / 1,270 |
+| 103,204 | 3/3 | 3/3 | 2,346 / 1,390 |
+
+So **Qwen3.8 at `medium` holds the full 128k window on RA-shaped content** — every one of
+the 30 question-length cells passes once the answer budget is not the constraint. And
+the answers are careful in a way the score cannot show: the contradiction answer at 64k
+adds "other snapshots of the same host do show kmon on 9100, so this appears to be a
+transient or recent port change" — which is exactly what the fixture contains (one
+overridden `ss` block among several normal ones), noticed and qualified rather than
+flattened into a verdict. The cost is the reasoning: 1,300–3,800 output tokens for a
+cross-reference over 100k of transcript, 45–150 s a question at 30 tok/s.
+
+The envelope requirement this leaves for whoever builds the RA: **an answer budget of at
+least ~6k tokens for cross-referencing tasks at `medium`**, and per-request `xhigh`
+should assume more. kyac's 16,384 local context with an 11,468 edit trigger (WI-1954's
+"name the requirement, do not go widen kyac") is now visibly the wrong shape for this
+model: the window is 8× larger and the reasoning alone can exceed a third of kyac's
+whole budget.
+
+One answer looked like a hallucination and was the opposite. At 103k the absence answer
+reported *two* unaccounted listeners where the fixture plants one: `kbeacon:8931` and
+`kmon:9105` — the second being the planted port contradiction, which at the
+(service, port) level indeed matches no manifest entry and no work item. It explained
+the distinction in a table. That is a stricter reading of the question than the question
+intended, and the right instinct for an overwatch agent.
+
+### Step 3 — the interview (WI-1973)
+
+#### The harness lied first
+
+The first pass of the ladder against Qwen3.8 ended with **no verdict on three of the first
+four scenarios** — fourteen turns, 25–38 tool calls each, `report` never called. Read
+the transcripts before reading anything into that: the candidate asked the world
+`systemctl --failed --no-pager; echo ---; systemctl list-units …` and got
+`bash: systemctl: command not found`; asked `ls -la /` and got `cannot access '/'`;
+asked `ps aux` and got nothing. The world was a lookup table keyed on exact command
+strings, with a "command not found" fallback for anything else. Qwen3.8 did what a good
+operator does with a shell that contradicts itself: it stopped investigating the task and
+investigated the shell — `echo hello`, `/bin/ls`, `type ls`, `echo $PATH`, `cat
+/etc/hostname` — and, at turn 12, wrote *"the shell on kubsdb is behaving very oddly —
+`date` and `echo` work but `ls`, `cat`, `printf`, `id`, `whoami`, `pwd` are all
+failing"*, and declined to conclude anything. That is the calibration behaviour the
+interview exists to find, produced by a harness bug, and it would have been scored
+`no-verdict` seven times.
+
+`docs/findings/evaluating-local-models.md`'s prime rule, one level down again: the
+fixture is part of the harness. `interview/world.py` is now a small fake shell — chains,
+pipes into head/tail/grep/wc/sort/uniq, redirections, fixture keys matched as ordered
+token subsequences so `journalctl -u kmon -n 200 --no-pager` finds `journalctl -u kmon`,
+and generic coreutils on every host (a plausible filesystem, `ps` from the host's
+services, `systemctl list-units`/`--failed`/`is-active` derived from the fixture's status
+entries, `journalctl` without a unit as the merge of the host's journals), with anything
+genuinely absent failing the way bash fails. Re-run of the postgres scenario through it:
+`escalate_now`, confidence 0.9, seven turns, 46 s, a finding that quotes the OOM kill,
+the failed restart, the dependents and the memory pressure. The first pass's results
+were deleted rather than kept as evidence of anything about the model.
+
+#### Qwen3.8 with the draft head (`speculative_config = { method = "mtp", num_speculative_tokens = 3 }`, 65,536)
+
+Sprint 18 measured the head unranked and left two questions open: is quality unchanged
+under it, and what does it cost in context. Both answered on 0.28.0:
+
+| | no head, 131,072 | **head, 65,536** |
+|---|---|---|
+| KV pool / KV tokens | 4.51 GiB / 136,897 | 3.23 GiB / 72,557 |
+| KiB per token (incl. draft KV) | 34.5 | 46.7 |
+| VRAM / cold start | 28,998 MiB / 65 s | 29,516 MiB / 58 s |
+| decode | 29.9 tok/s | **60.5 tok/s (2.0×)** |
+| effort screen, 5 probes at `medium`, T=0 | 166 s, 4/5 ok* | **74 s, 5/5 ok** |
+| long-context, `medium`, 6k answer budget | 1.00 to 128,805 | 1.00 to 57,634 |
+
+(*the "fail" was the check, see above.) 0.27.1 measured 1.84× on the head; 0.28.0's fused
+GDN MTP decode kernel (#51674) makes it a clean 2×.
+
+**Quality is preserved in substance, not in bytes.** At T=0 the arithmetic probe returns
+the identical `a=3.9 b=118534 c=79023` with or without the head and the JSON probe is
+byte-identical; the prose answers differ in wording (sequence similarity 0.2–0.3 against
+the no-head run) while passing the same checks and reading as the same quality. So
+speculative decoding on this stack is not bit-reproducible at greedy — NVFP4/fp8 numerics
+under a different verification batch shape — and any "local models are deterministic"
+claim has to say *without the draft head*. For an RA it does not matter; for a
+noise-floor measurement it does.
+
+**Context under the head:** 57,634 tokens of interleaved tool output, five questions,
+5/5 correct, 23–32 s a question. The first attempt at 61k bounced with a 400 — 59,393
+prompt + 6,144 answer = 65,537, one token over the window — which is a sizing lesson
+rather than a ceiling: `interview.longctx` now reads the served window from `/v1/models`
+and caps its targets. Ceilings above 65,536 with the head on are probed in the next
+phase. One more thing the numbers show: with a 3.23 GiB pool and 1.11× concurrency at
+64k, **prefix caching has no headroom** — a 57k prefix does not survive an interleaved
+request (Q2's TTFT was 32 s, not 0.3 s, while the interview shared the serve). The
+draft head's real cost is KV pool, and KV pool is what both context and caching live on.
+

@@ -297,6 +297,35 @@ SYSTEM = (
 )
 
 
+def served_max_len(base_url: str, model: str) -> int | None:
+    """vLLM reports the served window on /v1/models; None if it does not."""
+    try:
+        with urllib.request.urlopen(base_url.rstrip("/") + "/models", timeout=30) as r:
+            for m in json.load(r).get("data", []):
+                if m.get("id") == model and m.get("max_model_len"):
+                    return int(m["max_model_len"])
+    except Exception:
+        return None
+    return None
+
+
+def cap_targets(
+    targets: list[int], max_len: int | None, max_tokens: int, margin: int = 768
+) -> list[int]:
+    """Drop or clamp targets that cannot fit with the answer budget: the generator
+    overshoots by up to 5%, and a request one token over the window is a 400, not a
+    measurement. Duplicates after clamping collapse to one."""
+    if not max_len:
+        return targets
+    limit = int((max_len - max_tokens - margin) / 1.05)
+    out: list[int] = []
+    for t in targets:
+        c = min(t, limit)
+        if c > 0 and c not in out:
+            out.append(c)
+    return out
+
+
 def tokenize(base_url: str, model: str, text: str) -> int:
     url = base_url.rsplit("/v1", 1)[0] + "/tokenize"
     req = urllib.request.Request(
@@ -471,7 +500,13 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y-%m-%d-%H%M%S")
     results = []
-    for target in a.tokens:
+    max_len = served_max_len(a.base_url, a.model)
+    targets = cap_targets(a.tokens, max_len, a.max_tokens)
+    if targets != a.tokens:
+        print(
+            f"[longctx] served window {max_len}: targets capped to {targets} for a {a.max_tokens}-token answer budget"
+        )
+    for target in targets:
         print(f"[longctx] {a.model} target {target} tokens (kwargs {kwargs or '-'})")
         r = run_length(
             client,

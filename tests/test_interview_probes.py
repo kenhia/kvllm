@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from interview.effort import PROBES, check
-from interview.longctx import MANIFEST, Day, score
+from interview.longctx import MANIFEST, Day, cap_targets, score
 
 
 def test_day_plants_every_fact_and_questions_find_them():
@@ -79,3 +79,10 @@ def test_effort_checks():
         probes["constrained-json"]["check"],
     )[0]
     assert not check("", probes["constrained-json"]["check"])[0]
+
+
+def test_cap_targets_fits_the_window():
+    # 65536 window, 6144 answer, 768 margin → 58624 / 1.05 ≈ 55832 usable target
+    assert cap_targets([8192, 32768, 61440], 65536, 6144) == [8192, 32768, 55832]
+    assert cap_targets([61440, 65536], 65536, 6144) == [55832]
+    assert cap_targets([8192], None, 6144) == [8192]
