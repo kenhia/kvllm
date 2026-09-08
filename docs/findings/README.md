@@ -22,6 +22,13 @@ or planning local-agent projects, and for sharing.
   It masqueraded as an upstream vLLM bug with a real file and line number. Carries the
   five-line reproduction and the lesson: once a *second, unrelated* model fails the same
   way, drop to bare metal instead of investigating further inside the stack.
+- [`ra-interview-2026-09.md`](ra-interview-2026-09.md) — **hiring a resident agent: the
+  forest, not the trees.** Why the ranked board could not separate the two candidates, what
+  the interview measured instead (four ways an on-call engineer can be wrong), where
+  Qwen3.8 did better and why (it keeps looking, it notices absence, it says how sure it
+  is, it holds 128k), where gemma still shines (thinking on, fp8 KV, speed, vision), what
+  surprised us, and what it means for building the RA. **Dated — a September 2026
+  snapshot**; the next candidate runs the same interview.
 - [`local-vs-frontier-2026-07.html`](local-vs-frontier-2026-07.html) — rich self-contained
   report (charts, findings, methodology overview) prepared for the All-The-Vibes community.
   Open in a browser; safe to share as a single file. Generated from live board data by a

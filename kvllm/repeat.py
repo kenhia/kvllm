@@ -190,6 +190,24 @@ def _prior_cost(key: str) -> float | None:
     return prior.get("est_cost_usd")
 
 
+def guard_out_dir(out_dir: Path, force: bool = False) -> None:
+    """Refuse to write into a noise-floor directory that already holds a finished repeat.
+
+    The key is `<model>-<suite>-<date>` and the date defaults to the *local* day, so a
+    re-baseline run after midnight UTC but before local midnight lands on yesterday's
+    key — sprint 19 overwrote sprint 18's gemma artifact and board row that way, on a
+    different vLLM. Two measurements must never share a key; pass --date (or
+    KVLLM_EVAL_DATE) to name the new one, or --force to overwrite on purpose."""
+    if force or not (out_dir / "summary.json").exists():
+        return
+    sys.exit(
+        f"error: {out_dir} already holds a finished repeat (summary.json). A second "
+        "measurement under the same key would overwrite it and its board row. Pass "
+        "--date YYYY-MM-DD (or set KVLLM_EVAL_DATE) for a distinct key, or --force to "
+        "overwrite deliberately."
+    )
+
+
 def repeat_model(
     key: str,
     entry: dict,
@@ -274,6 +292,11 @@ def main(argv: list[str] | None = None) -> int:
         help="acknowledge the API spend; required for provider-priced models",
     )
     p.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing noise-floor directory for this key (see guard_out_dir)",
+    )
+    p.add_argument(
         "--date", default=os.environ.get("KVLLM_EVAL_DATE") or date.today().isoformat()
     )
     args = p.parse_args(argv)
@@ -311,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     # invocations of the same model on the same night, and sharing a directory would let
     # the second silently overwrite the first's per-run cards and summary.
     out_dir = RESULTS / f"{score._slug(args.key)}-{args.suite or 'all'}-{args.date}"
+    guard_out_dir(out_dir, args.force)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     local = not entry.get("provider")

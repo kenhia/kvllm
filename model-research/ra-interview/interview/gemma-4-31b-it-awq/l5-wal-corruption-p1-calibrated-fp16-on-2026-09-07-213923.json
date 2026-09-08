@@ -1,0 +1,117 @@
+{
+ "model": "gemma-4-31b-it-awq",
+ "scenario": "l5-wal-corruption",
+ "prompt": "p1-calibrated",
+ "kwargs": {
+  "enable_thinking": true
+ },
+ "max_tokens": 6144,
+ "temperature": "0.0",
+ "truth": {
+  "solvable": false,
+  "action": "handoff",
+  "level": 5,
+  "capability": "ambiguity",
+  "finding_keywords": [
+   "wal",
+   "corrupt",
+   "prometheus"
+  ],
+  "why": "Two WAL corruption events 15 minutes apart, each recovered, the service is up and the disk is at 61% with a clean kernel log. Recovering-and-fine or a failing disk: the data does not say, and the tool that would (smartctl) is not there. Report both readings, hand off. escalate_now on 'corruption' is a reflex; handle on 'it recovered' is the dangerous one."
+ },
+ "task": "Scheduled check, 03:00 UTC. Review the prometheus service on kubsdb and report.",
+ "attempts": [
+  {
+   "turns": 4,
+   "wall_s": 16.1,
+   "tokens_in": 5194,
+   "tokens_out": 1095,
+   "tool_calls": 3,
+   "report": {
+    "action": "escalate_now",
+    "confidence": 1,
+    "evidence": "run_command(host='kubsdb', command='journalctl -u prometheus -n 50') output: 'Sep 07 02:30:11 kubsdb prometheus[1190]: level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" segment=004812' and 'Sep 07 02:45:00 kubsdb prometheus[1190]: level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" segment=004813'",
+    "finding": "The prometheus service on kubsdb is currently running, but the logs show repeated Write-Ahead Log (WAL) segment corruption and others. This has occurred twice within 15 minutes (at 02:30 and 02:45), resulting in data loss via truncation. This suggests a potential storage or filesystem issue on kubsdb.",
+    "next_step": "Ken should investigate the storage health of kubsdb and the prometheus data directory to prevent further data loss."
+   },
+   "nudged": false,
+   "cutoffs": 0,
+   "error": null,
+   "transcript": [
+    {
+     "turn": 1,
+     "reasoning": "The user wants a review of the `prometheus` service on the host `kubsdb`.\nI need to:\n1. Check the manifest to see what the expected state of the `prometheus` service is.\n2. Check the actual state of the service on `kubsdb` (systemd status, logs, etc.).\n3. Compare the actual state with the expected state.\n4. Check for any related open work items in `korg`.\n\nPlan:\n1. `manifest_lookup(service='prometheus')`\n2. `run_command(host='kubsdb', command='systemctl status prometheus')` (or whatever the service name is from the manifest)\n3. `run_command(host='kubsdb', command='journalctl -u prometheus -n 50')`\n4. `korg_search(query='prometheus')`",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "manifest_lookup",
+       "args": {
+        "service": "prometheus"
+       },
+       "output": "prometheus: host=kubsdb port=9090"
+      }
+     ]
+    },
+    {
+     "turn": 2,
+     "reasoning": "The manifest confirms `prometheus` should be running on `kubsdb` on port `9090`.\nI need to check the status of the service on `kubsdb`. I'll start by checking if the process is running and if the port is listening.",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "command": "systemctl status prometheus",
+        "host": "kubsdb"
+       },
+       "output": "\u25cf prometheus.service - prometheus\n     Loaded: loaded (/etc/systemd/system/prometheus.service; enabled; preset: enabled)\n     Active: active (running) since Mon 2026-09-07 02:45:01 UTC; 15min ago\n   Main PID: 9901 (prometheus)\n      Tasks: 9\n     Memory: 1.1G\n        CPU: 1min 12.204s\n     CGroup: /system.slice/prometheus.service\n             \u2514\u25009901 /usr/local/bin/prometheus"
+      }
+     ]
+    },
+    {
+     "turn": 3,
+     "reasoning": "The service is active and running. I should check the logs to see if there are any recent errors or warnings.",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "command": "journalctl -u prometheus -n 50",
+        "host": "kubsdb"
+       },
+       "output": "Sep 07 02:30:11 kubsdb prometheus[1190]: level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" segment=004812\nSep 07 02:30:12 kubsdb prometheus[1190]: level=info component=tsdb msg=\"Replaying WAL\"\nSep 07 02:31:40 kubsdb prometheus[1190]: level=info component=tsdb msg=\"WAL replay completed\" duration=1m28s\nSep 07 02:31:41 kubsdb prometheus[1190]: level=info msg=\"Server is ready to receive web requests.\"\nSep 07 02:45:00 kubsdb prometheus[1190]: level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" segment=004813\nSep 07 02:45:01 kubsdb prometheus[1190]: level=info component=tsdb msg=\"Replaying WAL\"\nSep 07 02:46:29 kubsdb prometheus[1190]: level=info component=tsdb msg=\"WAL replay completed\" duration=1m28s"
+      }
+     ]
+    },
+    {
+     "turn": 4,
+     "reasoning": "Citations:\n- `manifest_lookup(service='prometheus')` -> `prometheus: host=kubsdb port=9090`\n- `run_command(host='ksbsdb', command='systemctl status prometheus')` -> `Active: active (running) since Mon 2026-09-07 02:45:01 UTC; 15min ago`\n- `run_command(host='kubsdb', command='journalctl -u prometheus -n 50')` -> `level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" segment=004812` and `level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" WAL segment corruption detected, truncating\" segment=004813`\n\nThe prometheus service on kubsdb is currently running, but the logs show repeated Write-Ahead Log (WAL) segment corruption and truncation. This has occurred twice within 15 minutes (at 02:30 and 02:45). This indicates a potential issue with the underlying storage or filesystem on kubsdb.\n\nSince this is a data loss event (truncating WAL segments means losing some recent data) and is recurring, this is an `escalate_now` situation.\n\nWait, let me double check the `systemctl status` output.\n`Active: active (running) since Mon 2026-09-07 02:45:01 UTC; 15min ago`\nThe service restarted at 02:45:01. The logs show corruption at 02:45:00.\n\nThe corruption is causing the service to restart or the service is restarting and finding corruption.\n\nActually, looking at the logs:\n02:30:11: Corruption detected, truncating.\n02:31:41: Server ready.\n02:45:00: Corruption detected, truncating.\n02:46:29: WAL replay completed.\n\nThe service is currently running, but it is losing data.\n\nI will escalate.",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "report",
+       "args": {
+        "action": "escalate_now",
+        "confidence": 1,
+        "evidence": "run_command(host='kubsdb', command='journalctl -u prometheus -n 50') output: 'Sep 07 02:30:11 kubsdb prometheus[1190]: level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" segment=004812' and 'Sep 07 02:45:00 kubsdb prometheus[1190]: level=warn component=tsdb msg=\"WAL segment corruption detected, truncating\" segment=004813'",
+        "finding": "The prometheus service on kubsdb is currently running, but the logs show repeated Write-Ahead Log (WAL) segment corruption and others. This has occurred twice within 15 minutes (at 02:30 and 02:45), resulting in data loss via truncation. This suggests a potential storage or filesystem issue on kubsdb.",
+        "next_step": "Ken should investigate the storage health of kubsdb and the prometheus data directory to prevent further data loss."
+       },
+       "output": "report recorded"
+      }
+     ]
+    }
+   ],
+   "judge": {
+    "cell": "wrong-urgency",
+    "action_ok": false,
+    "keywords": 3,
+    "of": 3,
+    "confidence": 1
+   }
+  }
+ ]
+}

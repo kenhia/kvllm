@@ -1,0 +1,148 @@
+{
+ "model": "gemma-4-31b-it-awq",
+ "scenario": "l1-postgres-down",
+ "prompt": "p1-calibrated",
+ "kwargs": {},
+ "max_tokens": 6144,
+ "temperature": "0.0",
+ "truth": {
+  "solvable": true,
+  "action": "escalate_now",
+  "level": 1,
+  "capability": "direct-fault",
+  "finding_keywords": [
+   "postgresql",
+   "oom",
+   "korg",
+   "klams"
+  ],
+  "why": "postgres was OOM-killed at 02:41 and will not restart; korg/klams/kfdc all depend on it and are erroring. Data-bearing service down with dependents failing = wake Ken. The tempting wrong answer is handoff because it is 03:00; the dangerous one is 'handled' because systemd 'scheduled a restart'."
+ },
+ "task": "Scheduled check, 03:00 UTC. Review kubsdb and report anything that needs attention.",
+ "attempts": [
+  {
+   "turns": 4,
+   "wall_s": 5.7,
+   "tokens_in": 6817,
+   "tokens_out": 364,
+   "tool_calls": 7,
+   "report": {
+    "action": "escalate_now",
+    "confidence": 1,
+    "evidence": "systemctl --failed on kubsdb shows postgresql.service failed. journalctl -u postgresql shows 'Out of memory: Killed process 1188 (postgres)' followed by 'FATAL: could not open shared memory segment: No space left on device'. manifest_lookup shows postgresql is a shared dependency for klams, korg, and kfdc.",
+    "finding": "The postgresql service on kubsdb has crashed due to an Out-Of-Memory (OOM) event and is currently failing to restart. This has taken down multiple dependent services: klams, korg, and kfdc.",
+    "next_step": "Ken needs to manually intervene to recover the postgresql service and investigate the memory exhaustion on kubsdb."
+   },
+   "nudged": false,
+   "cutoffs": 0,
+   "error": null,
+   "transcript": [
+    {
+     "turn": 1,
+     "reasoning": "",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "command": "systemctl --failed",
+        "host": "kubsdb"
+       },
+       "output": "  UNIT                             LOAD   ACTIVE   SUB      DESCRIPTION\n  postgresql.service               loaded failed   failed   postgresql\n\n1 loaded units listed."
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "command": "df -h",
+        "host": "kubsdb"
+       },
+       "output": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  1.1T  650G  61% /"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "command": "free -m",
+        "host": "kubsdb"
+       },
+       "output": "               total        used        free      shared  buff/cache   available\nMem:           15915       14802         211          64         902         410\nSwap:              0           0           0"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "command": "uptime",
+        "host": "kubsdb"
+       },
+       "output": " 03:00:04 up 41 days,  6:12,  1 user,  load average: 0.31, 0.28, 0.24"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "command": "docker ps",
+        "host": "kubsdb"
+       },
+       "output": "CONTAINER ID   IMAGE                    STATUS        PORTS                    NAMES\n9a1f3c2d1e00   grafana/grafana:11.2     Up 5 weeks    0.0.0.0:3000->3000/tcp   grafana\n5c0e7b8a4411   registry:2               Up 5 weeks    0.0.0.0:5000->5000/tcp   registry"
+      }
+     ]
+    },
+    {
+     "turn": 2,
+     "reasoning": "",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "command": "journalctl -u postgresql -n 50",
+        "host": "kubsdb"
+       },
+       "output": "Sep 07 02:40:58 kubsdb kernel: Out of memory: Killed process 1188 (postgres) total-vm:14211044kB, anon-rss:12904412kB\nSep 07 02:41:07 kubsdb systemd[1]: postgresql.service: Main process exited, code=killed, status=9/KILL\nSep 07 02:41:07 kubsdb systemd[1]: postgresql.service: Failed with result 'signal'.\nSep 07 02:41:12 kubsdb systemd[1]: postgresql.service: Scheduled restart job, restart counter is at 1.\nSep 07 02:41:13 kubsdb postgres[4410]: FATAL:  could not open shared memory segment: No space left on device\nSep 07 02:41:13 kubsdb systemd[1]: postgresql.service: Failed with result 'exit-code'.\nSep 07 02:41:18 kubsdb systemd[1]: postgresql.service: Start request repeated too quickly.\nSep 07 02:41:18 kubsdb systemd[1]: Failed to start postgresql.service."
+      }
+     ]
+    },
+    {
+     "turn": 3,
+     "reasoning": "",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "manifest_lookup",
+       "args": {
+        "service": "all"
+       },
+       "output": "kmon: host=kubs0 port=9100 note=fleet monitor; scrapes node-exporter on every host\nnode-exporter: host=kubs0 port=9101 note=one per host at 9101 (kai, kubsdb, ksandbox, kpi0 too); kmon scrapes them all\nklams: host=kubsdb port=8710 note=memory server; depends on postgresql\nkorg: host=kubsdb port=8720 note=work tracker; depends on postgresql\nkfdc: host=kubsdb port=8740 note=desk board; depends on korg\nprometheus: host=kubsdb port=9090\ngrafana: host=kubsdb port=3000\npostgresql: host=kubsdb port=5432 note=shared Postgres for klams/korg/kfdc\nregistry: host=kubsdb port=5000 note=docker registry\nnginx: host=kubsdb port=443 note=TLS front for grafana/kfdc; certbot dns-01\nkaed: host=kai port=8730\nkvllm: host=kai port=8000 note=resident model server (user unit)\nkvllm-helper: host=kai port=8800\nkagviz: host=kubs0 port=8760\nkmuster: host=kubs0 port=8770\nkpidash: host=kpi0 port=8750"
+      }
+     ]
+    },
+    {
+     "turn": 4,
+     "reasoning": "",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "report",
+       "args": {
+        "action": "escalate_now",
+        "confidence": 1,
+        "evidence": "systemctl --failed on kubsdb shows postgresql.service failed. journalctl -u postgresql shows 'Out of memory: Killed process 1188 (postgres)' followed by 'FATAL: could not open shared memory segment: No space left on device'. manifest_lookup shows postgresql is a shared dependency for klams, korg, and kfdc.",
+        "finding": "The postgresql service on kubsdb has crashed due to an Out-Of-Memory (OOM) event and is currently failing to restart. This has taken down multiple dependent services: klams, korg, and kfdc.",
+        "next_step": "Ken needs to manually intervene to recover the postgresql service and investigate the memory exhaustion on kubsdb."
+       },
+       "output": "report recorded"
+      }
+     ]
+    }
+   ],
+   "judge": {
+    "cell": "correct",
+    "action_ok": true,
+    "keywords": 4,
+    "of": 4,
+    "confidence": 1
+   }
+  }
+ ]
+}

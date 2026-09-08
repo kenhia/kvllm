@@ -41,3 +41,16 @@ def test_serve_error_empty_log(tmp_path):
 
 def test_serve_error_missing_file(tmp_path):
     assert serve_error(tmp_path / "nope.log") == ""
+
+
+def test_refuse_if_port_answers(monkeypatch):
+    import pytest
+
+    from kvllm import evalctl
+
+    monkeypatch.setattr(evalctl, "wait_port_healthy", lambda port, timeout_s=1: False)
+    evalctl.refuse_if_port_answers(8000)  # nothing there: fine
+    monkeypatch.setattr(evalctl, "wait_port_healthy", lambda port, timeout_s=1: True)
+    with pytest.raises(RuntimeError) as e:
+        evalctl.refuse_if_port_answers(8000)
+    assert "already answers" in str(e.value)

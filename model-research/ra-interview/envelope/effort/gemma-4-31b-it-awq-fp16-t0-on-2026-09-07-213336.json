@@ -1,0 +1,81 @@
+{
+ "model": "gemma-4-31b-it-awq",
+ "kwargs": {
+  "enable_thinking": true
+ },
+ "max_tokens": 8192,
+ "temperature": "0.0",
+ "n": 1,
+ "runs": [
+  {
+   "answer": "To achieve near-zero downtime, this plan utilizes **Streaming Replication**, allowing Machine B to stay synchronized with Machine A until the moment of cutover.\n\n1. **Prepare Machine B:** Install the exact same version of PostgreSQL as Machine A. Configure `pg_hba.conf` on Machine A to allow replication connections from Machine B's IP.\n2. **Initial Synchronization:** Run `pg_basebackup` on Machine B to clone the data directory from Machine A while the database is online.\n3. **Establish Warm Standby:** Start PostgreSQL on Machine B in standby mode. Verify that it is actively replicating changes from Machine A using `pg_stat_replication`.\n4. **Cutover (The Downtime Window):** Stop application traffic $\\rightarrow$ promote Machine B to primary using `pg_ctl promote` $\\rightarrow$ update application connection strings/DNS to point to Machine B.\n5. **Verification:** Perform a quick smoke test of the application to ensure read/write connectivity and data consistency on Machine B.\n6. **Rollback:** If verification fails, immediately revert application connection strings/DNS to point back to Machine A and restart the application services.",
+   "reasoning": "\n*   Goal: Migrate PostgreSQL from Machine A to Machine B.\n*   Environment: Homelab.\n*   Constraint 1: Downtime < 5 minutes.\n*   Constraint 2: Explicit rollback step.\n*   Constraint 3: Max 6 numbered steps.\n\n    *   *Option 1: pg_dump/pg_restore.* Too slow for large DBs, high downtime.\n    *   *Option 2: Logical Replication.* Low downtime, allows syncing before cutover. Best for this constraint.\n    *   *Option 3: Physical Replication (Streaming).* Low downtime, but requires identical versions/configs. Good for homelabs.\n    *   *Option 4: File system snapshot (rsync/ZFS).* Fast, but requires stopping the DB on A first. Might exceed 5 mins if data is large.\n\n    *Decision:* Logical Replication is the gold standard for near-zero downtime, but for a homelab, a \"Warm Standby\" (Streaming Replication) followed by a promotion is often simpler and faster to set up. However, to ensure the *absolute* minimum downtime, I'll use a combination of a base backup and streaming replication.\n\n    *   Step 1: Setup Machine B (Install Postgres, config).\n    *   Step 2: Initial Sync (pg_basebackup).\n    *   Step 3: Establish Streaming Replication (Machine B follows Machine A).\n    *   Step 4: Cutover (Stop apps, promote B, update DNS/IP).\n    *   Step 5: Verification.\n    *   Step 6: Rollback (if things break).\n\n    *Wait, the prompt asks for a \"plan\" and \"at most 6 numbered steps.\" I need to integrate the rollback into the flow or as a specific step.*\n\n    *Revised Steps:*\n    1.  **Prepare Machine B:** Install PostgreSQL (same version) and configure `pg_hba.conf` to allow replication from Machine A.\n    2.  **Initial Sync:** Use `pg_basebackup` on Machine B to clone Machine A's data directory while A is running.\n    3.  **Enable Streaming:** Start PostgreSQL on Machine B as a standby; verify it is actively replicating from Machine A.\n    4.  **Cutover:** Stop application traffic $\\rightarrow$ promote Machine B to primary (`pg_ctl promote`) $\\rightarrow$ update application connection strings to Machine B's IP.\n    5.  **Verification:** Run health checks on the application to ensure connectivity and data integrity.\n    6.  **Rollback:** If verification fails, point application connection strings back to Machine A and restart the service.\n\n    *   Downtime < 5 mins? Yes. The only downtime is the \"Cutover\" window (stopping apps, promoting B, updating IP).\n    *   Rollback included? Yes.\n    *   Max 6 steps? Yes.\n\n    *   *Self-Correction during drafting:* Make sure to mention the version must match. Ensure the \"promote\" command is clear.",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.18,
+   "wall_s": 12.9,
+   "completion_tokens": 904,
+   "prompt_tokens": 64,
+   "id": "plan-migration",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "This service runs a vLLM OpenAI-compatible server using the `uv` package manager and a model specified in an environment file. It will automatically restart after 5 seconds if the process crashes or fails. One caveat is the unusually long 15-minute startup timeout, meaning systemd will wait a significant amount of time before reporting a start failure.",
+   "reasoning": "\n*   Input: A systemd user unit file.\n*   Goal: Explain it to a colleague.\n*   Constraints:\n    *   2-4 plain sentences.\n    *   Must cover: What runs, when it restarts, and one operational caveat.\n\n    *   `Description`: vLLM OpenAI-compatible server.\n    *   `WorkingDirectory`: `/home/ken/src/ai/kvllm`.\n    *   `EnvironmentFile`: Loads variables from `/home/ken/src/ai/kvllm/deploy/kvllm.env`.\n    *   `ExecStart`: Runs `uv run python -m kvllm.registry serve ${KVLLM_MODEL_KEY}`.\n    *   `Restart=on-failure`: Restarts if the process exits with a non-zero code.\n    *   `RestartSec=5`: Waits 5 seconds before restarting.\n    *   `TimeoutStartSec=900`: Allows 15 minutes for the service to start (very long).\n    *   `TimeoutStopSec=30`: Allows 30 seconds to stop.\n    *   `WantedBy=default.target`: Standard user unit target.\n\n    *   *What runs:* A vLLM OpenAI-compatible server using `uv` and a specific model key.\n    *   *When it restarts:* Only if it crashes/fails (non-zero exit code), after a 5-second delay.\n    *   *Operational caveat:* The `TimeoutStartSec=900` is unusually high (15 minutes), meaning systemd will wait a long time before deciding the service failed to start.\n\n    *   *Draft 1:* This unit runs a vLLM OpenAI-compatible server using the `uv` package manager. It will automatically restart after 5 seconds if the process crashes. Note that it has a very long startup timeout of 15 minutes, so it might take a while for systemd to report a start failure.\n\n    *   *Draft 2 (More concise):* This service launches a vLLM OpenAI-compatible server using `uv` and a model specified in an environment file. It automatically restarts after 5 seconds if the process fails. Be aware that it has a 15-minute startup timeout, so it won't be marked as \"failed\" immediately if it hangs during initialization.\n\n    *   2-4 sentences? Yes (3 sentences).\n    *   Plain language? Yes.\n    *   What runs? vLLM server via `uv`.\n    *   When it restarts? On failure, after 5 seconds.\n    *   Operational caveat? 15-minute startup timeout.",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.12,
+   "wall_s": 9.3,
+   "completion_tokens": 655,
+   "prompt_tokens": 203,
+   "id": "explain-config",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "(a) Total available memory: $32 \\text{ GiB} \\times 0.9 = 28.8 \\text{ GiB}$.\nMemory left for KV cache: $28.8 - (21.3 + 3.6) = 28.8 - 24.9 = 3.9 \\text{ GiB}$.\n\n(b) Convert GiB to KiB: $3.9 \\times 1024 \\times 1024 = 4,089,446.4 \\text{ KiB}$.\nMax tokens: $4,089,446.4 / 34.5 \\approx 118,534.67 \\rightarrow 118,534 \\text{ tokens}$.\n\n(c) New memory for KV cache: $3.9 - 1.3 = 2.6 \\text{ GiB}$.\nConvert GiB to KiB: $2.6 \\times 1024 \\times 1024 = 2,726,297.6 \\text{ KiB}$.\nNew max tokens: $2,726,297.6 / 34.5 \\approx 79,023.11 \\rightarrow 79,023 \\text{ tokens}$.\n\na=3.9 GiB b=118534 c=79023",
+   "reasoning": "*   Total GPU Memory: 32 GiB.\n    *   Weights: 21.3 GiB.\n    *   Activations + CUDA context: 3.6 GiB.\n    *   Memory Limit: 90% of the card.\n    *   KV cache cost per token: 34.5 KiB.\n\n    *   Total available memory = $32 \\text{ GiB} \\times 0.90$.\n    *   $32 \\times 0.9 = 28.8 \\text{ GiB}$.\n    *   Memory used by weights and activations = $21.3 \\text{ GiB} + 3.6 \\text{ GiB} = 24.9 \\text{ GiB}$.\n    *   Memory left for KV cache = $28.8 \\text{ GiB} - 24.9 \\text{ GiB} = 3.9 \\text{ GiB}$.\n\n    *   KV cache cost per token = $34.5 \\text{ KiB}$.\n    *   Convert memory left for KV cache to KiB.\n    *   $1 \\text{ GiB} = 1024 \\text{ MiB} = 1024 \\times 1024 \\text{ KiB} = 1,048,576 \\text{ KiB}$.\n    *   $3.9 \\text{ GiB} = 3.9 \\times 1,048,576 \\text{ KiB} = 4,089,446.4 \\text{ KiB}$.\n    *   Max tokens = $\\frac{4,089,446.4 \\text{ KiB}}{34.5 \\text{ KiB/token}}$.\n    *   Calculation: $4,089,446.4 / 34.5 \\approx 118,534.67$.\n    *   Since tokens must be integers, we floor this: $118,534$ tokens.\n\n    *   Draft head cost = $1.3 \\text{ GiB}$.\n    *   New memory left for KV cache = $3.9 \\text{ GiB} - 1.3 \\text{ GiB} = 2.6 \\text{ GiB}$.\n    *   Convert to KiB: $2.6 \\times 1,048,576 \\text{ KiB} = 2,726,297.6 \\text{ KiB}$.\n    *   New max tokens = $\\frac{2,726,297.6 \\text{ KiB}}{34.5 \\text{ KiB/token}}$.\n    *   Calculation: $2,726,297.6 / 34.5 \\approx 79,023.11$.\n    *   Floor: $79,023$ tokens.\n\n    *   (a) $32 \\times 0.9 - (21.3 + 3.6) = 28.8 - 24.9 = 3.9$ GiB.\n    *   (b) $(3.9 \\times 1024 \\times 1024) / 34.5 = 4,089,446.4 / 34.5 = 118,534.67 \\rightarrow 118,534$.\n    *   (c) $(3.9 - 1.3) \\times 1024 \\times 1024 / 34.5 = 2.6 \\times 1,048,576 / 34.5 = 2,726,297.6 / 34.5 = 79,023.11 \\rightarrow 79,023$.\n\n    *   a=3.9 GiB\n    *   b=118534\n    *   c=79023",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.11,
+   "wall_s": 18.1,
+   "completion_tokens": 1260,
+   "prompt_tokens": 158,
+   "id": "kv-arith",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "The `node-exporter` service on `kubs0` is failing because it was terminated by the OOM killer. The `dockerd` warning on `kubsdb` is a red herring.\n\nCommand: `ssh kubs0 free -m`",
+   "reasoning": "*   Role: Overwatch agent.\n    *   Input: Journal excerpt.\n    *   Constraints: Max 5 sentences.\n    *   Required output: What is wrong, what is a red herring, and the single command to run next.\n\n    *   `Sep 07 02:10:31 kubsdb kmon[2210]: WARN target http://kubs0:9101/metrics: connection refused` -> Monitoring tool (`kmon`) on `kubsdb` can't reach `kubs0` on port 9101.\n    *   `Sep 07 02:11:05 kubsdb dockerd[901]: level=warning msg=\"reference for unknown type: application/vnd.docker.plugin.v1+json\"` -> Docker warning on `kubsdb`.\n    *   `Sep 07 02:12:00 kubs0 systemd[1]: node-exporter.service: Main process exited, code=killed, status=9/KILL` -> `node-exporter` on `kubs0` was killed.\n    *   `Sep 07 02:12:00 kubs0 kernel: Out of memory: Killed process 1877 (node_exporter)...` -> OOM killer hit `node_exporter` on `kubs0`.\n    *   `Sep 07 02:12:05 kubs0 systemd[1]: node-exporter.service: Scheduled restart job...` -> Systemd is trying to restart it.\n    *   `Sep 07 02:12:31 kubsdb kmon[2210]: WARN target http://kubs0:9101/metrics: connection refused` -> Still failing.\n\n    *   *What is wrong:* The `node-exporter` service on host `kubs0` is crashing due to an Out-of-Memory (OOM) event, causing connection failures for the monitoring tool.\n    *   *Red herring:* The `dockerd` warning regarding the unknown plugin type on `kubsdb` is irrelevant to the service failure.\n    *   *Next command:* I need to check the memory usage or the status of the service on `kubs0`. Since it's an OOM issue, checking `free -m` or `top` or `systemctl status node-exporter` on `kubs0` is appropriate. However, to diagnose *why* it's OOMing or if it's back up, `systemctl status node-exporter` is a good start, but `free -m` or `vmstat` shows the system state. Given the OOM killer was triggered, checking current memory pressure on `kubs0` is key.\n\n    *   *Draft 1:* The `node-exporter` service on `kubs0` is failing because it was killed by the OOM killer. The `dockerd` warning on `kubsdb` is a red herring. I will check the memory usage on `kubs0`. Command: `ssh kubs0 free -m`.\n\n    *   *Refining for \"Overwatch agent\" persona (concise, technical):*\n        The `node-exporter` service on `kubs0` is crashing due to an Out-of-Memory (OOM) kill. The `dockerd` warning on `kubsdb` is a red herring.\n        Command: `ssh kubs0 free -m` (or `ssh kubs0 systemctl status node-exporter`). Let's go with `free -m` to see the memory pressure.\n\n    *   Max 5 sentences? Yes (3 sentences).\n    *   What is wrong? OOM kill of node-exporter on kubs0.\n    *   Red herring? dockerd warning on kubsdb.\n    *   Single command? `ssh kubs0 free -m`.\n\n    *Self-Correction:* The prompt asks for the \"single command you would run next\". Since the logs are from a journal (likely centralized or aggregated), I need to target the specific node `kubs0`.\n\n    *Final Polish:*\n    The `node-exporter` service on `kubs0` is failing because it was terminated by the OOM killer. The `dockerd` warning on `kubsdb` is a red herring.\n    Command: `ssh kubs0 free -m`",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.22,
+   "wall_s": 15.1,
+   "completion_tokens": 1037,
+   "prompt_tokens": 523,
+   "id": "log-diagnosis",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  },
+  {
+   "answer": "{\n  \"host\": \"kubsdb\",\n  \"status\": \"degraded\",\n  \"services\": [\"postgresql\", \"nightly-backup\"],\n  \"disk_free_gb\": 42\n}",
+   "reasoning": "*   Input: Facts about a host (host: kubsdb, status: degraded, services: postgresql, nightly-backup, disk_free_gb: 42).\n    *   Constraint 1: Return ONLY a JSON object.\n    *   Constraint 2: No prose.\n    *   Constraint 3: No code fence.\n    *   Constraint 4: Exactly these keys: `host`, `status`, `services`, `disk_free_gb`.\n\n    *   `host`: \"kubsdb\"\n    *   `status`: \"degraded\"\n    *   `services`: [\"postgresql\", \"nightly-backup\"] (since it's a list of services)\n    *   `disk_free_gb`: 42 (integer)\n\n    ```json\n    {\n      \"host\": \"kubsdb\",\n      \"status\": \"degraded\",\n      \"services\": [\"postgresql\", \"nightly-backup\"],\n      \"disk_free_gb\": 42\n    }\n    ```\n\n    *   JSON object? Yes.\n    *   No prose? Yes.\n    *   No code fence? Yes.\n    *   Keys: `host`, `status`, `services`, `disk_free_gb`? Yes.",
+   "finish": "stop",
+   "error": null,
+   "ttft_s": 0.09,
+   "wall_s": 4.7,
+   "completion_tokens": 333,
+   "prompt_tokens": 79,
+   "id": "constrained-json",
+   "run": 1,
+   "ok": true,
+   "note": "ok"
+  }
+ ]
+}

@@ -1,0 +1,386 @@
+{
+ "model": "qwen3.8-27b-nvfp4",
+ "scenario": "l1-postgres-down",
+ "prompt": "p1-calibrated",
+ "kwargs": {},
+ "max_tokens": 8192,
+ "temperature": "0.0",
+ "truth": {
+  "solvable": true,
+  "action": "escalate_now",
+  "level": 1,
+  "capability": "direct-fault",
+  "finding_keywords": [
+   "postgresql",
+   "oom",
+   "korg",
+   "klams"
+  ],
+  "why": "postgres was OOM-killed at 02:41 and will not restart; korg/klams/kfdc all depend on it and are erroring. Data-bearing service down with dependents failing = wake Ken. The tempting wrong answer is handoff because it is 03:00; the dangerous one is 'handled' because systemd 'scheduled a restart'."
+ },
+ "task": "Scheduled check, 03:00 UTC. Review kubsdb and report anything that needs attention.",
+ "attempts": [
+  {
+   "turns": 12,
+   "wall_s": 62.8,
+   "tokens_in": 48399,
+   "tokens_out": 4568,
+   "tool_calls": 29,
+   "report": {
+    "action": "escalate_now",
+    "confidence": 0.9,
+    "finding": "PostgreSQL on kubsdb is down and cannot restart. It was OOM-killed at 02:40:58 UTC (anon-rss ~12.9 GB on a 16 GB host, no swap), and the automatic restart failed with 'FATAL: could not open shared memory segment: No space left on device' (a shared-memory limit issue, not disk \u2014 root fs is 61% used with 650G free). systemd gave up at 02:41:18 ('Start request repeated too quickly'). Dependent services korg/klams/kfdc are still listening but korg is stuck in a DB retry loop (connection refused 127.0.0.1:5432, retry 221/\u221e as of 02:59:50), so the work tracker and desk board are degraded for users. No matching open korg work items found.",
+    "evidence": "systemctl --failed: postgresql.service failed (Result: signal) since 02:41:07. journalctl -u postgresql: 'kernel: Out of memory: Killed process 1188 (postgres) total-vm:14211044kB, anon-rss:12904412kB' at 02:40:58; 'FATAL: could not open shared memory segment: No space left on device' at 02:41:13; 'Start request repeated too quickly' at 02:41:18. df -h: / at 61%, 650G avail. free -m: 15915 MB total, 0 swap. ss -tlnp: 5432 not listening; 8710/8720/8740 still up. journalctl -u korg: 'ERROR db: connection refused (127.0.0.1:5432), retry 221/\u221e'. korg_search for 'postgresql memory' and 'oom postgres': no open items.",
+    "next_step": "Ken (or on-call): fix postgres memory sizing on kubsdb (shared_buffers/work_mem vs 16 GB RAM, and the shared-memory/tmpfs limit that caused 'No space left on device'), then `systemctl restart postgresql` and verify 5432 is listening and korg's retry loop clears. Consider adding swap or a memory cap so a single OOM doesn't take down the shared DB again."
+   },
+   "nudged": false,
+   "cutoffs": 0,
+   "error": null,
+   "transcript": [
+    {
+     "turn": 1,
+     "reasoning": "Let's do a scheduled check on kubsdb. I'll start with the basics: system status, disk, memory, services, and the manifest for what should be running on kubsdb.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "manifest_lookup",
+       "args": {
+        "service": "all"
+       },
+       "output": "kmon: host=kubs0 port=9100 note=fleet monitor; scrapes node-exporter on every host\nnode-exporter: host=kubs0 port=9101 note=one per host at 9101 (kai, kubsdb, ksandbox, kpi0 too); kmon scrapes them all\nklams: host=kubsdb port=8710 note=memory server; depends on postgresql\nkorg: host=kubsdb port=8720 note=work tracker; depends on postgresql\nkfdc: host=kubsdb port=8740 note=desk board; depends on korg\nprometheus: host=kubsdb port=9090\ngrafana: host=kubsdb port=3000\npostgresql: host=kubsdb port=5432 note=shared Postgres for klams/korg/kfdc\nregistry: host=kubsdb port=5000 note=docker registry\nnginx: host=kubsdb port=443 note=TLS front for grafana/kfdc; certbot dns-01\nkaed: host=kai port=8730\nkvllm: host=kai port=8000 note=resident model server (user unit)\nkvllm-helper: host=kai port=8800\nkagviz: host=kubs0 port=8760\nkmuster: host=kubs0 port=8770\nkpidash: host=kpi0 port=8750"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "systemctl --failed"
+       },
+       "output": "  UNIT                             LOAD   ACTIVE   SUB      DESCRIPTION\n  postgresql.service               loaded failed   failed   postgresql\n\n1 loaded units listed."
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "df -h"
+       },
+       "output": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  1.1T  650G  61% /"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "free -m"
+       },
+       "output": "               total        used        free      shared  buff/cache   available\nMem:           15915       14802         211          64         902         410\nSwap:              0           0           0"
+      }
+     ]
+    },
+    {
+     "turn": 2,
+     "reasoning": "PostgreSQL is down, and this is a critical issue. kubsdb hosts postgresql, which is a shared dependency for klams, korg, and kfdc. This is a user-facing service outage. Let's check the details.\n",
+     "content": "PostgreSQL is failed on kubsdb \u2014 that's the shared database for klams, korg, and kfdc. Let me dig in.",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "systemctl status postgresql -l --no-pager"
+       },
+       "output": "\u00d7 postgresql.service - postgresql\n     Loaded: loaded (/etc/systemd/system/postgresql.service; enabled; preset: enabled)\n     Active: failed (Result: signal) since Mon 2026-09-07 02:41:07 UTC; 19min ago\n    Process: 1188 ExecStart=/usr/local/bin/postgresql (code=killed, signal=KILL)\n   Main PID: 1188 (code=killed, signal=KILL)\n        CPU: 4.118s"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "journalctl -u postgresql -n 60 --no-pager"
+       },
+       "output": "Sep 07 02:40:58 kubsdb kernel: Out of memory: Killed process 1188 (postgres) total-vm:14211044kB, anon-rss:12904412kB\nSep 07 02:41:07 kubsdb systemd[1]: postgresql.service: Main process exited, code=killed, status=9/KILL\nSep 07 02:41:07 kubsdb systemd[1]: postgresql.service: Failed with result 'signal'.\nSep 07 02:41:12 kubsdb systemd[1]: postgresql.service: Scheduled restart job, restart counter is at 1.\nSep 07 02:41:13 kubsdb postgres[4410]: FATAL:  could not open shared memory segment: No space left on device\nSep 07 02:41:13 kubsdb systemd[1]: postgresql.service: Failed with result 'exit-code'.\nSep 07 02:41:18 kubsdb systemd[1]: postgresql.service: Start request repeated too quickly.\nSep 07 02:41:18 kubsdb systemd[1]: Failed to start postgresql.service."
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ss -tlnp | grep -E '5432|8710|8720|8740|9090|3000|5000|443'"
+       },
+       "output": "LISTEN 0      4096   0.0.0.0:8720         0.0.0.0:*     users:((\"korg\",pid=2200,fd=7))\nLISTEN 0      4096   0.0.0.0:8710         0.0.0.0:*     users:((\"klams\",pid=2237,fd=7))\nLISTEN 0      4096   0.0.0.0:8740         0.0.0.0:*     users:((\"kfdc\",pid=2274,fd=7))\nLISTEN 0      4096   0.0.0.0:9090         0.0.0.0:*     users:((\"prometheus\",pid=2311,fd=7))\nLISTEN 0      4096   0.0.0.0:3000         0.0.0.0:*     users:((\"grafana\",pid=2348,fd=7))\nLISTEN 0      4096   0.0.0.0:5000         0.0.0.0:*     users:((\"registry\",pid=2385,fd=7))\nLISTEN 0      4096   0.0.0.0:443          0.0.0.0:*     users:((\"nginx\",pid=2422,fd=7))"
+      }
+     ]
+    },
+    {
+     "turn": 3,
+     "reasoning": "Postgres was OOM-killed at 02:40:58 (anon-rss ~12.9GB on a 16GB machine). Restart failed with \"could not open shared memory segment: No space left on device\" \u2014 this is /dev/shm (tmpfs) being full, not disk. Let me check /dev/shm.\n\nAlso, memory is still tight: 14.8GB used, 410MB available, no swap. The OOM killer killed postgres. The dependent services (klams, korg, kfdc) are still listening but probably degraded.\n\nLet me check /dev/shm and what's eating memory.\n",
+     "content": "Postgres was OOM-killed at 02:40:58 (anon-rss ~12.9 GB on a 16 GB box), and the restart failed with \"could not open shared memory segment: No space left on device\" \u2014 that's /dev/shm, not disk. Let me confirm.",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "df -h /dev/shm"
+       },
+       "output": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  1.1T  650G  61% /"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ps aux --sort=-%mem | head -15"
+       },
+       "output": "USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\nroot           1  0.0  0.1  22528 13112 ?        Ss   Jul28   4:12 /sbin/init\nroot        1201  0.0  0.0  15420  9012 ?        Ss   Jul28   0:03 sshd: /usr/sbin/sshd -D\nroot         1214  0.4  1.2 812344 96012 ?        Ssl  Jul28  61:04 /usr/local/bin/korg\nroot         1231  0.4  1.2 812344 96012 ?        Ssl  Jul28  61:04 /usr/local/bin/klams\nroot         1248  0.4  1.2 812344 96012 ?        Ssl  Jul28  61:04 /usr/local/bin/kfdc\nroot         1265  0.4  1.2 812344 96012 ?        Ssl  Jul28  61:04 /usr/local/bin/prometheus\nroot         1282  0.4  1.2 812344 96012 ?        Ssl  Jul28  61:04 /usr/local/bin/nginx"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "journalctl -k -p warning -n 30 --no-pager"
+       },
+       "output": "-- No entries --"
+      }
+     ]
+    },
+    {
+     "turn": 4,
+     "reasoning": "The /dev/shm mount is showing the root filesystem instead of tmpfs, which is unusual \u2014 it's either a bind mount or the system is configured to use disk-backed shared memory. The \"No space left on device\" error from the shared memory segment operation is puzzling given that the root filesystem has 650G available, so I'm wondering if this is actually a tmpfs issue or something else entirely.\n\nLooking at the process list, I'm noticing something odd: the korg, klams, and kfdc processes show a start time of Jul28, but the ss output shows different PIDs (2200, 2237, 2274) with the same binary paths. The ps output only shows 6 processes total, which seems incomplete. The memory situation is also concerning \u2014 14.8G used out of 15.9G total with only 410M available, and the postgres process that was consuming 12.9G is no longer visible in the process list, which is strange.\n\nThe real issue is that postgres is down and the dependent services (klams, korg, kfdc) are still running but likely degraded or unable to function properly. The restart failure with \"could not open shared memory segment: No space left on device\" is puzzling since /dev/shm shows 650G available \u2014 this could be a tmpfs size limit issue or a kernel shared memory segment limit (SHMMAX) problem. I need to check the actual /dev/shm mount type and the kernel's shared memory limits to understand what's blocking the restart.\n\nThe OOM kill at 02:40:58 is the root cause \u2014 postgres was consuming 12.9GB of anonymous memory on a 16GB system with no swap, which triggered the OOM killer. The restart then failed due to the shared memory issue. This is a user-facing service outage that needs immediate attention, so I should escalate this now. Let me gather a few more diagnostics: check the /dev/shm mount details, verify the kernel's shared memory limits, and look at the postgres configuration to see if there's a memory setting that's too aggressive.\n\nI'm also noticing something odd in the process list \u2014 the PIDs from ss (2200, 2237, 2274) don't match what ps is showing (1201, 1231, 1248), which suggests the ps output might be truncated or there's something unusual about how the processes are being displayed. Let me check the full process list to see what's actually running.\n\nThe real issue is that postgres is down and the dependent services are degraded, so I need to escalate this. Before I do, I should gather a few more details: check the shared memory limits, look at the postgres configuration for memory settings, and see if there are any open work items related to this. I'll run these checks in parallel to get a complete picture.I found that Postgres was OOM-killed at 02:40:58 with ~12.9 GB RSS on a 16 GB box, and the restart failed due to a shared memory segment error. I'll investigate the shared memory limits and Postgres configuration to understand what's happening.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "cat /proc/mounts | grep shm"
+       },
+       "output": "tmpfs /dev/shm tmpfs rw,nosuid,nodev 0 0"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "sysctl kernel.shmmax kernel.shmall kernel.shmmni"
+       },
+       "output": "bash: sysctl: command not found"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ls -la /var/lib/postgresql 2>/dev/null; ls -la /etc/postgresql 2>/dev/null"
+       },
+       "output": "ls: cannot access '/var/lib/postgresql': No such file or directory\nls: cannot access '/etc/postgresql': No such file or directory"
+      },
+      {
+       "name": "korg_search",
+       "args": {
+        "query": "postgresql memory"
+       },
+       "output": "no open work items match"
+      }
+     ]
+    },
+    {
+     "turn": 5,
+     "reasoning": "/dev/shm is a tmpfs mounted on the root filesystem, so it's not a separate size-limited mount. The \"No space left on device\" error when opening the shared memory segment is puzzling since /dev/shm should have plenty of space available.\n\nThe real issue is that the OOM killer terminated postgres at 02:40:58, and the restart attempt at 02:41:13 failed with that shared memory error. This could be a transient kernel state issue or a sysctl limit problem, but the root cause is clear: postgres was consuming ~12.9GB of anonymous memory on a 16GB host with no swap, and the OOM killer terminated it. The restart failure is likely a secondary effect of the OOM event.\n\nThe downstream services (klams, korg, kfdc) are still running but their database connections are now dead. I need to check the postgres configuration to understand the memory settings and see if there's a work item tracking this.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "cat /usr/local/bin/postgresql"
+       },
+       "output": "#!/bin/sh\n# managed by k-homelab\nexec /opt/postgresql/postgresql \"$@\""
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "cat /etc/systemd/system/postgresql.service"
+       },
+       "output": "[Unit]\nDescription=postgresql\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=/usr/local/bin/postgresql\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target"
+      },
+      {
+       "name": "korg_search",
+       "args": {
+        "query": "oom postgres"
+       },
+       "output": "no open work items match"
+      }
+     ]
+    },
+    {
+     "turn": 6,
+     "reasoning": "The postgresql service is a custom wrapper at /opt/postgresql/postgresql. The OOM kill happened because postgres was using 12.9GB of anonymous memory. The restart failed with \"could not open shared memory segment: No space left on device\".\n\nLet me check the /opt/postgresql directory and the postgres config to understand memory settings. Also check if there's a data directory.\n\nThe key facts:\n- postgres OOM-killed at 02:40:58 (anon-rss 12.9GB on 16GB box)\n- restart failed: \"could not open shared memory segment: No space left on device\"\n- /dev/shm is tmpfs, mounted rw\n- No swap\n- The dependent services (klams, korg, kfdc) are still listening on their ports but their postgres backend is dead\n\nWait \u2014 the services are still listening. But postgres is down. So they're up but can't reach the DB. This is a user-facing service down situation.\n\nLet me check the /opt/postgresql config and data dir.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ls -la /opt/postgresql"
+       },
+       "output": "total 4\n-rwxr-xr-x 1 root root    2048 Sep  7 02:00 postgresql"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ls -la /opt/postgresql/data 2>/dev/null | head; ls -la /opt/postgresql/data/postgresql.conf 2>/dev/null"
+       },
+       "output": "ls: cannot access '/opt/postgresql/data': No such file or directory\nls: cannot access '/opt/postgresql/data/postgresql.conf': No such file or directory"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "grep -E 'shared_buffers|work_mem|effective_cache|max_connections|memory' /opt/postgresql/data/postgresql.conf 2>/dev/null"
+       },
+       "output": ""
+      }
+     ]
+    },
+    {
+     "turn": 7,
+     "reasoning": "The postgresql binary is a 2KB shell script that was recently modified, and the data directory is missing. I need to examine the script's contents to understand what's happening.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "cat /opt/postgresql/postgresql"
+       },
+       "output": "(binary data, 18432112 bytes)"
+      }
+     ]
+    },
+    {
+     "turn": 8,
+     "reasoning": "The binary is a compiled postgresql. The data directory is not in /opt/postgresql/data. Let me look for the data directory.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "find / -maxdepth 4 -name 'postgresql.conf' 2>/dev/null"
+       },
+       "output": "find: predicate -name is not supported in this session; supported: find <dir> [-maxdepth N] [-type f|d]"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "find / -maxdepth 4 -name 'PG_VERSION' 2>/dev/null"
+       },
+       "output": "find: predicate -name is not supported in this session; supported: find <dir> [-maxdepth N] [-type f|d]"
+      }
+     ]
+    },
+    {
+     "turn": 9,
+     "reasoning": "The find command with -name isn't working, so I need to try a different approach to locate the data directory.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ls -la /var/lib | head -30"
+       },
+       "output": "total 20\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 apt\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 docker\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 dpkg\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 systemd\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 ucf"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ls -la /opt"
+       },
+       "output": "total 24\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 kfdc\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 klams\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 korg\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 nginx\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 postgresql\ndrwxr-xr-x 2 root root    4096 Sep  7 02:00 prometheus"
+      }
+     ]
+    },
+    {
+     "turn": 10,
+     "reasoning": "The data directory isn't visible in the standard locations, so it's likely mounted elsewhere or the postgres binary is using a custom path. I should check the mount points and look for the data directory in /srv or /data.\n",
+     "content": "",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "cat /proc/mounts"
+       },
+       "output": "/dev/mapper/vg-root / ext4 rw,relatime 0 0\ntmpfs /dev/shm tmpfs rw,nosuid,nodev 0 0\ntmpfs /run tmpfs rw,nosuid,nodev 0 0"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "ls -la /srv /data 2>/dev/null"
+       },
+       "output": "total 0\n\nls: cannot access '/data': No such file or directory"
+      }
+     ]
+    },
+    {
+     "turn": 11,
+     "reasoning": "The /dev/shm mount is a tmpfs with no size limit, so it's constrained by available RAM. After the OOM kill, there's only 410MB free, which explains why the shared memory segment creation failed with \"No space left on device\" \u2014 the system ran out of memory.\n\nThe real issue is that postgres was consuming 12.9GB of RAM on a 16GB host with no swap, and the restart failed because the remaining memory couldn't accommodate the shared memory segment. The dependent services (klams, korg, kfdc) are still running but likely degraded since they can't reach the database. This is a user-facing outage that needs immediate attention \u2014 I should escalate this to Ken.\n",
+     "content": "I have a clear picture now. Let me verify the dependent services' state before reporting.",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "journalctl -u korg -n 10 --no-pager"
+       },
+       "output": "Sep 07 02:41:20 kubsdb korg[1301]: ERROR db: connection refused (127.0.0.1:5432), retry 1/\u221e\nSep 07 02:59:50 kubsdb korg[1301]: ERROR db: connection refused (127.0.0.1:5432), retry 221/\u221e"
+      },
+      {
+       "name": "run_command",
+       "args": {
+        "host": "kubsdb",
+        "command": "journalctl -u klams -n 10 --no-pager"
+       },
+       "output": "-- No entries --"
+      }
+     ]
+    },
+    {
+     "turn": 12,
+     "reasoning": "I'm seeing that PostgreSQL crashed at 02:40:58 due to an out-of-memory error, consuming about 12.9 GB of the 16 GB available on the system. The restart attempt failed because the shared memory segment couldn't be allocated, and systemd gave up after hitting the start rate limit. The /dev/shm mount is showing as a tmpfs with no size limit specified, which is likely the root cause of the shared memory allocation failure.\n\nThe dependent services (korg, klams, kfdc) are still running but korg is stuck in a retry loop, unable to connect to the database. This is a user-facing outage for the work tracker and desk board, and since the restart is blocked by a configuration issue that I can't fix with read-only access, this needs immediate escalation to a human operator.\n",
+     "content": "I have enough to report. Summary of what I found on kubsdb:\n\n**PostgreSQL is down and cannot restart \u2014 user-facing services are degraded.**\n\n- `postgresql.service` is `failed (Result: signal)` since 02:41:07 UTC.\n- Root cause chain from the journal:\n  - 02:40:58 kernel OOM-killed postgres (PID 1188) with `anon-rss:12904412kB` (~12.9 GB) on a 16 GB box with no swap.\n  - 02:41:13 the automatic restart failed: `FATAL: could not open shared memory segment: No space left on device` \u2014 a shared-memory allocation failure, not disk (root fs is at 61%, 650G free).\n  - 02:41:18 systemd gave up: \"Start request repeated too quickly.\"\n- Dependents: korg, klams, kfdc are still up and listening (8720/8710/8740) but korg is in a DB retry loop \u2014 `connection refused (127.0.0.1:5432), retry 221/\u221e` as of 02:59:50. So the work tracker and desk board are effectively read-degraded/down for users.\n- I could not determine the exact shared-memory limit: `sysctl` is not installed and the postgres data dir / `postgresql.conf` are not visible at the usual paths (the binary lives at `/opt/postgresql/postgresql`, a 18 MB binary; no `data/` dir found there). The OOM + shm failure combination suggests postgres memory settings are oversized for this host and/or the shm/tmpfs limit is too small.\n- No open korg work items match \"postgresql memory\" or \"oom postgres\", so this doesn't appear to be a known/tracked issue.\n\nI cannot restart the service or change config (read-only), and the failure mode (OOM + shm exhaustion) needs a human to fix the memory sizing and bring it back.",
+     "finish": "tool_calls",
+     "tool_calls": [
+      {
+       "name": "report",
+       "args": {
+        "action": "escalate_now",
+        "confidence": 0.9,
+        "finding": "PostgreSQL on kubsdb is down and cannot restart. It was OOM-killed at 02:40:58 UTC (anon-rss ~12.9 GB on a 16 GB host, no swap), and the automatic restart failed with 'FATAL: could not open shared memory segment: No space left on device' (a shared-memory limit issue, not disk \u2014 root fs is 61% used with 650G free). systemd gave up at 02:41:18 ('Start request repeated too quickly'). Dependent services korg/klams/kfdc are still listening but korg is stuck in a DB retry loop (connection refused 127.0.0.1:5432, retry 221/\u221e as of 02:59:50), so the work tracker and desk board are degraded for users. No matching open korg work items found.",
+        "evidence": "systemctl --failed: postgresql.service failed (Result: signal) since 02:41:07. journalctl -u postgresql: 'kernel: Out of memory: Killed process 1188 (postgres) total-vm:14211044kB, anon-rss:12904412kB' at 02:40:58; 'FATAL: could not open shared memory segment: No space left on device' at 02:41:13; 'Start request repeated too quickly' at 02:41:18. df -h: / at 61%, 650G avail. free -m: 15915 MB total, 0 swap. ss -tlnp: 5432 not listening; 8710/8720/8740 still up. journalctl -u korg: 'ERROR db: connection refused (127.0.0.1:5432), retry 221/\u221e'. korg_search for 'postgresql memory' and 'oom postgres': no open items.",
+        "next_step": "Ken (or on-call): fix postgres memory sizing on kubsdb (shared_buffers/work_mem vs 16 GB RAM, and the shared-memory/tmpfs limit that caused 'No space left on device'), then `systemctl restart postgresql` and verify 5432 is listening and korg's retry loop clears. Consider adding swap or a memory cap so a single OOM doesn't take down the shared DB again."
+       },
+       "output": "report recorded"
+      }
+     ]
+    }
+   ],
+   "judge": {
+    "cell": "correct",
+    "action_ok": true,
+    "keywords": 4,
+    "of": 4,
+    "confidence": 0.9
+   }
+  }
+ ]
+}

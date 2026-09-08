@@ -156,12 +156,38 @@ def wait_port_healthy(port: int, timeout_s: int = 300) -> bool:
     return False
 
 
+def refuse_if_port_answers(port: int) -> None:
+    """A serve must own its port. If something already answers /v1/models there, a new
+    engine fails to bind and dies — and every request the harness then sends goes to
+    whatever is listening. Sprint 19: an orphaned `vllm serve qwen3.8` survived a killed
+    repeat; gemma's N=3 re-baseline scored 0/N on every suite against it, and Qwen's was
+    answered by a server the harness never started. Refuse loudly instead."""
+    if wait_port_healthy(port, timeout_s=1):
+        holder = ""
+        try:
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/v1/models", timeout=2
+            ) as r:
+                import json
+
+                holder = ", ".join(
+                    m.get("id", "?") for m in json.load(r).get("data", [])
+                )
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"port {port} already answers /v1/models (serving: {holder or 'unknown'}); "
+            "refusing to start a second engine behind it. Stop that server first."
+        )
+
+
 @contextmanager
 def serving(key: str, entry: dict, *, port: int):
     """Serve `key` standalone for the duration of the block. Yields (proc, serve_log_path);
     the caller decides health. Does NOT touch kvllm.service — the batch runner manages the
     service once per sweep (stop before the first model, restore + health-check after the
     last), so models swap with the minimum number of GPU teardown/startup cycles."""
+    refuse_if_port_answers(port)
     wait_gpu_drained()  # never start a serve while the previous one's VRAM is draining
     SERVE_LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = SERVE_LOG_DIR / f"{key.replace('/', '_')}.log"

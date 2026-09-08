@@ -295,3 +295,19 @@ def test_main_records_each_finished_run_for_the_monitor(tmp_path, monkeypatch):
         "run 2/3 · agentic 0.950",
         "run 3/3 · agentic 0.920",
     ]
+
+
+def test_guard_refuses_a_finished_key_unless_forced(tmp_path):
+    import pytest
+
+    from kvllm.repeat import guard_out_dir
+
+    out = tmp_path / "gemma-all-2026-09-07"
+    guard_out_dir(out)  # nothing there yet: fine
+    out.mkdir()
+    guard_out_dir(out)  # an empty directory is not a finished repeat
+    (out / "summary.json").write_text("{}")
+    with pytest.raises(SystemExit) as e:
+        guard_out_dir(out)
+    assert "--date" in str(e.value)
+    guard_out_dir(out, force=True)
