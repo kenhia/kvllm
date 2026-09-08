@@ -233,6 +233,16 @@ class World:
         "timeout ",
         "watch ",
     )
+    _SINGLETON = {
+        "df",
+        "free",
+        "ss",
+        "netstat",
+        "uptime",
+        "lsblk",
+        "mount",
+        "nvidia-smi",
+    }
     _LOOP = re.compile(r"(?:^|[;&|]\s*)(?:for|while|until|if|case|function)\s")
 
     def run_command(self, host: str, command: str) -> str:
@@ -342,6 +352,11 @@ class World:
         if fixture is not None:
             return fixture
         first, args = tokens[0], tokens[1:]
+        if first in self._SINGLETON:
+            # one filesystem, one memory, one socket table: flags do not change the answer
+            for key, val in h.get("commands", {}).items():
+                if key.split() and key.split()[0] == first:
+                    return val
         base = first.rsplit("/", 1)[-1]
         if first.startswith("/") and base in COREUTILS:
             first = base
@@ -416,6 +431,25 @@ class World:
                     outs.append(f"stat: cannot statx '{f}': No such file or directory")
             return "\n".join(outs)
         if first == "find":
+            unsupported = [
+                a
+                for a in args
+                if a
+                in (
+                    "-size",
+                    "-mtime",
+                    "-mmin",
+                    "-newer",
+                    "-name",
+                    "-iname",
+                    "-exec",
+                    "-user",
+                    "-perm",
+                    "-regex",
+                )
+            ]
+            if unsupported:
+                return f"find: predicate {unsupported[0]} is not supported in this session; supported: find <dir> [-maxdepth N] [-type f|d]"
             roots = [a for a in args if a.startswith("/")]
             tree = self._tree(h)
             want_files = "-type" in args and args[

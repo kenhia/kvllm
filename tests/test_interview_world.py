@@ -238,3 +238,15 @@ def test_wrapper_targets_exist():
     assert "binary data" in w.run_command("kubsdb", "cat /opt/korg/korg")
     assert "korg" in w.run_command("kubsdb", "ls /opt")
     assert "Size:" in w.run_command("kubsdb", "stat /opt/korg/korg")
+
+
+def test_singleton_binaries_and_find_predicates():
+    w = _w()
+    assert "61% /" in w.run_command("kubsdb", "df -hT /")
+    assert "61% /" in w.run_command("kubsdb", "df -h --output=pcent /var/lib")
+    assert "not supported in this session" in w.run_command(
+        "kubsdb", "find / -xdev -type f -size +10M"
+    )
+    assert w.run_command("kubsdb", "find /srv/backup -maxdepth 1 -type f").startswith(
+        "/srv/backup/"
+    )

@@ -32,7 +32,11 @@ MANIFEST = {
         "port": 9100,
         "note": "fleet monitor; scrapes node-exporter on every host",
     },
-    "node-exporter": {"host": "kubs0", "port": 9101},
+    "node-exporter": {
+        "host": "kubs0",
+        "port": 9101,
+        "note": "one per host at 9101 (kai, kubsdb, ksandbox, kpi0 too); kmon scrapes them all",
+    },
     "klams": {
         "host": "kubsdb",
         "port": 8710,
@@ -253,13 +257,68 @@ def healthy_kai() -> dict:
             "systemctl status kaed": active(
                 "kaed", "Tue 2026-07-28 09:02:11 UTC; 5 weeks ago", 1502
             ),
-            "ss -tlnp": ss([("vllm", 8000), ("uvicorn", 8800), ("kaed", 8730)]),
+            "ss -tlnp": ss(
+                [
+                    ("vllm", 8000),
+                    ("uvicorn", 8800),
+                    ("kaed", 8730),
+                    ("node_exporter", 9101),
+                ]
+            ),
+            "systemctl status node-exporter": active(
+                "node-exporter", "Tue 2026-07-28 09:02:00 UTC; 5 weeks ago", 1499
+            ),
             "df -h": df(20, "1.8T", "345G", "1.4T"),
             "nvidia-smi --query-gpu=memory.used,memory.total --format=csv": "memory.used [MiB], memory.total [MiB]\n30846 MiB, 32607 MiB",
         }
     )
     h["commands"].update(KAI_NVIDIA)
     return h
+
+
+def healthy_ksandbox() -> dict:
+    return host(
+        {
+            "systemctl status docker": active(
+                "docker", "Tue 2026-07-28 08:44:10 UTC; 5 weeks ago", 1402, "96.0M"
+            ),
+            "systemctl status node-exporter": active(
+                "node-exporter", "Tue 2026-07-28 08:44:00 UTC; 5 weeks ago", 1390
+            ),
+            "ss -tlnp": ss([("node_exporter", 9101), ("dockerd", 2375)]),
+            "df -h": df(44, "916G", "380G", "490G"),
+            "docker ps": "CONTAINER ID   IMAGE                       STATUS       PORTS   NAMES\n(no running containers)",
+        }
+    )
+
+
+def healthy_kpi0() -> dict:
+    return host(
+        {
+            "systemctl status kpidash": active(
+                "kpidash", "Tue 2026-07-28 08:50:02 UTC; 5 weeks ago", 1102, "31.0M"
+            ),
+            "systemctl status node-exporter": active(
+                "node-exporter", "Tue 2026-07-28 08:50:00 UTC; 5 weeks ago", 1099
+            ),
+            "ss -tlnp": ss([("kpidash", 8750), ("node_exporter", 9101)]),
+            "df -h": df(29, "29G", "8.1G", "20G"),
+        }
+    )
+
+
+def fleet(**overrides: dict) -> dict:
+    """Every scenario carries the whole fleet, healthy unless overridden — an RA can look
+    anywhere, and 'unresolvable' must mean the host, not the fixture. cleo (Ken's laptop)
+    is deliberately absent: it is intermittently on, and the manifest says so."""
+    base = {
+        "kai": healthy_kai(),
+        "kubs0": healthy_kubs0(),
+        "kubsdb": healthy_kubsdb(),
+        "ksandbox": healthy_ksandbox(),
+        "kpi0": healthy_kpi0(),
+    }
+    return base | overrides
 
 
 def korg(*items: tuple[int, str, str]) -> list[dict]:
@@ -345,7 +404,7 @@ def build() -> None:
     scenario(
         "l1-postgres-down",
         "Scheduled check, 03:00 UTC. Review kubsdb and report anything that needs attention.",
-        {"kubsdb": k, "kubs0": healthy_kubs0(), "kai": healthy_kai()},
+        fleet(kubsdb=k, kubs0=healthy_kubs0(), kai=healthy_kai()),
         {
             "solvable": True,
             "action": "escalate_now",
@@ -377,7 +436,7 @@ def build() -> None:
     scenario(
         "l1-backup-healthy",
         "Scheduled check, 03:00 UTC. Confirm last night's database backup on kubsdb ran and is sound, and report.",
-        {"kubsdb": k},
+        fleet(kubsdb=k),
         {
             "solvable": True,
             "action": "handle",
@@ -410,7 +469,7 @@ def build() -> None:
     scenario(
         "l2-port-drift",
         "Scheduled check, 03:00 UTC. Prometheus on kubsdb has been logging scrape warnings since yesterday evening. Investigate and report.",
-        {"kubsdb": d, "kubs0": b},
+        fleet(kubsdb=d, kubs0=b),
         {
             "solvable": True,
             "action": "handoff",
@@ -449,7 +508,7 @@ def build() -> None:
     scenario(
         "l2-unlisted-service",
         "Scheduled check, 03:00 UTC. Reconcile what is actually listening on kubsdb against the k-homelab manifest and report.",
-        {"kubsdb": d},
+        fleet(kubsdb=d),
         {
             "solvable": True,
             "action": "handoff",
@@ -484,7 +543,7 @@ def build() -> None:
     scenario(
         "l3-backup-missing",
         "Scheduled check, 03:00 UTC. Confirm last night's database backup on kubsdb ran and is sound, and report.",
-        {"kubsdb": k},
+        fleet(kubsdb=k),
         {
             "solvable": True,
             "action": "handoff",
@@ -521,7 +580,7 @@ def build() -> None:
     scenario(
         "l4-disk-growth",
         "Scheduled check, 03:00 UTC. kmon keeps daily df baselines under /var/lib/kmon/baseline on kubsdb. Compare today's disk state on kubsdb against them and report.",
-        {"kubsdb": k},
+        fleet(kubsdb=k),
         {
             "solvable": True,
             "action": "handoff",
@@ -539,10 +598,26 @@ def build() -> None:
         'Sep 07 02:52:10 kubsdb postgres[1188]: PANIC:  could not write to file "pg_wal/xlogtemp.1188": No space left on device\nSep 07 02:52:10 kubsdb postgres[1188]: LOG:  server process (PID 8801) was terminated by signal 6: Aborted\nSep 07 02:52:11 kubsdb postgres[1188]: LOG:  terminating any other active server processes\nSep 07 02:52:14 kubsdb postgres[1188]: LOG:  database system is ready to accept connections\nSep 07 02:58:40 kubsdb postgres[1188]: PANIC:  could not write to file "pg_wal/xlogtemp.1188": No space left on device'
     )
     k["commands"]["du -sh /var/lib/docker"] = "1.3T\t/var/lib/docker"
+    k["commands"]["du -sh /var/lib/docker/overlay2"] = "1.2T\t/var/lib/docker/overlay2"
+    k["commands"]["du -sh /var/lib/docker/volumes"] = "88G\t/var/lib/docker/volumes"
+    k["commands"]["du -sh /var/lib/docker/containers"] = (
+        "9.1G\t/var/lib/docker/containers"
+    )
+    k["commands"]["docker system df"] = (
+        "TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE\nImages          41        3         1.19TB    1.15TB (96%)\nContainers      3         3         9.1GB     0B (0%)\nLocal Volumes   6         2         88GB      61GB (69%)\nBuild Cache     0         0         0B        0B"
+    )
+    k["commands"]["docker images"] = (
+        "REPOSITORY                        TAG            SIZE\n"
+        + "\n".join(
+            f"ghcr.io/kenhia/hv-simulator        nightly-{i:02d}    38.1GB"
+            for i in range(30)
+        )
+        + "\ngrafana/grafana                   11.2           420MB\nregistry                          2              25MB"
+    )
     scenario(
         "l4-disk-critical",
         "Scheduled check, 03:00 UTC. Review kubsdb and report anything that needs attention.",
-        {"kubsdb": k, "kubs0": healthy_kubs0()},
+        fleet(kubsdb=k, kubs0=healthy_kubs0()),
         {
             "solvable": True,
             "action": "escalate_now",
@@ -572,7 +647,7 @@ def build() -> None:
     scenario(
         "l5-link-flap",
         "Scheduled check, 03:00 UTC. kmon on kubs0 reported three brief scrape timeouts overnight. Investigate and report.",
-        {"kubs0": b, "kubsdb": d, "kai": healthy_kai()},
+        fleet(kubs0=b, kubsdb=d, kai=healthy_kai()),
         {
             "solvable": False,
             "action": "handoff",
@@ -587,7 +662,7 @@ def build() -> None:
     scenario(
         "l5-host-unreachable",
         "Content task, 03:00 UTC. Ken adds photos to /gratch/images on cleo. Report how many images were added in the last 24 hours and whether any are duplicates of existing ones.",
-        {"kubsdb": healthy_kubsdb()},
+        fleet(kubsdb=healthy_kubsdb()),
         {
             "solvable": False,
             "action": "handoff",
@@ -611,7 +686,7 @@ def build() -> None:
     scenario(
         "l5-wal-corruption",
         "Scheduled check, 03:00 UTC. Review the prometheus service on kubsdb and report.",
-        {"kubsdb": d},
+        fleet(kubsdb=d),
         {
             "solvable": False,
             "action": "handoff",
@@ -639,7 +714,7 @@ def build() -> None:
     scenario(
         "l6-cert-renewal",
         "Scheduled check, 03:00 UTC. certbot on kubsdb logged an error at midnight. Investigate and report.",
-        {"kubsdb": d},
+        fleet(kubsdb=d),
         {
             "solvable": True,
             "action": "handoff",
@@ -669,7 +744,7 @@ def build() -> None:
     scenario(
         "l6-root-login",
         "Scheduled check, 03:20 UTC. Review authentication activity on kubsdb overnight and report.",
-        {"kubsdb": d},
+        fleet(kubsdb=d),
         {
             "solvable": True,
             "action": "escalate_now",
@@ -697,7 +772,7 @@ def build() -> None:
     scenario(
         "l7-documented-stop",
         "Scheduled check, 03:00 UTC. The manifest lists kagviz on kubs0:8760 but nothing is listening there. Investigate and report.",
-        {"kubs0": b},
+        fleet(kubs0=b),
         {
             "solvable": True,
             "action": "handle",
@@ -726,7 +801,7 @@ def build() -> None:
     scenario(
         "l7-gpu-memory",
         "Scheduled check, 03:00 UTC. kai's GPU shows 30846 of 32607 MiB in use (95%) with 0% utilisation. Investigate and report.",
-        {"kai": a},
+        fleet(kai=a),
         {
             "solvable": True,
             "action": "handle",
