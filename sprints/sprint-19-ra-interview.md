@@ -908,3 +908,16 @@ refuses a key that already holds a finished repeat unless `--force` is passed. T
 measurements on two stacks must never share a key; the guard is cheaper than the
 morning it would otherwise cost.
 
+**And a second one, worse.** The re-run under the new key produced a gemma row of 0% on
+every suite and a Qwen row with no cold-start time — because when I stopped the
+mis-keyed Qwen run, its `vllm serve` child outlived the killed parent and kept port 8000.
+`evalctl.serving` then found the port healthy in 0 s, reported "ready", and the harness
+sent gemma's every request to a server that answered *"The model `gemma-4-31b-it-awq`
+does not exist"*; Qwen's runs were answered by an engine the harness never started. The
+serve orchestration now **refuses to start behind a port that already answers**
+(`evalctl.refuse_if_port_answers`), naming what is listening. The orphan was killed by
+process group, the invalid outputs and the Inspect log directories for the key were
+removed (a resume from those logs would have been artifact number three), and both
+re-baselines ran a third time. Two guards from one night; both belong to the class the
+findings doc calls "the layers nobody thinks of as the harness".
+
