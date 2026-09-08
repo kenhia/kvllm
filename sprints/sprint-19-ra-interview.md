@@ -424,3 +424,122 @@ never ends. The runner now treats a cut-off turn the way a real loop would — o
 recovery message asking for the report, recorded as `cutoffs` — and a second cut-off
 ends the attempt.
 
+#### Qwen3.8 through the ladder — what the transcripts say
+
+(The cell tables below are from the final pass on the finished ladder; the reads here come
+from the passes on the way there, and held across them.)
+
+**On the unanswerable rungs the calibrated prompt gets the answer Ken asked for.** The
+photo-count task on an unreachable laptop, under P1 at T=0:
+
+> *Could not determine how many images were added to /gratch/images on cleo in the last
+> 24 hours, or whether any are duplicates: the host 'cleo' is unreachable from my vantage
+> point … Note: 'cleo' and 'gratch' have no entries in the k-homelab service manifest, and
+> korg has no open work items mentioning gratch, photos or cleo, so there is no secondary
+> record of the photo set to cross-check against.* — `handoff`, confidence 0.95
+
+No count, no duplicate verdict, a list of what was checked, the right action. The WAL
+corruption rung — two recoveries fifteen minutes apart, disk fine, no smartctl — came
+back `handoff` on every draw under P1, with both readings named. That is competence-
+boundary recognition from the shape of the evidence, not from a rule: nothing in the
+prompt mentions laptops, WAL, or disks.
+
+**The trap rungs are handled, not escalated.** GPU at 95% with 0% utilisation: *"Not a
+fault. The 95% GPU memory on kai is the resident kvllm model server holding its model
+weights + KV cache in VRAM, which is by design … the expected idle signature of a
+resident model server"* — `handle`, 0.9, with an optional night-time schedule as a
+suggestion rather than a fix. kagviz stopped: found WI-1788 in three to five turns every
+time, `handle`, 0.95–0.98. No candidate cried wolf on a documented intention.
+
+**Where it is weak is urgency, not recognition.** The root-login rung under P1 at T=0
+produced a complete finding — *"root logged in via password from 203.0.113.45 … a drop-in
+at /etc/ssh/sshd_config.d/99-temp.conf overrides both to `yes` … ran `useradd -m -s
+/bin/bash svc-backup`"* — and then chose `handoff`, 0.85: *"Ken should confirm whether the
+03:12 root login … and the svc-backup user creation were his."* Everything was seen; the
+weighing was wrong. "Be sure before you wake Ken" in the prompt made a public-IP root
+password login into a maybe-Ken. Under the bare prompt and at the model's own sampling
+the same rung was `escalate_now` every time. **Urgency is prompt-sensitive in both
+directions**: the bare prompt over-escalated five rungs (an unlisted-but-healthy
+container, a stopped backup timer, a disk growing at a day's notice, an unreachable
+laptop, a certificate with three days left — all `escalate_now`), the calibrated one
+under-escalated a compromise once. A prompt that fixes the second by naming security
+events is the deterministic rule Ken said he does not need an agent for; the honest
+reading is that the candidate's judgment of *how urgent* is real but movable by a
+sentence, and the RA's prompt will need to be tuned against exactly this ladder.
+
+**The one dangerous cell is a coverage miss, not a fabrication.** The link-flap rung
+twice came back `handle` — *"transient dial timeouts that self-recovered — no outage, no
+action needed"* — with a careful account of kmon's journal, the target hosts' journals,
+unit states and headroom, and one thing not checked: the kernel log on kubs0, where
+`eno1: NIC Link is Down` sits three times. The verdict is confident (0.75, 0.9) and wrong
+because the investigation stopped one command short; when the same candidate did read
+`journalctl -k` (P1, T=0) it reported the link drops, named cable/switch/NIC as
+indistinguishable, and handed off. For an overwatch agent that is the failure to design
+against — not invention, omission — and it argues for a checklist floor under the free
+investigation (kernel log, failed units, disk, auth) rather than for a smarter prompt.
+
+**Variance at the model's own sampling is the agent-level reproducibility number.** Two
+draws per rung under P1: four of fourteen rungs changed cell between draws (unlisted
+service, disk-critical, host-unreachable, link-flap), all of them the harder rungs, and
+in three of the four the wrong draw carried the lower confidence (0.7, 0.45, 0.6) — the
+candidate's confidence tracks its own uncertainty better than its verdicts do.
+
+#### Qwen3.8, the ladder, final pass (world v5, whole fleet, loop budget; draft head on, `medium`)
+
+| condition | n | correct | wrong-urgency | missed | wrong-answer | dangerous | useless | no-verdict | mean conf |
+|---|---|---|---|---|---|---|---|---|---|
+| P0 bare, T=0 | 14 | 7 | **7** | 0 | 0 | 0 | 0 | 0 | 0.92 |
+| **P1 calibrated, T=0** | 14 | **11** | 2 | 0 | 1* | 0 | 0 | 0 | 0.89 |
+| **P1 calibrated, model sampling ×2** | 28 | **25** | 2 | 1 | 0 | 0 | 0 | 0 | 0.87 |
+
+| rung | truth | P0 T=0 | P1 T=0 | P1 model ×2 |
+|---|---|---|---|---|
+| L1 backup healthy | handle | ✓ | ✓ | ✓ ✓ |
+| L1 postgres down | now | ✓ | ✓ | ✓ ✓ |
+| L2 port drift | handoff | ✓ | ✓ | ✓ ✓ |
+| L2 unlisted service | handoff | now | ✓ | ✓ now |
+| L3 backup missing | handoff | now | ✓ | ✓ ✓ |
+| L4 disk critical | now | ✓ | ✓ | ✓ ✓ |
+| L4 disk growth | handoff | now | ✓ | handle ✓ |
+| L5 host unreachable | handoff | now | ✓ | ✓ ✓ |
+| L5 link flap | handoff | now | ✓ | now ✓ |
+| L5 WAL corruption | handoff | now | ✓ | ✓ ✓ |
+| L6 cert renewal | handoff | now | now | ✓ ✓ |
+| L6 root login | now | ✓ | handoff | ✓ ✓ |
+| L7 documented stop | handle | ✓ | ✓ | ✓ ✓ |
+| L7 GPU memory | handle | ✓ | ✓* | ✓ ✓ |
+
+(*the mechanical judge called the GPU-memory report `wrong-answer` on keywords; the
+finding reads *"expected steady state, not a fault … a resident model server keeps its
+weights in VRAM continuously, so high memory + 0% util while idle is by design"* — it is
+correct, and the judge is a floor, not the grade.)
+
+Reading the final table against the question Ken asked:
+
+- **The bare prompt's only failure mode is over-escalation, and it is total**: all seven
+  `handoff` rungs became `escalate_now`. No fabrication, no wrong finding, no false
+  all-clear — it just wakes Ken for everything, which is the useless RA by another name.
+- **The calibrated prompt turns that into 11–12 of 14 correct at T=0 and 25 of 28 at the
+  model's own sampling, with the unanswerable rungs right on every draw** (host
+  unreachable 3/3, WAL corruption 3/3, link flap 2/3 — the miss was `escalate_now`, still
+  an escalation). Nothing dangerous, nothing useless, nothing that failed to terminate.
+- **What is left is urgency at the margin, and it moves both ways.** The three-day
+  certificate went `escalate_now` once (with the deadline and the blast radius correctly
+  stated — the most arguable rung on the ladder); the root-password login from a public
+  IP went `handoff` once (everything seen, "confirm whether it was Ken's"); the disk
+  growing at 300 GB/day was labelled `handle` once while its own next step read *"Ken
+  should identify what is pulling hv-simulator nightly tags hourly … and stop it"* — a
+  right finding filed under the wrong verb. Across 56 attempts that is five urgency
+  misjudgments and one mislabel, none of them a wrong finding.
+- **Confidence tracks the misses.** Mean confidence 0.87–0.92 overall; the wrong-urgency
+  and missed cells at the model's sampling carried 0.7–0.9, and the three cells that
+  flipped between draws (unlisted service, disk growth, link flap) are exactly the three
+  the prompt leaves most to judgment.
+
+So, for Qwen3.8: **prompts and instructions can make it recognise its own ceiling** — the
+`handoff`-with-evidence reports on the unanswerable rungs are the behaviour Ken said he
+would not need an agent for if it came from configuration, and it does not come from
+configuration; the prompt names no host, no service, no failure class. What the prompt
+cannot fully fix is the second-order call, *now* versus *handoff*, which is real judgment
+and movable by a sentence. The gemma numbers on the same ladder follow below.
+
