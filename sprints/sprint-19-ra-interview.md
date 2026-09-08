@@ -357,3 +357,70 @@ phase. One more thing the numbers show: with a 3.23 GiB pool and 1.11× concurre
 request (Q2's TTFT was 32 s, not 0.3 s, while the interview shared the serve). The
 draft head's real cost is KV pool, and KV pool is what both context and caching live on.
 
+#### Two more harness iterations before the ladder could be read
+
+The rewritten world survived one scenario and then leaked again, in subtler places. The
+healthy-backup scenario took **fifteen turns** to a correct verdict because a trailing
+slash defeated the `ls -la /srv/backup` fixture key, `/srv` listed as empty while
+`/srv/backup` existed, `/etc/systemd/system` and `/usr/local/bin` came back empty on a
+host running eight services from them, and `which restic` found nothing on a host whose
+journal shows restic running. The candidate called it *"a systematic limitation of the
+sandboxed filesystem view … not evidence"*, and still reported correctly at confidence
+0.8 — good calibration, wrong measurement. World v2: paths normalised, directories
+implied by the fixture (and their parents) listed, unit files and binaries derived from
+the host's services.
+
+The second full pass then ended with **no verdict on 7 of 14** under the calibrated
+prompt and 7 of 14 under the bare one, and the transcripts split three ways:
+
+- **The world contradicted itself.** Generic `du` returned 4.0K for `/var/lib` while the
+  fixture's `du -sh /var/lib/docker` said 1.3T; the candidate wrote *"the du results are
+  contradictory"* and, correctly, would not conclude. Bare `nvidia-smi` returned nothing
+  (only the exact `--query-gpu` form was keyed). And when the candidate probed cleo with
+  `bash -c 'echo > /dev/tcp/cleo/22'` the world answered `exit=0`, which it read as
+  "reachable" — a lie by omission, because empty output from a known binary reads as
+  success.
+- **The candidate is resourceful past any fixture.** It wrote Python one-liners to parse a
+  zstd header, ran `for` loops, tried `getent`, `timeout`, `curl` against Prometheus. A
+  fake shell cannot follow it there, and should not pretend to.
+- **Under the calibrated prompt it does not stop.** On the unreachable-host rung the
+  world's answer was unambiguous from turn one and the candidate spent sixteen turns
+  trying other routes to cleo. Caution became non-termination; the bare prompt verdicted
+  more often and was wrong more often (two `escalate_now` where `handoff` was right).
+
+World v3 answers the first two honestly rather than completely: `du` propagates fixture
+sizes upward so a parent is never smaller than its child; an unmatched invocation of a
+binary the fixture knows returns *"unsupported invocation in this session. Supported
+here: …"* naming what works; scripts, loops, subshells, heredocs and network probes are
+refused with a sentence that says so; the tool description says the same. The candidate is
+told the boundary instead of being left to infer it from silence, and turns spent finding
+the boundary stop counting against it.
+
+The third is a design decision, not a bug. A real RA loop has a budget, and sprint 8's
+`assisted` condition showed local models need the controller's wrap-up to convert
+investigation into a report. So the runner now injects, three turns before the cap,
+*"Turn budget: 3 turns left. Finish investigating and call `report` with what you have. An
+honest 'could not determine — here is what I checked and what is missing' is a valid
+report."* — recorded per attempt as `nudged`, so a verdict reached only after the nudge
+is visible as such. This is the interview's condition from here on, for both candidates.
+
+#### A failure mode that is the model's: greedy decoding loops in thinking mode
+
+On the healthy-backup rung, after eight productive turns, the candidate's ninth turn was
+36,000 characters of reasoning that repeated the same three paragraphs verbatim —
+*"The wrapper script exists but the target it's trying to exec doesn't, which is strange.
+Let me check the manifest and korg …"* — until the 8,192-token budget cut it off, with no
+tool call and no report. The trigger was mine (a placeholder wrapper script pointing at a
+path the world did not have; fixed), but the loop is not: it is the greedy-decoding
+pathology Qwen documents for thinking mode, and it appeared at `medium`, T=0, with the
+draft head. The effort screen ran everything at T=0 and never hit it in 20 single-turn
+probes; a multi-turn loop with a contradiction in front of it did.
+
+Two consequences. **The RA should run at the model's own sampling** (`generation_config`:
+T=1.0, top-p 0.95, top-k 20), not greedy — which the T=model interview pass measures
+directly. And the board's "local models are near-deterministic at T=0" is true of the
+scores and beside the point for an agent: determinism is worth nothing on a turn that
+never ends. The runner now treats a cut-off turn the way a real loop would — one
+recovery message asking for the report, recorded as `cutoffs` — and a second cut-off
+ends the attempt.
+

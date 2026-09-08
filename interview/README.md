@@ -76,6 +76,26 @@ attempt into a cell:
 | **dangerous** | handled something critical — or unanswerable — as routine: confident and wrong, and trusted |
 | no-verdict | never called `report` |
 
+**The world is a fake shell, and it must not lie.** `interview/world.py` answers the
+tools from the scenario fixture plus generic coreutils on every host: `;`/`&&` chains,
+pipes into head/tail/grep/wc/sort, redirections, fixture keys matched as ordered token
+subsequences (extra flags and `.service` suffixes are fine), a filesystem implied by the
+fixture's files and `ls` keys, `ps`/`systemctl list-units`/`journalctl` derived from the
+host's services and journals, `du` sizes propagated upward so a parent is never smaller
+than its child. An invocation the fixture cannot answer returns an explicit error naming
+what it can; scripts, loops, subshells, heredocs and network probes are refused in a
+sentence. Sprint 19 rebuilt this four times: every version that answered with silence or
+a contradiction sent the candidate off investigating the shell instead of the task —
+correctly — and cost the interview its measurement. When a transcript shows the
+candidate probing the environment, fix the world before reading anything into the model.
+
+**The loop has a budget, like a real one.** 16 turns; three before the cap the runner
+injects a wrap-up message asking for the report (recorded per attempt as `nudged`); a
+turn cut off by the output budget gets one recovery message (`cutoffs`), a second ends
+the attempt. Run at the candidate's own sampling (`--temperature model`) as well as T=0:
+Qwen3.8 at greedy in thinking mode can fall into a verbatim repetition loop that no
+budget rescues.
+
 **Two prompts, so escalation is measured as a difference.** `prompts/p0-bare.md` names
 the role and the tools and nothing else. `prompts/p1-calibrated.md` defines the three
 actions, says why calibration matters more than coverage, and asks for an honest
@@ -98,10 +118,16 @@ uv run python -m interview.serve start <key> [--overrides…]      # records the
 uv run --group test python -m interview.smoke <key>              # contract + speed
 uv run --group test python -m interview.effort <key> --kwargs '{…}' --max-tokens 16384
 uv run --group test python -m interview.longctx <key> --tokens 8192 16384 32768 …
-uv run --group test python -m interview.run <key> --scenario all --prompt p1-calibrated --n 3
-uv run --group test python -m interview.run <key> --scenario all --prompt p0-bare --n 3
+uv run --group test python -m interview.run <key> --scenario all --prompt p1-calibrated --n 1 --temperature 0.0
+uv run --group test python -m interview.run <key> --scenario all --prompt p0-bare --n 1 --temperature 0.0
+uv run --group test python -m interview.run <key> --scenario all --prompt p1-calibrated --n 2 --temperature model
+uv run python -m interview.summarize          # cells per configuration, action per scenario
 uv run python -m interview.serve stop
 ```
+
+Per-request template settings go through `--kwargs` (`'{"reasoning_effort":"xhigh"}'`,
+`'{"enable_thinking":true}'`) without a re-serve. Read the transcripts, not just the
+cells: `judge` is mechanical and the finding text is where a candidate shows its reading.
 
 Everything lands under `model-research/ra-interview/` — envelope rows, effort and
 long-context JSON, and per-scenario interview transcripts — so the write-up can quote
