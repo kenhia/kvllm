@@ -726,3 +726,11 @@ the board: `kv_cache_dtype = "fp8"`, `max_model_len` 32,768 (or more), and
 `enable_thinking` on cost gemma nothing it had and give it twice the window, exact
 arithmetic and working aggregation. The board never measured any of it.
 
+And the same sweep with thinking **off**, to 29,648 tokens (the 32k window minus the
+answer budget — `interview.longctx` now caps its targets to the served window):
+needle, absence and contradiction 3/3 at every length, count 3–4/5, order 1–2/3, a
+question answered in 0.6–11 s. **Nothing degrades with length under fp8 KV**: the 29.6k
+row is the 8k row. The misses are thinking-off's — the same aggregation and
+adjacent-timestamp slips it shows at 4k — and thinking on removes them. The
+configuration to carry forward for gemma is therefore all three knobs together.
+
