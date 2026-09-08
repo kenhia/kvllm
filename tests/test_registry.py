@@ -68,3 +68,39 @@ def test_max_num_batched_tokens_precedes_extra_args():
         ),
     )
     assert argv[-2:] == ["--max-num-batched-tokens", "4096"]
+
+
+def test_speculative_config_absent_by_default():
+    assert "--speculative-config" not in build_serve_argv("m", _entry())
+
+
+def test_speculative_config_emitted_as_compact_json():
+    argv = build_serve_argv(
+        "m", _entry(speculative_config={"method": "mtp", "num_speculative_tokens": 3})
+    )
+    i = argv.index("--speculative-config")
+    assert argv[i + 1] == '{"method":"mtp","num_speculative_tokens":3}'
+
+
+def test_chat_template_kwargs_absent_by_default():
+    assert "--default-chat-template-kwargs" not in build_serve_argv("m", _entry())
+
+
+def test_chat_template_kwargs_emitted_as_compact_json():
+    argv = build_serve_argv(
+        "m", _entry(chat_template_kwargs={"reasoning_effort": "medium"})
+    )
+    i = argv.index("--default-chat-template-kwargs")
+    assert argv[i + 1] == '{"reasoning_effort":"medium"}'
+
+
+def test_chat_template_kwargs_precede_extra_args():
+    # extra_args keeps the last word, as for every other first-class field.
+    argv = build_serve_argv(
+        "m",
+        _entry(
+            chat_template_kwargs={"enable_thinking": True},
+            extra_args=["--default-chat-template-kwargs", "{}"],
+        ),
+    )
+    assert argv[-2:] == ["--default-chat-template-kwargs", "{}"]

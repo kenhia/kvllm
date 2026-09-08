@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
 import os
 import sys
 import tomllib
@@ -122,6 +123,24 @@ def build_serve_argv(
             "--max-num-batched-tokens",
             str(entry["max_num_batched_tokens"]),
         ]
+    if entry.get("speculative_config"):
+        # A draft head is a model property (Qwen3.8 ships one in
+        # model_mtp.safetensors); an inline TOML table here becomes vLLM's JSON,
+        # e.g. { method = "mtp", num_speculative_tokens = 3 }. It costs KV pool
+        # (~1.3 GiB on Qwen3.8), so it trades against max_model_len — sprint 18.
+        argv += [
+            "--speculative-config",
+            json.dumps(entry["speculative_config"], separators=(",", ":")),
+        ]
+    if entry.get("chat_template_kwargs"):
+        # Server-side defaults the chat template reads on every request unless the
+        # request overrides them: Qwen3.8's reasoning_effort, gemma-4's
+        # enable_thinking. Registry-level because it is part of how the model is
+        # served, not a per-call choice — a plain OpenAI client never sends it.
+        argv += [
+            "--default-chat-template-kwargs",
+            json.dumps(entry["chat_template_kwargs"], separators=(",", ":")),
+        ]
     # Escape hatch for model-specific vllm flags with no dedicated field
     # (e.g. Devstral's --tokenizer-mode/--config-format/--load-format mistral).
     argv += [str(a) for a in entry.get("extra_args", [])]
@@ -181,6 +200,8 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "enforce_eager",
         "max_model_len",
         "max_num_batched_tokens",
+        "speculative_config",
+        "chat_template_kwargs",
         "gated",
         "est_vram_gb",
         "capabilities",

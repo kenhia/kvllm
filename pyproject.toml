@@ -15,23 +15,22 @@ dependencies = [
     # upgrading vllm alone drags cutlass-dsl forward while uv holds quack at its locked
     # version. A stale quack then dies at kernel warm-up (AttributeError on a cutlass.cute
     # API it removed) — which looks like a serving bug, long after model load. See sprint 15.
-    # Sprint 18 (WI-1736): 0.28.0 EVALUATED, NOT ADOPTED — and the blocker is not
-    # serving. 0.28.0 serves gemma-4-31b-it-awq cleanly (30,746 MiB, 7.31 GiB KV pool,
-    # vs 30,846 / 7.42 on 0.27.1). It is unadoptable *here* because it requires
-    # click>=8.4.2 while inspect-ai 0.3.244 requires click<8.2.2, so taking 0.28.0
-    # forces inspect-ai to 0.3.263, which in turn requires openai>=3.1.0 — i.e. the
-    # serving bump drags the EVAL HARNESS forward as a rider. That would confound the
-    # hardware change, the vLLM change and the harness change in one measurement, and
-    # move the board out from under sprint 16's noise floor (0.036). Adopt 0.28.0 as
-    # its own sprint, paired with the inspect-ai bump and a re-measured floor.
-    "vllm>=0.27.1,<0.28",
+    # Sprint 18 (WI-1736): 0.28.0 served gemma cleanly but was NOT adopted, because it
+    # dragged inspect-ai 0.3.244 -> 0.3.263 (click coupling) and that harness needs
+    # openai>=3.1.0 — three changes in the one measurement sprint 18 existed to make
+    # trustworthy. Sprint 19 (WI-1962) adopts all three together, deliberately: vLLM
+    # 0.28.0 + inspect-ai 0.3.263 + openai 3.x, re-locked in one `uv lock` call.
+    # Why 0.28.0 matters for the resident-model candidate: fused MTP decode kernel for
+    # Qwen3.5-family GDN (#51674), GDN gates aligned with speculative tokens (#51812),
+    # and a thinking_token_budget control (#46727).
+    "vllm>=0.28.0,<0.29",
 ]
 
 [dependency-groups]
 test = [
     "langchain-core>=1.4.8",
     "langchain-openai>=1.3.3",
-    "openai>=2.44.0",
+    "openai>=3.1.0",
 ]
 dev = [
     "ruff>=0.14.0",
@@ -42,14 +41,19 @@ helper = [
     "uvicorn[standard]>=0.49.0",
 ]
 eval = [
-    "anthropic>=0.115.0",
-    # PINNED, not floored (sprint 18). The vLLM 0.28.0 re-resolve dragged this to
-    # 0.3.263, whose OpenAI-compatible provider requires openai>=3.1.0 and aborts the
-    # suites outright. Chasing it forward would also move the eval harness out from
-    # under sprint 16's measured noise floor (composite band 0.036), which every gap
-    # on the board is read against. Hold it here; bump deliberately, with a re-measured
-    # floor, not as a rider on a serving-stack change.
-    "inspect-ai==0.3.244",
+    # inspect-ai 0.3.263's Anthropic provider (the judge) checks anthropic>=1.0.0 at
+    # runtime, like the openai floor below — found by the sprint-19 harness smoke, where
+    # `judged` recorded no scores because every judge call died with a PrerequisiteError.
+    "anthropic>=1.0.0",
+    # Floored again (sprint 19, WI-1962). Sprint 18 PINNED this at 0.3.244 so a serving
+    # bump could not drag the eval harness forward as a silent rider; that was the right
+    # call for a re-baseline sprint and the wrong shape to leave in place. The floor is the
+    # version the vLLM 0.28.0 resolve lands on. Bumping it later moves the harness out from
+    # under the measured noise floor (eval-config.toml [noise]) — re-measure when you do.
+    "inspect-ai>=0.3.263",
+    # inspect-ai's OpenAI-compatible provider checks this AT RUNTIME (PrerequisiteError,
+    # one suite into a run), not in its package metadata — so the floor has to be here.
+    "openai>=3.1.0",
     "tomlkit>=0.15.0",
 ]
 
