@@ -44,6 +44,33 @@ in the suite — they are in the layers nobody thinks of as "the harness".**
    never crashed. **A derived column with no test is an assertion nobody checked** — and this
    one was load-bearing for "is local good enough to stop paying".
 
+**Three more, added 2026-09-08 (sprint 19), from the first eval that let the model
+investigate instead of answer.**
+
+7. **A fixture that answers with silence or a contradiction is a harness bug that
+   masquerades as bad judgment.** The RA interview's first world was a lookup table:
+   `systemctl --failed --no-pager` came back "command not found", `ls -la /` "cannot
+   access '/'", a parent directory 4.0K beside a child of 1.3T. Qwen3.8 did the right thing
+   — stopped investigating the task and investigated the shell, and declined to conclude —
+   and would have been scored *no-verdict* on half the ladder. Five iterations later the
+   world never contradicts itself and says explicitly what it cannot do ("unsupported
+   invocation in this session; supported here: …"). The rule: **when a transcript shows the
+   candidate probing the environment, fix the environment before reading anything into the
+   model.** A candidate that notices the fixture is lying is behaving well.
+8. **Greedy decoding in thinking mode can loop.** Qwen3.8 at `medium`, T=0, on a
+   multi-turn task with a contradiction in front of it, produced 36,000 characters of the
+   same three paragraphs until the output budget ended the turn. Twenty single-turn probes
+   at T=0 never showed it; one agent loop did. "Local models are near-deterministic at T=0"
+   is true of scores and worthless on a turn that never ends — run agents at the model's
+   own sampling, and give the loop a budget with a wrap-up nudge.
+9. **The prompt is part of the harness, and it moves urgency both ways.** The same
+   candidate on the same 14 rungs: a bare role prompt over-escalated every `handoff` rung to
+   `escalate_now`; a prompt that defines the three actions and says calibration matters
+   more than coverage got 11–12 of 14 right and once under-escalated a public-IP root login
+   to `handoff` ("Ken should confirm whether it was his"). Measure escalation as the
+   difference between two prompts, not as a property of the model; and keep both cells —
+   "wakes Ken for everything" and "silent on a compromise" — in view when tuning.
+
 ## What an eval actually measures (and why a frontier baseline is less reproducible)
 
 An eval never measures a model. It measures the model **plus its entire extended
