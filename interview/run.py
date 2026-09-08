@@ -205,6 +205,7 @@ def attempt(
     error = None
     turns = 0
     nudged = False
+    cutoffs = 0
     while turns < max_turns and report is None:
         turns += 1
         params = dict(
@@ -255,11 +256,21 @@ def attempt(
                 }
             )
         if not msg.tool_calls:
-            # no tool call and no report: nudge once, then stop
             transcript.append(entry)
             if r.choices[0].finish_reason == "length":
-                error = "length"
-                break
+                # a turn cut off by the output budget: a real loop notices and asks for
+                # the report; a second cut-off ends the attempt
+                cutoffs += 1
+                if cutoffs >= 2:
+                    error = "length"
+                    break
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Your last turn was cut off by the output budget. Call `report` now with what you have.",
+                    }
+                )
+                continue
             messages.append(
                 {
                     "role": "user",
@@ -292,6 +303,7 @@ def attempt(
         "tool_calls": len(world.calls),
         "report": report,
         "nudged": nudged,
+        "cutoffs": cutoffs,
         "error": error,
         "transcript": transcript,
         "judge": judge(report, scenario["truth"]),

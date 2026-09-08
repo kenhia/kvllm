@@ -231,3 +231,10 @@ def test_listed_files_are_real_and_loops_are_refused_by_position():
     assert "simple commands only" in w.run_command(
         "kubsdb", "ls /srv; while true; do sleep 1; done"
     )
+
+
+def test_wrapper_targets_exist():
+    w = _w()
+    assert "binary data" in w.run_command("kubsdb", "cat /opt/korg/korg")
+    assert "korg" in w.run_command("kubsdb", "ls /opt")
+    assert "Size:" in w.run_command("kubsdb", "stat /opt/korg/korg")

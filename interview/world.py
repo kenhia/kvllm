@@ -625,6 +625,8 @@ class World:
     def _implied_files(self, h: dict) -> set[str]:
         out = set(self._listed_sizes(h))
         for unit in self._services(h):
+            out.add(f"/opt/{_unit(unit)}/{_unit(unit)}")  # what the wrapper execs
+        for unit in self._services(h):
             name = unit if "." in unit else unit + ".service"
             out.add(f"/etc/systemd/system/{name}")
             out.add(f"/usr/local/bin/{_unit(unit)}")
@@ -712,6 +714,8 @@ class World:
         sizes = self._listed_sizes(h)
         if path in sizes:
             return f"(binary data, {sizes[path]} bytes)"
+        if path.startswith("/opt/") and path in self._implied_files(h):
+            return "(binary data, 18432112 bytes)"
         return f"cat: {path}: No such file or directory"
 
     _SIZES = {"K": 1, "M": 1024, "G": 1024**2, "T": 1024**3}
