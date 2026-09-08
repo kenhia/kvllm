@@ -689,3 +689,40 @@ make a candidate read a log it did not think to read. The gap between the two ca
 on this ladder is not speed or knowledge; it is thoroughness before concluding, and a
 confidence signal that means something when they are wrong.
 
+#### gemma with fp8 KV — the untested lever, tested
+
+| | fp16 KV, 16,384 | **fp8 KV, 16,384** | **fp8 KV, 32,768** |
+|---|---|---|---|
+| KV pool | 7.42 GiB | 7.32 GiB | 7.32 GiB |
+| KV tokens | 20,765 | **40,963** | **67,507** |
+| KiB per token (at that length) | 375 | 187 | 114 |
+| concurrency at max length | 1.27× | 2.5× | **2.06×** |
+| VRAM / cold start | 30,846 MiB / 84 s | 30,754 MiB / 128 s | 30,746 MiB / 126 s |
+| decode | 72.9 tok/s | 72.9 tok/s | — |
+| effort screen, thinking off | 4/5* | 5/5 | — |
+
+(*the underscore false negative.) The premise-check arithmetic said fp8 KV would roughly
+double gemma's usable context; it did — and the per-token cost keeps falling with
+length because the 50 sliding-window layers are a fixed ~400 MiB at fp8, so **32,768 is
+not the ceiling**: at 2.06× concurrency there is room for a single request past 60k. The
+40k and 48k probes are in the queue. Nothing about gemma's answers changed under fp8 KV:
+the effort screen is byte-for-byte the same shape (295/71/489/77/57 tokens at thinking
+off), tool calls parse, and the registry's "NEVER on-the-fly FP8" note is confirmed to
+be about weights, not the cache.
+
+**Long-context at 32k, fp8 KV, thinking on:**
+
+| tokens | needle | absence | contradiction | count | order | TTFT Q1 | wall/Q |
+|---|---|---|---|---|---|---|---|
+| 8,238 | 3/3 | 3/3 | 3/3 | **5/5** | 1/3* | 2.8 s | 11 s |
+| 16,920 | 3/3 | 3/3 | 3/3 | **5/5** | 3/3 | 5.7 s | 16 s |
+| 25,427 | 3/3 | 3/3 | 3/3 | **5/5** | 3/3 | 8.9 s | 15 s |
+
+(*the adjacent-line timestamp again at 8k, gone at 16k and 24k.) **Thinking fixes the
+aggregation miss** — the count that lost a host on every run without it is 5/5 with
+it, at 4–6 s a question — and 25k tokens of interleaved tool output with five facts is
+answered perfectly in 15 s a question. That is a different incumbent from the one on
+the board: `kv_cache_dtype = "fp8"`, `max_model_len` 32,768 (or more), and
+`enable_thinking` on cost gemma nothing it had and give it twice the window, exact
+arithmetic and working aggregation. The board never measured any of it.
+
