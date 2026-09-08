@@ -712,6 +712,13 @@ class World:
         if path in files:
             return files[path]
         svcs = self._services(h)
+        m = re.match(r"/etc/systemd/system/([^/]+)\.timer$", path)
+        if m and m.group(1) + ".timer" in svcs:
+            u = m.group(1)
+            return (
+                f"[Unit]\nDescription={u} (timer)\n\n[Timer]\nOnCalendar=*-*-* 02:10:00\nPersistent=true\n"
+                f"Unit={u}.service\n\n[Install]\nWantedBy=timers.target"
+            )
         m = re.match(r"/etc/systemd/system/([^/]+?)(?:\.service)?$", path)
         if m and (m.group(1) in svcs or m.group(1) + ".service" in svcs):
             u = m.group(1)
@@ -906,6 +913,10 @@ class World:
             )
         if cmd in ("cat", "show"):
             unit = _unit(a[-1])
+            if unit.endswith(".timer") and unit in svcs:
+                return f"# /etc/systemd/system/{unit}\n" + self._cat(
+                    "", h, f"/etc/systemd/system/{unit}"
+                )
             return (
                 f"# /etc/systemd/system/{unit}.service\n[Service]\nExecStart=/usr/local/bin/{unit}\nRestart=on-failure"
                 if unit in svcs
@@ -991,17 +1002,29 @@ class World:
             if not pats:
                 return text
             pat = pats[0]
-            ci = any("i" in f for f in flags)
-            inv = any(f == "-v" for f in flags)
-            fixed = any(f == "-F" for f in flags) or not (
-                cmd == "egrep" or "-E" in flags
-            )
+            letters = set("".join(f[1:] for f in flags if not f.startswith("--")))
+            ci = "i" in letters or "--ignore-case" in flags
+            inv = "v" in letters or "--invert-match" in flags
+            ere = cmd == "egrep" or "E" in letters or "--extended-regexp" in flags
+            fixed_flag = "F" in letters or "--fixed-strings" in flags
+            # basic-regex alternation/grouping, as in `grep -i "disk\|spac"`, is a regex
+            bre_meta = any(m in pat for m in ("\\|", "\\(", "\\)", "\\{"))
+            if bre_meta and not fixed_flag:
+                for a_, b_ in (
+                    ("\\|", "|"),
+                    ("\\(", "("),
+                    ("\\)", ")"),
+                    ("\\{", "{"),
+                    ("\\}", "}"),
+                ):
+                    pat = pat.replace(a_, b_)
+            fixed = fixed_flag or not (ere or bre_meta)
             try:
                 rx = re.compile(re.escape(pat) if fixed else pat, re.I if ci else 0)
             except re.error:
                 rx = re.compile(re.escape(pat), re.I if ci else 0)
             keep = [ln for ln in lines if bool(rx.search(ln)) != inv]
-            if "-c" in flags:
+            if "c" in letters or "--count" in flags:
                 return str(len(keep))
             return "\n".join(keep)
         if cmd == "wc":

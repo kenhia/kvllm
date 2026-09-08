@@ -275,3 +275,31 @@ def test_whole_journal_includes_kernel_lines():
         w.run_command("kubs0", "journalctl -u kmon")
         == "Sep 07 01:12:05 kubs0 kmon[2210]: WARN target dial timeout"
     )
+
+
+def test_grep_bre_alternation_and_timer_units():
+    w = World(
+        {
+            "hosts": {
+                "kubsdb": {
+                    "commands": {
+                        "journalctl -u postgresql": "Sep 07 02:52:10 kubsdb postgres[1188]: PANIC:  could not write to file: No space left on device",
+                        "systemctl status nightly-backup.timer": "○ nightly-backup.timer - Nightly\n     Active: inactive (dead)",
+                    }
+                }
+            },
+            "manifest": {},
+            "korg": [],
+        }
+    )
+    assert "No space left" in w.run_command(
+        "kubsdb", 'journalctl -p warning -n 100 | grep -i "disk\\|spac"'
+    )
+    assert "No space left" in w.run_command(
+        "kubsdb", "journalctl -p warning | grep -iE 'disk|space'"
+    )
+    assert w.run_command("kubsdb", 'journalctl -p warning | grep -i "zzz\\|yyy"') == ""
+    assert "[Timer]" in w.run_command(
+        "kubsdb", "cat /etc/systemd/system/nightly-backup.timer"
+    )
+    assert "[Timer]" in w.run_command("kubsdb", "systemctl cat nightly-backup.timer")

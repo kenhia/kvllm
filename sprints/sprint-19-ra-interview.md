@@ -734,3 +734,21 @@ row is the 8k row. The misses are thinking-off's — the same aggregation and
 adjacent-timestamp slips it shows at 4k — and thinking on removes them. The
 configuration to carry forward for gemma is therefore all three knobs together.
 
+#### gemma at its best configuration through the ladder (fp8 KV, 32k, thinking on)
+
+10 correct, 3 wrong-urgency, 1 dangerous — **the same cells as fp16 with thinking on**,
+which is what it should be: the scenarios sit at ~10k tokens, and the window is not what
+decides them. The fp8 KV cache changes nothing about the verdicts, at 13–132 s a rung.
+
+Two of its four wrong cells turned out to be the world's again, found by reading the
+transcripts rather than the table: on the PANICking postgres gemma ran `journalctl -p
+warning -n 100 | grep -i "disk\|spac"` — the right question — and the world's grep,
+treating basic-regex `\|` as a literal, hid the "No space left on device" line a real
+grep shows; on the missing backup it ran `cat /etc/systemd/system/nightly-backup.timer`,
+got a `[Service]` file from the placeholder, and reported the timer *"misconfigured as a
+service rather than a timer"* — a fabrication the fixture handed it. Both fixed; the
+three rungs that touched them (link flap, disk critical, missing backup) are re-run for
+both candidates in every condition before the comparison is final. The link-flap cell
+here was gemma's own: it queried the target hosts' journals for the window and never the
+kmon host's, where the NIC was flapping.
+
