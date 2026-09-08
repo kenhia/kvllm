@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import shlex
 import sys
 import time
 from pathlib import Path
+
+from interview.world import World
 
 REPO = Path(__file__).resolve().parent.parent
 SCENARIOS = REPO / "interview" / "scenarios"
@@ -34,7 +35,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_command",
-            "description": "Run a read-only shell command on a homelab host and return its output. Examples: systemctl status <unit>, journalctl -u <unit> -n 50, ss -tlnp, df -h, docker ps, ls <dir>, date.",
+            "description": "Run a read-only shell command on a homelab host as user ken and return its output. One command per call; pipes into head/tail/grep and `;` chains are fine. Examples: systemctl status <unit>, systemctl --failed, journalctl -u <unit> -n 50, journalctl -p warning -n 100, ss -tlnp, df -h, free -m, ps aux, docker ps, ls -la <dir>, cat <file>.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -127,121 +128,6 @@ TOOLS = [
         },
     },
 ]
-
-
-class World:
-    """Answers tool calls from the scenario's fixture. Unknown things fail the way a real
-    host would, so the candidate cannot tell a fixture from a fleet by the error text."""
-
-    def __init__(self, w: dict):
-        self.w = w
-        self.calls: list[dict] = []
-
-    def _host(self, host: str) -> dict | None:
-        return self.w.get("hosts", {}).get(host)
-
-    def run_command(self, host: str, command: str) -> str:
-        h = self._host(host)
-        if h is None:
-            return f"ssh: Could not resolve hostname {host}: Name or service not known"
-        cmds = h.get("commands", {})
-        try:
-            words = shlex.split(command) if command.strip() else []
-        except ValueError:
-            words = command.split()
-        norm = " ".join(words)
-        if norm in cmds:
-            return cmds[norm]
-        # longest fixture key that is a prefix of the command (extra flags are fine)
-        best = max((k for k in cmds if norm.startswith(k)), key=len, default=None)
-        if best:
-            return cmds[best]
-        first = words[0] if words else ""
-        if first in ("cat", "less", "head", "tail") and len(words) >= 2:
-            return self.read_file(host, words[-1])
-        if first == "journalctl":
-            return "-- No entries --"
-        if first == "systemctl" and "status" in words:
-            unit = words[-1]
-            return f"Unit {unit if unit.endswith('.service') or unit.endswith('.timer') else unit + '.service'} could not be found."
-        if first in ("ls", "find") and len(words) >= 2:
-            return f"ls: cannot access '{words[-1]}': No such file or directory"
-        # core utils exist on every host and print nothing useful here; anything
-        # more exotic is absent unless the scenario says otherwise
-        if first in (
-            "ss",
-            "df",
-            "docker",
-            "date",
-            "uptime",
-            "free",
-            "ps",
-            "grep",
-            "du",
-            "ip",
-            "ping",
-            "curl",
-            "dig",
-            "last",
-            "who",
-            "wc",
-            "sort",
-            "echo",
-        ):
-            return h.get("default_output", "")
-        return f"bash: {first}: command not found"
-
-    def read_file(self, host: str, path: str) -> str:
-        h = self._host(host)
-        if h is None:
-            return f"ssh: Could not resolve hostname {host}: Name or service not known"
-        files = h.get("files", {})
-        if path in files:
-            return files[path]
-        return f"cat: {path}: No such file or directory"
-
-    def manifest_lookup(self, service: str) -> str:
-        m = self.w.get("manifest", {})
-        if service == "all":
-            return (
-                "\n".join(
-                    f"{s}: host={v['host']} port={v['port']}"
-                    + (f" note={v['note']}" if v.get("note") else "")
-                    for s, v in m.items()
-                )
-                or "(empty manifest)"
-            )
-        v = m.get(service)
-        if not v:
-            return f"no manifest entry for '{service}'"
-        return f"{service}: host={v['host']} port={v['port']}" + (
-            f" note={v['note']}" if v.get("note") else ""
-        )
-
-    def korg_search(self, query: str) -> str:
-        q = query.lower()
-        hits = [
-            wi
-            for wi in self.w.get("korg", [])
-            if any(
-                t in (wi["title"] + " " + wi.get("body", "")).lower() for t in q.split()
-            )
-        ]
-        if not hits:
-            return "no open work items match"
-        return "\n\n".join(
-            f"#{wi['number']} [{wi.get('status', 'open')}] {wi['title']}\n{wi.get('body', '')}"
-            for wi in hits
-        )
-
-    def dispatch(self, name: str, args: dict) -> str:
-        fn = getattr(self, name, None)
-        try:
-            out = fn(**args) if fn else f"error: unknown tool {name}"
-        except TypeError as e:
-            out = f"error: bad arguments for {name}: {e}"
-        self.calls.append({"tool": name, "args": args, "chars": len(out)})
-        return out
 
 
 def _reasoning(msg) -> str:
@@ -413,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--kwargs", default=None)
     p.add_argument("--max-tokens", type=int, default=8192)
     p.add_argument("--temperature", default="0.0")
-    p.add_argument("--max-turns", type=int, default=14)
+    p.add_argument("--max-turns", type=int, default=16)
     p.add_argument("--tag", default="")
     a = p.parse_args(argv)
     kwargs = json.loads(a.kwargs) if a.kwargs else {}

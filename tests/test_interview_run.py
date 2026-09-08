@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from interview.run import World, judge
+from interview.run import judge
+from interview.world import World
 
 
 def _truth(**kw):
