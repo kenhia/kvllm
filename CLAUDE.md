@@ -13,6 +13,11 @@ weighted leaderboard). Human owner: Ken. Read this, then go straight to what you
   the landscape has moved.
 - `model-research/evals/leaderboard.md` — current board. Scorecards sit next to it;
   `model-research/` is research output generally, `suites/` is suite source code.
+- `interview/README.md` — the RA interview (sprint 19): the unranked, adaptive protocol for
+  deciding whether a local model can fill the resident-agent slot, and the envelope tools
+  (serve-with-overrides, effort screen, long-context probe). Results and transcripts under
+  `model-research/ra-interview/`. Its world is a fake shell; when a transcript shows the
+  candidate probing the environment, fix the world before reading anything into the model.
 
 ## Conventions
 
@@ -38,7 +43,8 @@ weighted leaderboard). Human owner: Ken. Read this, then go straight to what you
 `kvllm/` package (registry/serve, evalrun, evalctl, score, helper) · `client/` the
 `kvllm-client` distribution (shared LLM client for kagent/kmon/klams-mind; own pyproject —
 no vLLM dependency) · `suites/` Inspect
-tasks + fixtures · `model-research/` outputs incl. `evals/` scorecards+board · `docs/`
+tasks + fixtures · `interview/` the RA interview + envelope probes (unranked; talks to a
+served /v1) · `model-research/` outputs incl. `evals/` scorecards+board · `docs/`
 usage docs + `findings/` · `sprints/` history + `planning/` architecture · `eval-logs/`
 transcripts (gitignored).
 
