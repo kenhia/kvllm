@@ -155,3 +155,41 @@ def test_absent_things_fail_like_bash():
         "error: bad arguments"
     )
     assert len(w.calls) == 1
+
+
+def test_world_never_contradicts_itself_and_refuses_scripts():
+    w = World(
+        {
+            "hosts": {
+                "kubsdb": {
+                    "commands": {
+                        "du -sh /var/lib/docker": "1.3T\t/var/lib/docker",
+                        "docker ps": "CONTAINER ID IMAGE STATUS NAMES",
+                        "nvidia-smi --query-gpu=memory.used --format=csv": "memory.used [MiB]\n30846 MiB",
+                    }
+                }
+            },
+            "manifest": {},
+            "korg": [],
+        }
+    )
+    assert w.run_command("kubsdb", "du -sh /var/lib/docker") == "1.3T\t/var/lib/docker"
+    assert w.run_command("kubsdb", "du -sh /var/lib").startswith("1.3T")
+    assert (
+        w.run_command("kubsdb", "du -xh --max-depth=1 / | sort -rh | head -3")
+        .splitlines()[0]
+        .startswith("1.3T")
+    )
+    assert "overlay2" in w.run_command("kubsdb", "ls -la /var/lib/docker")
+    assert "No such file" in w.run_command("kubsdb", "du -sh /nope")
+    assert "read-only session runs simple commands only" in w.run_command(
+        "kubsdb", "for d in /var/lib/docker/*/; do du -sh $d; done"
+    )
+    assert "read-only session runs simple commands only" in w.run_command(
+        "kubsdb", "bash -c 'echo > /dev/tcp/cleo/22'"
+    )
+    assert "read-only session runs simple commands only" in w.run_command(
+        "kubsdb", "python3 -c 'print(1)'"
+    )
+    out = w.run_command("kubsdb", "nvidia-smi -L")
+    assert out.startswith("nvidia-smi: unsupported invocation") and "--query-gpu" in out

@@ -35,7 +35,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_command",
-            "description": "Run a read-only shell command on a homelab host as user ken and return its output. One command per call; pipes into head/tail/grep and `;` chains are fine. Examples: systemctl status <unit>, systemctl --failed, journalctl -u <unit> -n 50, journalctl -p warning -n 100, ss -tlnp, df -h, free -m, ps aux, docker ps, ls -la <dir>, cat <file>.",
+            "description": "Run a simple read-only shell command on a homelab host as user ken and return its output. Pipes into head/tail/grep/wc/sort and `;` chains are fine; scripts, loops, subshells, heredocs and network probes are refused. Examples: systemctl status <unit>, systemctl --failed, journalctl -u <unit> -n 50, journalctl -p warning -n 100, ss -tlnp, df -h, du -sh <dir>, free -m, ps aux, docker ps, ls -la <dir>, cat <file>.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -204,6 +204,7 @@ def attempt(
     tokens_in = tokens_out = 0
     error = None
     turns = 0
+    nudged = False
     while turns < max_turns and report is None:
         turns += 1
         params = dict(
@@ -244,6 +245,15 @@ def attempt(
                 for t in msg.tool_calls
             ]
         messages.append(assistant)
+        if turns == max_turns - 3 and report is None:
+            # a real RA loop has a budget; the nudge is the controller's wrap-up, recorded
+            nudged = True
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "Turn budget: 3 turns left. Finish investigating and call `report` with what you have. An honest 'could not determine — here is what I checked and what is missing' is a valid report.",
+                }
+            )
         if not msg.tool_calls:
             # no tool call and no report: nudge once, then stop
             transcript.append(entry)
@@ -281,6 +291,7 @@ def attempt(
         "tokens_out": tokens_out,
         "tool_calls": len(world.calls),
         "report": report,
+        "nudged": nudged,
         "error": error,
         "transcript": transcript,
         "judge": judge(report, scenario["truth"]),

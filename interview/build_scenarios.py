@@ -194,8 +194,29 @@ def healthy_kubs0() -> dict:
     )
 
 
+KAI_NVIDIA = {
+    "nvidia-smi": (
+        "Mon Sep  7 03:00:04 2026\n+-----------------------------------------------------------------------------------------+\n"
+        "| NVIDIA-SMI 595.58.03              Driver Version: 595.58.03      CUDA Version: 13.0     |\n"
+        "|-----------------------------------------+------------------------+----------------------+\n"
+        "| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n"
+        "| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n"
+        "|=========================================+========================+======================|\n"
+        "|   0  NVIDIA GeForce RTX 5090        Off |   00000000:01:00.0 Off |                  N/A |\n"
+        "| 30%   41C    P8             21W /  575W |   30846MiB /  32607MiB |      0%      Default |\n"
+        "+-----------------------------------------+------------------------+----------------------+\n\n"
+        "| Processes:                                                                              |\n"
+        "|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n"
+        "|=========================================================================================|\n"
+        "|    0   N/A  N/A            1917      C   VLLM::EngineCore                       30818MiB |\n"
+        "+-----------------------------------------------------------------------------------------+"
+    ),
+    "nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv": "pid, process_name, used_gpu_memory [MiB]\n1917, VLLM::EngineCore, 30818 MiB",
+}
+
+
 def healthy_kai() -> dict:
-    return host(
+    h = host(
         {
             "systemctl --user status kvllm": active(
                 "kvllm",
@@ -212,6 +233,8 @@ def healthy_kai() -> dict:
             "nvidia-smi --query-gpu=memory.used,memory.total --format=csv": "memory.used [MiB], memory.total [MiB]\n30846 MiB, 32607 MiB",
         }
     )
+    h["commands"].update(KAI_NVIDIA)
+    return h
 
 
 def korg(*items: tuple[int, str, str]) -> list[dict]:

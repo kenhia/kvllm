@@ -216,10 +216,37 @@ class World:
         self.calls.append({"tool": name, "args": args, "chars": len(out)})
         return out
 
+    REFUSED = (
+        "python3 -c",
+        "python -c",
+        "python3 -",
+        "bash -c",
+        "sh -c",
+        "for ",
+        "while ",
+        "until ",
+        "<<",
+        "$(",
+        "`",
+        "/dev/tcp",
+        "/dev/udp",
+        "eval ",
+        "exec ",
+        "xargs",
+        "timeout ",
+        "watch ",
+    )
+
     def run_command(self, host: str, command: str) -> str:
         h = self._host(host)
         if h is None:
             return f"ssh: Could not resolve hostname {host}: Name or service not known"
+        if any(k in command for k in self.REFUSED):
+            return (
+                "error: this read-only session runs simple commands only — no scripts, loops, "
+                "subshells, heredocs, network probes or timeouts. Pipes into head/tail/grep/wc/sort "
+                "and `;` chains are fine."
+            )
         outs = []
         for seg in _split(_tokens(command), (";", "&&", "||", "&")):
             stages = _split(seg, ("|",))
@@ -391,10 +418,7 @@ class World:
         if first == "df":
             return "Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  916G  330G  540G  38% /"
         if first == "du":
-            return (
-                "\n".join(f"4.0K\t{a}" for a in args if not a.startswith("-"))
-                or "4.0K\t."
-            )
+            return self._du(h, args)
         if first == "free":
             return (
                 "               total        used        free      shared  buff/cache   available\n"
@@ -465,7 +489,15 @@ class World:
         if first in ("cd", "export", "set", "unset", "alias", "source", "."):
             return ""
         if first in self._binaries(h):
-            return ""  # installed (a fixture key names it); nothing to say for this invocation
+            keyed = sorted(
+                k for k in h.get("commands", {}) if k.split() and k.split()[0] == first
+            )
+            if keyed:
+                return (
+                    f"{first}: unsupported invocation in this session. Supported here: "
+                    + " | ".join(keyed)
+                )
+            return f"{first}: no output"
         return f"bash: {first}: command not found"
 
     # --- helpers ---------------------------------------------------------------------------
@@ -514,6 +546,16 @@ class World:
                 add(_path(kt[-1]), True)
         for f in self._implied_files(h):
             add(f, False)
+        if any(k.startswith("docker") for k in h.get("commands", {})):
+            for d in (
+                "overlay2",
+                "containers",
+                "image",
+                "volumes",
+                "network",
+                "buildkit",
+            ):
+                add(f"/var/lib/docker/{d}", True)
         return tree
 
     def _implied_files(self, h: dict) -> set[str]:
@@ -599,6 +641,86 @@ class World:
         if self._isdir(h, path):
             return f"cat: {path}: Is a directory"
         return f"cat: {path}: No such file or directory"
+
+    _SIZES = {"K": 1, "M": 1024, "G": 1024**2, "T": 1024**3}
+
+    def _du(self, h: dict, args: list[str]) -> str:
+        """`du` answers from the fixture's own `du` keys, propagated upward: if the fixture
+        says /var/lib/docker is 1.3T then /var/lib and / are at least that — the world must
+        never contradict itself. Unknown paths that the tree knows are small; others fail."""
+        sized: dict[str, float] = {}
+        for key, val in h.get("commands", {}).items():
+            kt = key.split()
+            if kt and kt[0] == "du" and len(kt) >= 2 and kt[-1].startswith("/"):
+                m = re.match(r"([\d.]+)([KMGT])", val.strip())
+                if m:
+                    sized[_path(kt[-1])] = float(m.group(1)) * self._SIZES[m.group(2)]
+
+        def size_of(path: str) -> float | None:
+            path = _path(path)
+            if path in sized:
+                return sized[path]
+            under = [
+                v
+                for k, v in sized.items()
+                if path == "/" or k.startswith(path.rstrip("/") + "/")
+            ]
+            if under:
+                return sum(under) + 4
+            if (
+                path in GENERIC_DIRS
+                or path in self._tree(h)
+                or path in h.get("files", {})
+            ):
+                return 4.0
+            return None
+
+        def fmt(kib: float) -> str:
+            for unit, div in (("T", 1024**3), ("G", 1024**2), ("M", 1024)):
+                if kib >= div:
+                    return f"{kib / div:.1f}{unit}"
+            return f"{kib:.1f}K"
+
+        flags = [a for a in args if a.startswith("-")]
+        paths = [a for a in args if not a.startswith("-")] or ["."]
+        depth = next(
+            (int(f.split("=")[1]) for f in flags if f.startswith("--max-depth=")), None
+        )
+        if "-d" in flags:
+            k = args.index("-d")
+            if k + 1 < len(args) and args[k + 1].isdigit():
+                depth = int(args[k + 1])
+                paths = [a for a in paths if a != args[k + 1]]
+        out = []
+        for pth in paths:
+            if pth.endswith("/*"):
+                base = _path(pth[:-2])
+                kids = sorted(
+                    set(GENERIC_DIRS.get(base, [])) | self._tree(h).get(base, set())
+                )
+                for kid in kids:
+                    sz = size_of(f"{base.rstrip('/')}/{kid}")
+                    out.append(
+                        f"{fmt(sz)}\t{base.rstrip('/')}/{kid}"
+                        if sz is not None
+                        else f"du: cannot access '{base}/{kid}': No such file or directory"
+                    )
+                continue
+            sz = size_of(pth)
+            if sz is None:
+                out.append(f"du: cannot access '{pth}': No such file or directory")
+                continue
+            if depth:
+                base = _path(pth)
+                kids = sorted(
+                    set(GENERIC_DIRS.get(base, [])) | self._tree(h).get(base, set())
+                )
+                for kid in kids:
+                    ksz = size_of(f"{base.rstrip('/')}/{kid}")
+                    if ksz is not None:
+                        out.append(f"{fmt(ksz)}\t{base.rstrip('/')}/{kid}")
+            out.append(f"{fmt(sz)}\t{pth}")
+        return "\n".join(out)
 
     def _ps(self, h: dict, host: str) -> str:
         lines = [
