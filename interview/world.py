@@ -941,7 +941,9 @@ class World:
                 return "-- No entries --"
         merged = []
         for key, val in h.get("commands", {}).items():
-            if key.startswith("journalctl") and key not in ("journalctl -k",):
+            # the whole journal includes the kernel ring: `journalctl --since …` on a real
+            # host shows `NIC Link is Down` alongside the units' lines
+            if key.startswith("journalctl") and val != "-- No entries --":
                 merged.append(val)
         if not merged:
             return "-- No entries --"

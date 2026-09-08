@@ -250,3 +250,28 @@ def test_singleton_binaries_and_find_predicates():
     assert w.run_command("kubsdb", "find /srv/backup -maxdepth 1 -type f").startswith(
         "/srv/backup/"
     )
+
+
+def test_whole_journal_includes_kernel_lines():
+    w = World(
+        {
+            "hosts": {
+                "kubs0": {
+                    "commands": {
+                        "journalctl -k": "Sep 07 01:12:04 kubs0 kernel: igc eno1: NIC Link is Down",
+                        "journalctl -u kmon": "Sep 07 01:12:05 kubs0 kmon[2210]: WARN target dial timeout",
+                    }
+                }
+            },
+            "manifest": {},
+            "korg": [],
+        }
+    )
+    whole = w.run_command(
+        "kubs0", "journalctl --since '2026-09-07 01:00' --until '2026-09-07 03:00'"
+    )
+    assert "NIC Link is Down" in whole and "dial timeout" in whole
+    assert (
+        w.run_command("kubs0", "journalctl -u kmon")
+        == "Sep 07 01:12:05 kubs0 kmon[2210]: WARN target dial timeout"
+    )
