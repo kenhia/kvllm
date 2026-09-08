@@ -762,3 +762,18 @@ with a CUDA out-of-memory ("57.69 MiB free … this process has 31.29 GiB") — 
 profiler's activation peak does not fit once the engine is allowed 95% of a card whose
 weights take 19 GiB. For gemma, 0.90 is the fraction; the window is the free variable.
 
+**And the third Qwen configuration is real.** Draft head on, `max_model_len` 122,880,
+GPU fraction 0.95: serves, 4.80 GiB pool, 122,880 KV tokens — exactly one full-length
+request, 1.0× concurrency — at 31,112 MiB (1.5 GB left on the card, where gemma at
+0.95 found none), 54 s cold start, **60.3 tok/s**. So Qwen3.8 has three honest serve
+configurations on this card, and the choice between them is the RA's design choice:
+
+| Qwen3.8 configuration | context | decode | concurrency | prefix-cache headroom |
+|---|---|---|---|---|
+| no head, 0.90 (registry) | 131,072 | 30 tok/s | 1.04× | none at full length |
+| head, 0.90 | 65,536 | 60 tok/s | 1.11× | none past ~57k |
+| head, 0.95 | 122,880 | 60 tok/s | 1.0× | none at full length |
+
+The long-context probe at 32k/64k/96k against the last of these follows; an engine that
+starts is not yet an engine that answers at 96k under the head.
+
