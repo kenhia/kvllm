@@ -222,9 +222,6 @@ class World:
         "python3 -",
         "bash -c",
         "sh -c",
-        "for ",
-        "while ",
-        "until ",
         "<<",
         "$(",
         "`",
@@ -236,12 +233,13 @@ class World:
         "timeout ",
         "watch ",
     )
+    _LOOP = re.compile(r"(?:^|[;&|]\s*)(?:for|while|until|if|case|function)\s")
 
     def run_command(self, host: str, command: str) -> str:
         h = self._host(host)
         if h is None:
             return f"ssh: Could not resolve hostname {host}: Name or service not known"
-        if any(k in command for k in self.REFUSED):
+        if any(k in command for k in self.REFUSED) or self._LOOP.search(command):
             return (
                 "error: this read-only session runs simple commands only — no scripts, loops, "
                 "subshells, heredocs, network probes or timeouts. Pipes into head/tail/grep/wc/sort "
@@ -399,15 +397,45 @@ class World:
         if first == "ls":
             return self._ls(h, host, args)
         if first == "stat":
-            files = [a for a in args if not a.startswith("-")]
-            return "\n".join(
-                f"  File: {f}\n  Size: 4096\tBlocks: 8\tIO Block: 4096\tdirectory"
-                if self._isdir(h, f)
-                else f"stat: cannot statx '{f}': No such file or directory"
-                for f in files
-            )
+            sizes = self._listed_sizes(h)
+            files = h.get("files", {})
+            outs = []
+            for f in [a for a in args if not a.startswith("-")]:
+                f = _path(f)
+                if self._isdir(h, f):
+                    outs.append(
+                        f"  File: {f}\n  Size: 4096\tBlocks: 8\tIO Block: 4096\tdirectory"
+                    )
+                elif f in sizes or f in files or f in self._implied_files(h):
+                    n = sizes.get(f, len(files.get(f, "")) or 2048)
+                    outs.append(
+                        f"  File: {f}\n  Size: {n}\tBlocks: {(n + 511) // 512}\tIO Block: 4096\tregular file\n"
+                        "Modify: 2026-09-07 02:14:41.000000000 +0000"
+                    )
+                else:
+                    outs.append(f"stat: cannot statx '{f}': No such file or directory")
+            return "\n".join(outs)
         if first == "find":
-            return ""
+            roots = [a for a in args if a.startswith("/")]
+            tree = self._tree(h)
+            want_files = "-type" in args and args[
+                args.index("-type") + 1 : args.index("-type") + 2
+            ] == ["f"]
+            outs = []
+            for root in roots:
+                root = _path(root)
+                if root not in tree and root not in GENERIC_DIRS:
+                    outs.append(f"find: '{root}': No such file or directory")
+                    continue
+                kids = sorted(set(GENERIC_DIRS.get(root, [])) | tree.get(root, set()))
+                if not want_files:
+                    outs.append(root)
+                for k in kids:
+                    full = f"{root.rstrip('/')}/{k}"
+                    if want_files and (full in tree or full in GENERIC_DIRS):
+                        continue
+                    outs.append(full)
+            return "\n".join(outs)
         if first == "grep":
             flags = [a for a in args if a.startswith("-")]
             rest = [a for a in args if not a.startswith("-")]
@@ -535,7 +563,7 @@ class World:
         for d, kids in h.get("dirs", {}).items():
             add(d, True)
             tree[d] |= set(kids)
-        for key in h.get("commands", {}):
+        for key, val in h.get("commands", {}).items():
             kt = key.split()
             if (
                 kt
@@ -543,7 +571,11 @@ class World:
                 and len(kt) >= 2
                 and kt[-1].startswith("/")
             ):
-                add(_path(kt[-1]), True)
+                base = _path(kt[-1])
+                add(base, True)
+                if kt[0] == "ls":
+                    for name, is_dir in self._listed(val):
+                        add(f"{base}/{name}", is_dir)
         for f in self._implied_files(h):
             add(f, False)
         if any(k.startswith("docker") for k in h.get("commands", {})):
@@ -558,8 +590,40 @@ class World:
                 add(f"/var/lib/docker/{d}", True)
         return tree
 
+    @staticmethod
+    def _listed(listing: str) -> list[tuple[str, bool]]:
+        """Names in an `ls`/`ls -la` fixture output, with whether each is a directory."""
+        out = []
+        for ln in listing.splitlines():
+            ln = ln.rstrip()
+            if not ln or ln.startswith("total "):
+                continue
+            parts = ln.split()
+            if len(parts) >= 9 and parts[0][0] in "-dl" and len(parts[0]) == 10:
+                out.append((parts[-1], parts[0][0] == "d"))
+            elif len(parts) == 1 and not ln.startswith("ls:"):
+                out.append((parts[0], "." not in parts[0]))
+        return out
+
+    def _listed_sizes(self, h: dict) -> dict[str, int]:
+        """path -> size in bytes for files an `ls -l` fixture output describes."""
+        out: dict[str, int] = {}
+        for key, val in h.get("commands", {}).items():
+            kt = key.split()
+            if kt and kt[0] == "ls" and len(kt) >= 2 and kt[-1].startswith("/"):
+                base = _path(kt[-1])
+                for ln in val.splitlines():
+                    parts = ln.split()
+                    if (
+                        len(parts) >= 9
+                        and parts[0].startswith("-")
+                        and parts[4].isdigit()
+                    ):
+                        out[f"{base}/{parts[-1]}"] = int(parts[4])
+        return out
+
     def _implied_files(self, h: dict) -> set[str]:
-        out = set()
+        out = set(self._listed_sizes(h))
         for unit in self._services(h):
             name = unit if "." in unit else unit + ".service"
             out.add(f"/etc/systemd/system/{name}")
@@ -600,7 +664,12 @@ class World:
                             f"-rw-r----- 1 root root {len(files[full]):>7} Sep  7 02:00 {e}"
                         )
                     elif full in implied:
-                        rows.append(f"-rwxr-xr-x 1 root root    2048 Sep  7 02:00 {e}")
+                        n = self._listed_sizes(h).get(full)
+                        rows.append(
+                            f"-rw-r----- 1 root root {n:>10} Sep  7 02:14 {e}"
+                            if n
+                            else f"-rwxr-xr-x 1 root root    2048 Sep  7 02:00 {e}"
+                        )
                     elif full in tree or full in GENERIC_DIRS or "." not in e:
                         rows.append(f"drwxr-xr-x 2 root root    4096 Sep  7 02:00 {e}")
                     else:
@@ -640,6 +709,9 @@ class World:
             return generic[path]
         if self._isdir(h, path):
             return f"cat: {path}: Is a directory"
+        sizes = self._listed_sizes(h)
+        if path in sizes:
+            return f"(binary data, {sizes[path]} bytes)"
         return f"cat: {path}: No such file or directory"
 
     _SIZES = {"K": 1, "M": 1024, "G": 1024**2, "T": 1024**3}

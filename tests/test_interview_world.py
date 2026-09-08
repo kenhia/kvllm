@@ -193,3 +193,41 @@ def test_world_never_contradicts_itself_and_refuses_scripts():
     )
     out = w.run_command("kubsdb", "nvidia-smi -L")
     assert out.startswith("nvidia-smi: unsupported invocation") and "--query-gpu" in out
+
+
+def test_listed_files_are_real_and_loops_are_refused_by_position():
+    w = World(
+        {
+            "hosts": {
+                "kubsdb": {
+                    "commands": {
+                        "ls -la /srv/backup": "-rw-r----- 1 postgres postgres 2043118820 Sep  7 02:14 pg-2026-09-07.sql.zst",
+                        "journalctl -u nightly-backup": "Sep 07 02:14:41 kubsdb nightly-backup[5120]: OK (2m40s)",
+                    }
+                }
+            },
+            "manifest": {},
+            "korg": [],
+        }
+    )
+    assert "Size: 2043118820" in w.run_command(
+        "kubsdb", "stat /srv/backup/pg-2026-09-07.sql.zst"
+    )
+    assert (
+        w.run_command("kubsdb", "find /srv/backup -maxdepth 1 -type f")
+        == "/srv/backup/pg-2026-09-07.sql.zst"
+    )
+    assert "pg-2026-09-07" in w.run_command("kubsdb", "ls -lab /srv/backup")
+    assert "binary data" in w.run_command(
+        "kubsdb", "head -c 4 /srv/backup/pg-2026-09-07.sql.zst"
+    )
+    assert "OK (2m40s)" in w.run_command(
+        "kubsdb",
+        "journalctl -u nightly-backup --since '2026-09-07 02:00' --until '2026-09-07 03:00'",
+    )
+    assert "simple commands only" in w.run_command(
+        "kubsdb", "for f in /srv/backup/*; do stat $f; done"
+    )
+    assert "simple commands only" in w.run_command(
+        "kubsdb", "ls /srv; while true; do sleep 1; done"
+    )

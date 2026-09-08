@@ -124,6 +124,31 @@ def host(commands: dict, files: dict | None = None) -> dict:
     return {"commands": base | commands, "files": files or {}}
 
 
+RESTIC = {
+    "restic -r /srv/backup/restic snapshots": (
+        "repository 3f9a1c22 opened (version 2)\n"
+        "ID        Time                 Host    Tags  Paths\n"
+        "----------------------------------------------------------------------\n"
+        "5b0d77aa  2026-09-05 02:12:30  kubsdb        /srv/backup/pg-2026-09-05.sql.zst\n"
+        "6e21c0b4  2026-09-06 02:12:31  kubsdb        /srv/backup/pg-2026-09-06.sql.zst\n"
+        "7c1e9a2f  2026-09-07 02:12:33  kubsdb        /srv/backup/pg-2026-09-07.sql.zst\n"
+        "----------------------------------------------------------------------\n3 snapshots"
+    ),
+    "restic -r /srv/backup/restic check": "using temporary cache in /tmp/restic-check-cache\nrepository 3f9a1c22 opened (version 2)\nload indexes\ncheck all packs\ncheck snapshots, trees and blobs\nno errors were found",
+    "restic snapshots": "Fatal: Please specify repository location (-r or --repository-file)",
+}
+RESTIC_STALE = RESTIC | {
+    "restic -r /srv/backup/restic snapshots": RESTIC[
+        "restic -r /srv/backup/restic snapshots"
+    ]
+    .replace(
+        "7c1e9a2f  2026-09-07 02:12:33  kubsdb        /srv/backup/pg-2026-09-07.sql.zst\n",
+        "",
+    )
+    .replace("3 snapshots", "2 snapshots")
+}
+
+
 def healthy_kubsdb() -> dict:
     return host(
         {
@@ -348,6 +373,7 @@ def build() -> None:
     k["commands"]["ls -la /srv/backup"] = (
         "-rw-r----- 1 postgres postgres 2040012311 Sep  5 02:14 pg-2026-09-05.sql.zst\n-rw-r----- 1 postgres postgres 2041880004 Sep  6 02:14 pg-2026-09-06.sql.zst\n-rw-r----- 1 postgres postgres 2043118820 Sep  7 02:14 pg-2026-09-07.sql.zst"
     )
+    k["commands"].update(RESTIC)
     scenario(
         "l1-backup-healthy",
         "Scheduled check, 03:00 UTC. Confirm last night's database backup on kubsdb ran and is sound, and report.",
@@ -454,6 +480,7 @@ def build() -> None:
     k["commands"]["ls -la /srv/backup"] = (
         "-rw-r----- 1 postgres postgres 2038011200 Sep  4 02:14 pg-2026-09-04.sql.zst\n-rw-r----- 1 postgres postgres 2040012311 Sep  5 02:14 pg-2026-09-05.sql.zst"
     )
+    k["commands"].update(RESTIC_STALE)
     scenario(
         "l3-backup-missing",
         "Scheduled check, 03:00 UTC. Confirm last night's database backup on kubsdb ran and is sound, and report.",
