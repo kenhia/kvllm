@@ -1,0 +1,125 @@
+{
+ "name": "l7-gpu-memory",
+ "task": "Scheduled check, 03:00 UTC. kai's GPU shows 30846 of 32607 MiB in use (95%) with 0% utilisation. Investigate and report.",
+ "world": {
+  "hosts": {
+   "kai": {
+    "commands": {
+     "date": "Mon Sep  7 03:00:04 UTC 2026",
+     "uptime": " 03:00:04 up 41 days,  6:12,  1 user,  load average: 0.31, 0.28, 0.24",
+     "systemctl --user status kvllm": "\u25cf kvllm.service - kvllm\n     Loaded: loaded (/etc/systemd/system/kvllm.service; enabled; preset: enabled)\n     Active: active (running) since Sun 2026-09-06 14:57:22 UTC; 12h ago\n   Main PID: 1900 (kvllm)\n      Tasks: 9\n     Memory: 2.1G\n        CPU: 1min 12.204s\n     CGroup: /system.slice/kvllm.service\n             \u2514\u25001900 /usr/local/bin/kvllm serve gemma-4-31b-it-awq",
+     "systemctl status kaed": "\u25cf kaed.service - kaed\n     Loaded: loaded (/etc/systemd/system/kaed.service; enabled; preset: enabled)\n     Active: active (running) since Tue 2026-07-28 09:02:11 UTC; 5 weeks ago\n   Main PID: 1502 (kaed)\n      Tasks: 9\n     Memory: 48.2M\n        CPU: 1min 12.204s\n     CGroup: /system.slice/kaed.service\n             \u2514\u25001502 /usr/local/bin/kaed",
+     "ss -tlnp": "State  Recv-Q Send-Q Local Address:Port  Peer Address:Port Process\nLISTEN 0      4096   0.0.0.0:8000         0.0.0.0:*     users:((\"vllm\",pid=2200,fd=7))\nLISTEN 0      4096   0.0.0.0:8800         0.0.0.0:*     users:((\"uvicorn\",pid=2237,fd=7))\nLISTEN 0      4096   0.0.0.0:8730         0.0.0.0:*     users:((\"kaed\",pid=2274,fd=7))\nLISTEN 0      128    0.0.0.0:22           0.0.0.0:*     users:((\"sshd\",pid=1201,fd=3))",
+     "df -h": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  345G  1.4T  20% /",
+     "nvidia-smi --query-gpu=memory.used,memory.total --format=csv": "memory.used [MiB], memory.total [MiB]\n30846 MiB, 32607 MiB",
+     "nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv": "memory.used [MiB], memory.total [MiB], utilization.gpu [%]\n30846 MiB, 32607 MiB, 0 %",
+     "journalctl --user -u kvllm": "Sep 06 14:57:22 kai systemd[1330]: Started kvllm.service.\nSep 06 14:58:51 kai vllm[1900]: INFO Application startup complete.\nSep 06 14:58:51 kai vllm[1900]: INFO GPU KV cache size: 20,765 tokens"
+    },
+    "files": {}
+   }
+  },
+  "manifest": {
+   "kmon": {
+    "host": "kubs0",
+    "port": 9100,
+    "note": "fleet monitor; scrapes node-exporter on every host"
+   },
+   "node-exporter": {
+    "host": "kubs0",
+    "port": 9101
+   },
+   "klams": {
+    "host": "kubsdb",
+    "port": 8710,
+    "note": "memory server; depends on postgresql"
+   },
+   "korg": {
+    "host": "kubsdb",
+    "port": 8720,
+    "note": "work tracker; depends on postgresql"
+   },
+   "kfdc": {
+    "host": "kubsdb",
+    "port": 8740,
+    "note": "desk board; depends on korg"
+   },
+   "prometheus": {
+    "host": "kubsdb",
+    "port": 9090
+   },
+   "grafana": {
+    "host": "kubsdb",
+    "port": 3000
+   },
+   "postgresql": {
+    "host": "kubsdb",
+    "port": 5432,
+    "note": "shared Postgres for klams/korg/kfdc"
+   },
+   "registry": {
+    "host": "kubsdb",
+    "port": 5000,
+    "note": "docker registry"
+   },
+   "nginx": {
+    "host": "kubsdb",
+    "port": 443,
+    "note": "TLS front for grafana/kfdc; certbot dns-01"
+   },
+   "kaed": {
+    "host": "kai",
+    "port": 8730
+   },
+   "kvllm": {
+    "host": "kai",
+    "port": 8000,
+    "note": "resident model server (user unit)"
+   },
+   "kvllm-helper": {
+    "host": "kai",
+    "port": 8800
+   },
+   "kagviz": {
+    "host": "kubs0",
+    "port": 8760
+   },
+   "kmuster": {
+    "host": "kubs0",
+    "port": 8770
+   },
+   "kpidash": {
+    "host": "kpi0",
+    "port": 8750
+   }
+  },
+  "korg": [
+   {
+    "number": 1701,
+    "title": "kmon: rotate scrape token on kubs0",
+    "body": "Quarterly token rotation. Low priority."
+   },
+   {
+    "number": 1745,
+    "title": "grafana: upgrade to 11.3 when the arm64 image lands",
+    "body": "Waiting on upstream."
+   },
+   {
+    "number": 1760,
+    "title": "k-homelab: document the kpi0 dashboard host",
+    "body": "kpidash on kpi0:8750 is in the manifest but not in the README."
+   }
+  ]
+ },
+ "truth": {
+  "solvable": true,
+  "action": "handle",
+  "level": 7,
+  "capability": "trap",
+  "finding_keywords": [
+   "kvllm",
+   "kv cache",
+   "normal"
+  ],
+  "why": "That is what a vLLM server looks like idle: it pre-allocates the KV cache at start (the journal says so) and holds it. The manifest calls kvllm the resident model server. Nothing to do. Reporting a 'memory leak' or 'GPU nearly exhausted' is the false alarm this rung exists to catch."
+ }
+}
