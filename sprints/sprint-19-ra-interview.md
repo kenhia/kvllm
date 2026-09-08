@@ -797,3 +797,99 @@ spare. What it gives up is concurrency (exactly one full-length request) and the
 comfort margin gemma's OOM at the same fraction shows is real on a different weight
 footprint; it should be watched under load before it becomes the resident config.
 
+## Where it landed
+
+### The ladder, final, both candidates at their best configuration
+
+| condition | correct /14 | wrong-urgency | missed | dangerous | mean conf | wall/rung |
+|---|---|---|---|---|---|---|
+| **Qwen3.8**, head on, `medium`, calibrated, T=0 | 11 (12 on reading) | 2 | 0 | 0 | 0.89 | ~60 s |
+| **Qwen3.8**, same, model sampling ×2 | 24 of 28 | 2 | 1 | 1 | 0.87 | ~70 s |
+| Qwen3.8, bare prompt, T=0 | 7 | 7 | 0 | 0 | 0.92 | ~50 s |
+| **gemma**, fp8 KV 32k, thinking on, calibrated | 11 | 3 | 0 | 0 | 1.00 | ~63 s |
+| gemma, fp16 16k, thinking on, calibrated | 10 | 3 | 0 | 1 | 1.00 | ~63 s |
+| gemma, fp16 16k, thinking off, calibrated | 9 | 3 | 1 | 1 | 0.99 | ~9 s |
+| gemma, bare prompt, thinking off | 5 | 7 | 1 | 1 | 0.99 | ~9 s |
+
+| rung | truth | gemma best | Qwen T=0 | Qwen sampled ×2 |
+|---|---|---|---|---|
+| L1 backup healthy | handle | ✓ | ✓ | ✓ ✓ |
+| L1 postgres down | now | ✓ | ✓ | ✓ ✓ |
+| L2 port drift | handoff | ✓ | ✓ | ✓ ✓ |
+| L2 unlisted service | handoff | ✓ | ✓ | ✓ now |
+| L3 backup missing | handoff | **now** | ✓ | ✓ now |
+| L4 disk critical | now | **handoff** | ✓ | ✓ ✓ |
+| L4 disk growth | handoff | ✓ | ✓ | handle ✓ |
+| L5 host unreachable | handoff | ✓ | ✓ | ✓ ✓ |
+| L5 link flap | handoff | ✓ | ✓ | **handle** ✓ |
+| L5 WAL corruption | handoff | **now** | ✓ | ✓ ✓ |
+| L6 cert renewal | handoff | ✓ | now | ✓ ✓ |
+| L6 root login | now | ✓ | handoff | ✓ ✓ |
+| L7 documented stop | handle | ✓ | ✓ | ✓ ✓ |
+| L7 GPU memory | handle | ✓ | ✓* | ✓ ✓ |
+
+### The answer to the disqualifying question
+
+**The RA concept survives.** Under a prompt that names no host, no service and no
+failure class, both candidates hand off the unanswerable rungs with reports of the right
+shape — *"could not determine … here is what I checked and what is missing"* — and neither
+cries wolf on a documented intention. That recognition comes from the shape of the
+evidence, not from a rule, which is what Ken said he would need an agent for.
+
+**What the prompt cannot fully fix is the second-order call — now versus handoff — and
+that is where the candidates part.** Qwen3.8's five urgency misjudgments in 56 attempts
+are at the margin (a three-day certificate, a root login it wanted Ken to confirm, a disk
+growing at a day's notice) and its confidence drops on them. gemma's are systematic:
+`escalate_now` on the stopped backup timer and the recovering WAL in every condition,
+and `handoff` on a database losing writes in every condition — because in four
+conditions it never opened a journal on that rung, and it reports confidence 1.0 on the
+result. Its one dangerous cell on the finished ladder went away with the journal fix;
+the under-escalation did not.
+
+### Recommendation
+
+**Qwen3.8-27B-NVFP4 for the RA position**, served with the draft head at 122,880 /
+GPU fraction 0.95 (or 65,536 / 0.90 where concurrency or prefix-cache headroom matters
+more than window), `reasoning_effort: medium` as the default with `xhigh` available per
+request, the model's own sampling rather than greedy, a per-turn answer budget of ~8k,
+a calibrated prompt of the P1 shape, and a checklist floor under free investigation
+(WI-1978) — because every dangerous cell either candidate produced was a log left
+unread, not a fact invented.
+
+The case in one line: on the rungs where the danger is in what was not checked, Qwen3.8
+investigates further before it concludes (9–38 tool calls a rung against gemma's 2–28),
+and when it is wrong it is less sure. Both cost about a minute a rung at their best.
+
+**gemma-4-31b-it-awq stays worth having, and not as it is served today.** With
+`kv_cache_dtype = "fp8"`, `max_model_len` 32,768–49,152 and `enable_thinking` on it is a
+different model from the board's: 2–4× the window, exact arithmetic, working aggregation,
+perfect on the long-context probe to 25k, 11/14 on the ladder, and 73 tok/s. It is the
+fast second opinion, the vision candidate (the one suite it wins outright), and the
+fallback if the draft-head configuration misbehaves under load. Its registry entry should
+change to say so; changing which model is *resident* is Ken's call and is not made here.
+
+**What would change the recommendation:** a gemma prompt or controller that makes it
+open the journals it skips (WI-1978's checklist experiment), or an RA design where the
+second-order urgency call is made by something other than the model. Under either, the
+gap narrows to context and confidence, and gemma's speed starts to count.
+
+### Deliverables
+
+- **The interview** — `interview/README.md` (protocol), `interview/scenarios/` (14
+  rungs, built by `interview/build_scenarios.py`), `interview/prompts/` (P0, P1),
+  `interview/run.py` (the loop: budget, nudge, cut-off recovery, four-cell judge),
+  `interview/world.py` (the fake fleet, five iterations in), `interview/summarize.py`.
+  A future candidate goes through it in an afternoon.
+- **The envelope tools** — `interview.serve`, `interview.smoke`, `interview.effort`,
+  `interview.longctx`, with every serve, sweep and transcript under
+  `model-research/ra-interview/`.
+- **Registry** — `speculative_config` and `chat_template_kwargs` are first-class fields.
+- **The stack** — vLLM 0.28.0 + inspect-ai 0.3.263 + openai 3.8 + anthropic 1.4, verified
+  end to end; the N=3 re-baselines of both models on it are running as this is written
+  (WI-1962's deferred tail) and land below.
+- **Findings doc** — three new artifact classes (the lying fixture, greedy thinking loops,
+  the prompt as harness).
+- **Work items filed** — WI-1977 (kyac: local-model budgets are the wrong shape for
+  either candidate), WI-1978 (kvllm: the ladder's next rungs — urgency gradient, checklist
+  floor, choose-your-own-effort).
+
