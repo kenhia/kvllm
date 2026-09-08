@@ -893,3 +893,18 @@ gap narrows to context and confidence, and gemma's speed starts to count.
   either candidate), WI-1978 (kvllm: the ladder's next rungs — urgency gradient, checklist
   floor, choose-your-own-effort).
 
+### The re-baselines (WI-1962's tail), and one more harness lesson on the way in
+
+The deferred N=3 re-baselines ran overnight once the envelope queue released the GPU.
+gemma's first pass finished in fourteen minutes and had **overwritten sprint 18's
+artifacts**: `kvllm.repeat` keys its outputs `<model>-<suite>-<date>` with the date
+defaulting to the *local* day, and at 23:00 PDT on the 7th that key was still
+`2026-09-07` — sprint 18's. The board's gemma row silently went from agentic 77% on
+vLLM 0.27.1 to 63% on 0.28.0 under the same date, the noise-floor directory was
+replaced, and sprint 18's per-case logs under `eval-logs/` for that key were lost (the
+scorecard JSON keeps the case results). Caught by the duration, confirmed by `git
+status`, restored from the commit, and re-run under `2026-09-08`. `kvllm.repeat` now
+refuses a key that already holds a finished repeat unless `--force` is passed. Two
+measurements on two stacks must never share a key; the guard is cheaper than the
+morning it would otherwise cost.
+
