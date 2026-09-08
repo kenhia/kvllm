@@ -233,16 +233,7 @@ class World:
         "timeout ",
         "watch ",
     )
-    _SINGLETON = {
-        "df",
-        "free",
-        "ss",
-        "netstat",
-        "uptime",
-        "lsblk",
-        "mount",
-        "nvidia-smi",
-    }
+    _SINGLETON = {"df", "free", "ss", "netstat", "uptime", "lsblk", "mount"}
     _LOOP = re.compile(r"(?:^|[;&|]\s*)(?:for|while|until|if|case|function)\s")
 
     def run_command(self, host: str, command: str) -> str:
