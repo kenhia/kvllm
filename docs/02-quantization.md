@@ -78,5 +78,17 @@ below before setting it on anything.
   only 16 of 64 layers keep a per-token cache, `kv_cache_dtype = "fp8"`) holds **129,615 in
   4.27 GiB** — ~34.5 KiB/token. A hybrid model with fp8 KV buys context a dense one cannot, at the
   same VRAM.
+- **fp8 KV cache is a lever for dense models too (sprint 19).** The same `gemma-4-31b-it-awq`
+  with `kv_cache_dtype = "fp8"` holds **40,963 KV tokens at 16,384 and 86,105 at 49,152** — it
+  serves cleanly at 48k on this card at the same 73 tok/s with unchanged answers. The GPU
+  fraction is the hard edge, not the window: 0.95 OOMs gemma in engine startup; 0.90 is right.
+  The registry's "NEVER on-the-fly FP8" warning is about *weight* quantization (vllm#39049)
+  and does not apply to the cache.
+- **Two more first-class registry fields since sprint 19:** `speculative_config` (Qwen3.8's
+  MTP draft head — ~2× decode for ~1.3 GiB of KV pool, so it trades against `max_model_len`;
+  head on fits 65,536 at 0.90 or 122,880 at 0.95) and `chat_template_kwargs` (server-side
+  template defaults: Qwen3.8 `reasoning_effort`, gemma-4 `enable_thinking`). Both are also
+  overridable per request via `extra_body.chat_template_kwargs` on a plain OpenAI client, so
+  an agent can ask for more thinking on the task that deserves it without a re-serve.
 - The `est_vram_gb` in the registry is a **sanity figure**, not a guarantee — confirm with
   `nvidia-smi` after the first serve and adjust.
