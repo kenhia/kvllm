@@ -752,3 +752,13 @@ both candidates in every condition before the comparison is final. The link-flap
 here was gemma's own: it queried the target hosts' journals for the window and never the
 kmon host's, where the NIC was flapping.
 
+**gemma's fp8-KV ceiling is past 48k.** 40,960 serves with 77,558 KV tokens (1.89×
+concurrency) and **49,152 serves with 86,105 KV tokens (1.75×)**, both at 30,764 MiB and
+the same 126 s cold start — the sliding-window layers' fixed cost keeps amortising, so
+the engine finds more tokens per request as the window grows. The premise-check estimate
+of ~45k for one request was conservative; 64k is probably servable at ~1.3×. **The GPU
+fraction, on the other hand, has a hard edge:** 49,152 at 0.95 died in engine startup
+with a CUDA out-of-memory ("57.69 MiB free … this process has 31.29 GiB") — the
+profiler's activation peak does not fit once the engine is allowed 95% of a card whose
+weights take 19 GiB. For gemma, 0.90 is the fraction; the window is the free variable.
+
