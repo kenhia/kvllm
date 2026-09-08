@@ -978,3 +978,26 @@ same configuration on committed code and stamp it.
 - **Building the RA.** WI-1977 (kyac budgets) and WI-1978 (the ladder's next rungs) carry
   what this sprint learned into it.
 - **The frontier baseline on the new harness.** Needs Ken's go, ~$3 for N=3.
+
+## Deployed
+
+**2026-09-08, kai, from merged `main` `0fd23aa`** (`deploy-kvllm`, sprint-ship Phase 7).
+
+Four serve-path files had landed since the sprint-18 stamp (`kvllm/registry.py`,
+`models.toml`, `pyproject.toml`, `uv.lock` — the vLLM 0.28.0 bump and the two new registry
+fields), so this was a real restart, not a no-op. `deploy/` was unchanged; the unit
+templates were not re-rendered. No eval in flight.
+
+- **Drain:** 2 MiB / 0 compute processes within 10 s of stop.
+- **Restart:** `kvllm.service` answered `/v1/models` after 81 s; `kvllm-helper.service`
+  restarted.
+- **Verified:** served id `gemma-4-31b-it-awq` equals `KVLLM_MODEL_KEY`; `NRestarts=0`;
+  30,846 MiB (gemma's band); the running `vllm serve` argv is **byte-identical** to
+  `registry show` — the check that proves the `chat_template_kwargs` migration and the
+  0.28.0 venv are live and emitting nothing extra for gemma.
+- **Smoke:** answered `OK`, `finish_reason: stop`.
+- Stamped `0fd23aa`.
+
+The box serves the same model and configuration it did before the sprint, now from the
+committed 0.28.0 stack. The resident-model change the sprint recommends was deliberately
+not made here (WI-1973, awaiting Ken).
