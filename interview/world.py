@@ -76,6 +76,12 @@ GENERIC_DIRS: dict[str, list[str]] = {
         "systemd",
     ],
     "/etc/systemd": ["system", "user", "journald.conf", "logind.conf"],
+    "/etc/systemd/system": ["multi-user.target.wants", "timers.target.wants"],
+    "/etc/systemd/user": [],
+    "/etc/cron.d": ["e2scrub_all", "sysstat"],
+    "/var/log/journal": ["3a1c9e2f5b4d4c1e9d1f2a3b4c5d6e7f"],
+    "/var/lib/systemd": ["timers", "deb-systemd-helper-enabled"],
+    "/usr/local/bin": [],
     "/home": [USER],
     f"/home/{USER}": ["scratch", "src"],
     "/srv": [],
@@ -87,7 +93,6 @@ GENERIC_DIRS: dict[str, list[str]] = {
     "/run": ["lock", "systemd", "user"],
     "/usr": ["bin", "lib", "local", "share"],
     "/usr/local": ["bin", "lib"],
-    "/usr/local/bin": [],
 }
 COREUTILS = {
     "ls",
@@ -189,6 +194,11 @@ def _unit(name: str) -> str:
     return name[:-8] if name.endswith(".service") else name
 
 
+def _path(tok: str) -> str:
+    """`/srv/backup/` and `/srv/backup` are the same place."""
+    return (tok.rstrip("/") or "/") if tok.startswith("/") and len(tok) > 1 else tok
+
+
 class World:
     """Answers tool calls from the scenario's fixture, generically where the fixture is silent."""
 
@@ -264,7 +274,7 @@ class World:
 
     def _match(self, h: dict, tokens: list[str]) -> str | None:
         """Longest fixture key whose tokens appear, in order, in the command's tokens."""
-        norm = [_unit(t) for t in tokens]
+        norm = [_unit(_path(t)) for t in tokens]
         best, best_len = None, 0
         for key, val in h.get("commands", {}).items():
             kt = [_unit(t) for t in key.split()]
@@ -275,6 +285,15 @@ class World:
             if i == len(kt) and len(kt) > best_len:
                 best, best_len = val, len(kt)
         return best
+
+    def _binaries(self, h: dict) -> set[str]:
+        """Binaries that exist on this host: coreutils, docker/python/uv, every service the
+        host runs, and the first word of every fixture command key (if `certbot certificates`
+        is a fixture answer, certbot is installed)."""
+        out = set(COREUTILS) | {"docker", "python3", "uv", "bash", "sh"}
+        out |= {_unit(u) for u in self._services(h)}
+        out |= {k.split()[0] for k in h.get("commands", {}) if k.split()}
+        return out
 
     def _services(self, h: dict) -> dict[str, str]:
         """unit -> 'active' | 'failed' | 'inactive', from the fixture's systemctl status entries."""
@@ -303,6 +322,8 @@ class World:
             first = base
         if first == "sudo":
             return self._simple(host, h, args)
+        if first == "crontab":
+            return f"no crontab for {USER}"
         if first in ("date",):
             return h.get("commands", {}).get("date", "Mon Sep  7 03:00:04 UTC 2026")
         if first == "uptime":
@@ -329,10 +350,12 @@ class World:
             return ""
         if first in ("which", "type", "command"):
             names = [a for a in args if not a.startswith("-")]
+            known = self._binaries(h)
+            system = COREUTILS | {"docker", "python3", "uv", "bash", "sh"}
             return "\n".join(
-                f"/usr/bin/{n}"
+                f"/usr/bin/{n}" if n in system else f"/usr/local/bin/{n}"
                 for n in names
-                if n in COREUTILS or n in ("docker", "python3", "uv")
+                if n in system or n in known
             )
         if first == "env":
             return f"HOME=/home/{USER}\nUSER={USER}\nSHELL=/bin/bash\nPATH=/usr/local/bin:/usr/bin:/bin\nHOSTNAME={host}"
@@ -412,7 +435,7 @@ class World:
                     else f"docker: unknown command: docker {' '.join(args)}"
                 )
             return "bash: docker: command not found"
-        if first in (
+        if first not in self._binaries(h) and first in (
             "smartctl",
             "nvidia-smi",
             "ethtool",
@@ -441,6 +464,8 @@ class World:
             return f"bash: {first}: command not found"
         if first in ("cd", "export", "set", "unset", "alias", "source", "."):
             return ""
+        if first in self._binaries(h):
+            return ""  # installed (a fixture key names it); nothing to say for this invocation
         return f"bash: {first}: command not found"
 
     # --- helpers ---------------------------------------------------------------------------
@@ -459,22 +484,60 @@ class World:
         out = re.sub(r"\$\{?(\w+|\?|0)\}?", lambda m: env.get(m.group(1), ""), out)
         return out.replace("\\n", "\n").rstrip("\n")
 
+    def _tree(self, h: dict) -> dict[str, set[str]]:
+        """dir -> children, from everything the fixture implies exists: files and their
+        parents, paths named by `ls`/`du` fixture keys, explicit `dirs`, the host's unit
+        files under /etc/systemd/system and its binaries under /usr/local/bin."""
+        tree: dict[str, set[str]] = {}
+
+        def add(path: str, is_dir: bool) -> None:
+            parts = path.strip("/").split("/")
+            for i in range(1, len(parts) + 1):
+                parent = "/" + "/".join(parts[: i - 1]) if i > 1 else "/"
+                tree.setdefault(parent, set()).add(parts[i - 1])
+            if is_dir:
+                tree.setdefault(path, set())
+
+        for f in h.get("files", {}):
+            add(f, False)
+        for d, kids in h.get("dirs", {}).items():
+            add(d, True)
+            tree[d] |= set(kids)
+        for key in h.get("commands", {}):
+            kt = key.split()
+            if (
+                kt
+                and kt[0] in ("ls", "du", "tree")
+                and len(kt) >= 2
+                and kt[-1].startswith("/")
+            ):
+                add(_path(kt[-1]), True)
+        for f in self._implied_files(h):
+            add(f, False)
+        return tree
+
+    def _implied_files(self, h: dict) -> set[str]:
+        out = set()
+        for unit in self._services(h):
+            name = unit if "." in unit else unit + ".service"
+            out.add(f"/etc/systemd/system/{name}")
+            out.add(f"/usr/local/bin/{_unit(unit)}")
+        return out
+
     def _isdir(self, h: dict, path: str) -> bool:
-        p = path.rstrip("/") or "/"
-        if p in GENERIC_DIRS or p in h.get("dirs", {}):
-            return True
-        return any(f.startswith(p + "/") for f in h.get("files", {})) or any(
-            k == f"ls {p}" or k == f"ls -la {p}" for k in h.get("commands", {})
-        )
+        p = _path(path)
+        return p in GENERIC_DIRS or p in self._tree(h)
 
     def _ls(self, h: dict, host: str, args: list[str]) -> str:
         flags = [a for a in args if a.startswith("-")]
         paths = [a for a in args if not a.startswith("-")] or [f"/home/{USER}"]
         long = any("l" in f for f in flags)
+        files = h.get("files", {})
+        tree = self._tree(h)
+        implied = self._implied_files(h)
         outs = []
         for p in paths:
-            p = p.rstrip("/") or "/"
-            files = h.get("files", {})
+            p = _path(p)
             if p in files:
                 outs.append(
                     f"-rw-r--r-- 1 root root {len(files[p]):>7} Sep  7 02:00 {p}"
@@ -482,36 +545,45 @@ class World:
                     else p
                 )
                 continue
-            entries = list(h.get("dirs", {}).get(p, [])) or list(
-                GENERIC_DIRS.get(p, [])
-            )
-            entries += [
-                f[len(p) + 1 :].split("/")[0] for f in files if f.startswith(p + "/")
-            ]
-            if not entries and p not in GENERIC_DIRS and p not in h.get("dirs", {}):
+            if p not in GENERIC_DIRS and p not in tree:
                 outs.append(f"ls: cannot access '{p}': No such file or directory")
                 continue
-            entries = sorted(set(entries))
+            entries = sorted(set(GENERIC_DIRS.get(p, [])) | tree.get(p, set()))
             if long:
-                outs.append(
-                    f"total {len(entries) * 4}\n"
-                    + "\n".join(
-                        (
-                            f"drwxr-xr-x 2 root root 4096 Sep  7 02:00 {e}"
-                            if "." not in e
-                            else f"-rw-r--r-- 1 root root  812 Sep  7 02:00 {e}"
+                rows = []
+                for e in entries:
+                    full = f"{p.rstrip('/')}/{e}"
+                    if full in files:
+                        rows.append(
+                            f"-rw-r----- 1 root root {len(files[full]):>7} Sep  7 02:00 {e}"
                         )
-                        for e in entries
-                    )
-                )
+                    elif full in implied:
+                        rows.append(f"-rwxr-xr-x 1 root root    2048 Sep  7 02:00 {e}")
+                    elif full in tree or full in GENERIC_DIRS or "." not in e:
+                        rows.append(f"drwxr-xr-x 2 root root    4096 Sep  7 02:00 {e}")
+                    else:
+                        rows.append(f"-rw-r--r-- 1 root root     812 Sep  7 02:00 {e}")
+                outs.append(f"total {len(entries) * 4}\n" + "\n".join(rows))
             else:
                 outs.append("\n".join(entries))
         return "\n".join(outs)
 
     def _cat(self, host: str, h: dict, path: str) -> str:
         files = h.get("files", {})
+        path = _path(path)
         if path in files:
             return files[path]
+        svcs = self._services(h)
+        m = re.match(r"/etc/systemd/system/([^/]+?)(?:\.service)?$", path)
+        if m and (m.group(1) in svcs or m.group(1) + ".service" in svcs):
+            u = m.group(1)
+            return (
+                f"[Unit]\nDescription={u}\nAfter=network-online.target\n\n[Service]\nType=simple\n"
+                f"ExecStart=/usr/local/bin/{u}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target"
+            )
+        m = re.match(r"/usr/local/bin/([^/]+)$", path)
+        if m and any(_unit(u) == m.group(1) for u in svcs):
+            return f'#!/bin/sh\n# managed by k-homelab\nexec /opt/{m.group(1)}/{m.group(1)} "$@"'
         generic = {
             "/etc/hostname": host,
             "/etc/os-release": 'PRETTY_NAME="Ubuntu 24.04.3 LTS"\nNAME="Ubuntu"\nVERSION_ID="24.04"',

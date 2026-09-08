@@ -122,6 +122,26 @@ def test_systemctl_and_journalctl_derive_from_fixture():
     assert w.run_command("kubsdb", "journalctl -k") == "-- No entries --"
 
 
+def test_fixture_implies_a_filesystem():
+    w = _w()
+    assert "pg-2026-09-07.sql.zst" in w.run_command(
+        "kubsdb", "ls -la /srv/backup/ | tail -10"
+    )
+    assert "backup" in w.run_command("kubsdb", "ls -la /srv/")
+    assert "korg.service" in w.run_command("kubsdb", "ls /etc/systemd/system")
+    assert "ExecStart=/usr/local/bin/korg" in w.run_command(
+        "kubsdb", "cat /etc/systemd/system/korg.service"
+    )
+    assert "korg" in w.run_command("kubsdb", "ls -la /usr/local/bin/")
+    assert "managed by k-homelab" in w.read_file("kubsdb", "/usr/local/bin/korg")
+    assert (
+        w.run_command("kubsdb", "which docker korg restic")
+        == "/usr/bin/docker\n/usr/local/bin/korg"
+    )
+    assert w.run_command("kubsdb", "crontab -l") == "no crontab for ken"
+    assert "zst" == w.run_command("kubsdb", "cat /srv/backup/pg-2026-09-07.sql.zst")
+
+
 def test_absent_things_fail_like_bash():
     w = _w()
     assert "Could not resolve hostname" in w.run_command("cleo", "ls /gratch/images")
