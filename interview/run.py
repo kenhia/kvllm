@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -525,9 +526,13 @@ def main(argv: list[str] | None = None) -> int:
                 indent=1,
             )
         )
-    (out / f"summary-{a.prompt}{'-' + a.tag if a.tag else ''}-{stamp}.json").write_text(
-        json.dumps(summary, indent=1)
-    )
+    # the per-invocation summary carries the pid: parallel invocations of one prompt+tag
+    # can start in the same second (the per-scenario files, the source of truth, cannot
+    # collide — each names its scenario)
+    (
+        out
+        / f"summary-{a.prompt}{'-' + a.tag if a.tag else ''}-{stamp}-{os.getpid()}.json"
+    ).write_text(json.dumps(summary, indent=1))
     cells = {}
     for s in summary:
         cells[s["cell"]] = cells.get(s["cell"], 0) + 1
