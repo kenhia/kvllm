@@ -216,3 +216,30 @@ outside this leg. Nothing else on the list changed.
 
 `just check` green: ruff clean, 262 unit tests, 31 client tests. `.scratch/` and
 `eval-logs/` are gitignored; the API key appears in no committed file and no log line.
+
+## Deployed
+
+**2026-09-09 03:09 UTC (2026-09-08 20:09 PDT), kai, from merged `main` `6a3ea09`**
+(`deploy-kvllm`, sprint-ship Phase 7, on the karc ship turn after the overseer's clearance,
+comment 1464 / handoff korg:2007).
+
+Serve-path files since the sprint-20 stamp `b147a62`: `models.toml` only — the Sonnet
+baseline entry's `eval_date` and its corrected pricing note, neither of which feeds the
+served argv. A restart on an inert diff, as predicted and as cleared; the skill's rule is
+by path, and the alternative (an exception for baseline entries) is a skill change for
+another sprint. No eval in flight; `deploy/` unchanged, so no re-render.
+
+- **Drain:** 2 MiB / 0 compute processes 1 s after stop.
+- **Restart:** `/v1/models` answered after 50 s; `kvllm-helper.service` restarted.
+- **Verified:** served id `qwen3.8-27b-nvfp4` equals `KVLLM_MODEL_KEY`, `max_model_len
+  122880`; `NRestarts=0`; 30,972 MiB at idle after start (this configuration's band); the
+  running `vllm serve` argv is byte-identical to `registry show`; the exec'd API server's
+  `PATH` begins `/usr/local/cuda/bin` (`serve_env`); engine report 122,880 KV tokens,
+  FlashInfer resolved.
+- **Smoke:** two chat completions back to back (the head's verify step is request 2):
+  both `OK`, `finish_reason: stop`, 34 / 33 reasoning tokens; `NRestarts=0` after.
+- Stamped `6a3ea09`.
+
+Shipped as PR #8, squash `6a3ea09`; proposal korg:1998 done, WI-1997 resolved, WI-2005 in
+the backlog. The box serves the resident from committed `main` with the board's frontier
+row and noise band on the same stack as its local rows.
