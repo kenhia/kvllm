@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 
 from kvllm import evalctl
-from kvllm.registry import build_serve_argv, effective_gpu_util, get_model
+from kvllm.registry import build_serve_argv, effective_gpu_util, get_model, serve_env
 
 REPO = Path(__file__).resolve().parent.parent
 LOG_DIR = REPO / "eval-logs" / "serve"
@@ -126,6 +126,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         gpu_util=args.gpu_util,
     )
     argv = build_serve_argv(args.key, entry, port=str(args.port))
+    env = serve_env(args.key, entry)
     tag = args.tag or time.strftime("%H%M%S")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"interview-{args.key}-{tag}.log"
@@ -135,7 +136,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     log = open(log_path, "w")
     t0 = time.time()
     proc = subprocess.Popen(
-        argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+        argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env
     )
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(

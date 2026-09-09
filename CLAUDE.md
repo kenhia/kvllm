@@ -15,6 +15,8 @@ weighted leaderboard). Human owner: Ken. Read this, then go straight to what you
   `model-research/` is research output generally, `suites/` is suite source code.
 - `docs/findings/ra-interview-2026-09.md` — **the resident-agent decision, readable in ten
   minutes**: which candidate, why, where each fails, and what would change the answer.
+  Taken 2026-09-08: `qwen3.8-27b-nvfp4` is the resident, served as interviewed since
+  sprint 20; gemma is the second opinion at fp8 KV / 32k / thinking on.
 - `interview/README.md` — the RA interview (sprint 19): the unranked, adaptive protocol for
   deciding whether a local model can fill the resident-agent slot, and the envelope tools
   (serve-with-overrides, effort screen, long-context probe). Results and transcripts under

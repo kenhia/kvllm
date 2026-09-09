@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from kvllm.registry import DEFAULT_GPU_UTIL, build_serve_argv, effective_gpu_util
+import pytest
+
+from kvllm.registry import (
+    DEFAULT_GPU_UTIL,
+    build_serve_argv,
+    effective_gpu_util,
+    serve_env,
+)
 
 
 def _entry(**kw):
@@ -133,3 +140,50 @@ def test_effective_gpu_util_levels():
     assert effective_gpu_util({}) == DEFAULT_GPU_UTIL
     assert effective_gpu_util({}, "0.80") == "0.80"
     assert effective_gpu_util({"gpu_memory_utilization": 0.95}, "0.80") == "0.95"
+
+
+# --- serve_env: the CUDA toolkit on PATH, or a refusal (sprint 20) ---
+
+
+def _toolkit(tmp_path):
+    cuda_bin = tmp_path / "cuda" / "bin"
+    cuda_bin.mkdir(parents=True)
+    nvcc = cuda_bin / "nvcc"
+    nvcc.write_text("#!/bin/sh\n")
+    nvcc.chmod(0o755)
+    return cuda_bin
+
+
+def test_serve_env_prepends_cuda_bin_when_nvcc_missing(tmp_path):
+    cuda_bin = _toolkit(tmp_path)
+    env = serve_env("m", _entry(), env={"PATH": "/usr/bin"}, cuda_bin=cuda_bin)
+    assert env["PATH"] == f"{cuda_bin}:/usr/bin"
+
+
+def test_serve_env_leaves_path_alone_when_nvcc_present(tmp_path):
+    cuda_bin = _toolkit(tmp_path)
+    env = serve_env(
+        "m", _entry(), env={"PATH": str(cuda_bin)}, cuda_bin=tmp_path / "elsewhere"
+    )
+    assert env["PATH"] == str(cuda_bin)
+
+
+def test_serve_env_does_not_mutate_the_input(tmp_path):
+    cuda_bin = _toolkit(tmp_path)
+    given = {"PATH": "/usr/bin", "KVLLM_PORT": "8000"}
+    out = serve_env("m", _entry(), env=given, cuda_bin=cuda_bin)
+    assert given == {"PATH": "/usr/bin", "KVLLM_PORT": "8000"}
+    assert out["KVLLM_PORT"] == "8000"
+
+
+def test_serve_env_refuses_speculative_serve_without_nvcc(tmp_path):
+    # A draft head decodes through FlashInfer's XQA kernel; without nvcc vLLM stubs the
+    # kernel and the serve passes the health check, then dies on the first request.
+    spec = _entry(speculative_config={"method": "mtp", "num_speculative_tokens": 3})
+    with pytest.raises(SystemExit, match="speculative_config.*nvcc"):
+        serve_env("m", spec, env={"PATH": "/usr/bin"}, cuda_bin=tmp_path / "none")
+
+
+def test_serve_env_allows_plain_serve_without_nvcc(tmp_path):
+    env = serve_env("m", _entry(), env={"PATH": "/usr/bin"}, cuda_bin=tmp_path / "none")
+    assert env["PATH"] == "/usr/bin"

@@ -20,7 +20,7 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
-from kvllm.registry import build_serve_argv
+from kvllm.registry import build_serve_argv, serve_env
 
 SERVICE = "kvllm"
 HEALTH_TIMEOUT_S = 900
@@ -192,10 +192,11 @@ def serving(key: str, entry: dict, *, port: int):
     SERVE_LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = SERVE_LOG_DIR / f"{key.replace('/', '_')}.log"
     argv = build_serve_argv(key, entry, port=str(port))
+    env = serve_env(key, entry)  # CUDA toolkit on PATH, or a refusal (sprint 20)
     print(f"[serve] {' '.join(argv)}")
     log = open(log_path, "w")
     proc = subprocess.Popen(
-        argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+        argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env
     )
     try:
         yield proc, log_path

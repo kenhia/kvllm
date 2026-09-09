@@ -19,8 +19,10 @@ import argparse
 import difflib
 import json
 import os
+import shutil
 import sys
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
 
 DEFAULT_REGISTRY = Path(__file__).resolve().parent.parent / "models.toml"
@@ -32,6 +34,10 @@ DEFAULT_REGISTRY = Path(__file__).resolve().parent.parent / "models.toml"
 DEFAULT_HOST = os.environ.get("KVLLM_HOST", "127.0.0.1")
 DEFAULT_PORT = os.environ.get("KVLLM_PORT", "8000")
 DEFAULT_GPU_UTIL = os.environ.get("KVLLM_GPU_UTIL", "0.90")
+# Where the CUDA toolkit lives on kai. Ken's shell puts its bin on PATH (.bashrc); a
+# systemd unit and a headless karc leg do not, and vLLM's FlashInfer integration keys on
+# `nvcc` being findable — see serve_env().
+CUDA_BIN = Path("/usr/local/cuda/bin")
 
 
 def load_registry(path: Path | None = None) -> dict[str, dict]:
@@ -76,6 +82,41 @@ def effective_gpu_util(entry: dict, gpu_util: str | float = DEFAULT_GPU_UTIL) ->
     """
     own = entry.get("gpu_memory_utilization")
     return str(own if own is not None else gpu_util)
+
+
+def serve_env(
+    key: str,
+    entry: dict,
+    *,
+    env: Mapping[str, str] | None = None,
+    cuda_bin: Path = CUDA_BIN,
+) -> dict[str, str]:
+    """The environment a serve runs in: the CUDA toolkit on PATH, or a refusal.
+
+    `vllm.utils.flashinfer.has_flashinfer()` answers False when `nvcc` is not on PATH
+    and no cubin package is installed — and then every FlashInfer kernel vLLM imports
+    lazily is replaced by a stub that raises *at call time*, not at startup. On this
+    card the draft head's verify step decodes through FlashInfer's XQA kernel, so a
+    speculative serve started without nvcc comes up healthy, answers /v1/models, and
+    dies on the first request (sprint 20: the eval from a karc leg, and it would have
+    been kmon's 04:01 request on the unit). Sprint 19's interview never saw it because
+    Ken's shell has /usr/local/cuda/bin on PATH. Every serve path — the unit, evalctl,
+    interview.serve — goes through here, so the fix is one place and the failure a
+    refused start rather than a crash after the health check.
+    """
+    out = dict(os.environ if env is None else env)
+    path = out.get("PATH", "")
+    if shutil.which("nvcc", path=path) is None and (cuda_bin / "nvcc").exists():
+        path = f"{cuda_bin}{os.pathsep}{path}" if path else str(cuda_bin)
+        out["PATH"] = path
+    if entry.get("speculative_config") and shutil.which("nvcc", path=path) is None:
+        sys.exit(
+            f"error: '{key}' has a speculative_config, whose decode path needs "
+            "FlashInfer's JIT (nvcc on PATH), and nvcc is not findable — refusing to "
+            "start a serve that would pass the health check and die on its first "
+            f"request. Install the CUDA toolkit at {cuda_bin} or put nvcc on PATH."
+        )
+    return out
 
 
 def build_serve_argv(
@@ -236,8 +277,9 @@ def _cmd_show(args: argparse.Namespace) -> int:
 def _cmd_serve(args: argparse.Namespace) -> int:
     entry = get_model(args.key)
     argv = build_serve_argv(args.key, entry)
+    env = serve_env(args.key, entry)
     print("+ " + " ".join(argv), file=sys.stderr)
-    os.execvp(argv[0], argv)  # replaces this process; only returns on failure
+    os.execvpe(argv[0], argv, env)  # replaces this process; only returns on failure
     return 1
 
 
