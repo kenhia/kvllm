@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kvllm.registry import build_serve_argv
+from kvllm.registry import DEFAULT_GPU_UTIL, build_serve_argv, effective_gpu_util
 
 
 def _entry(**kw):
@@ -104,3 +104,32 @@ def test_chat_template_kwargs_precede_extra_args():
         ),
     )
     assert argv[-2:] == ["--default-chat-template-kwargs", "{}"]
+
+
+def _gpu(argv):
+    return argv[argv.index("--gpu-memory-utilization") + 1]
+
+
+def test_gpu_util_comes_from_the_env_level_by_default():
+    assert _gpu(build_serve_argv("m", _entry())) == DEFAULT_GPU_UTIL
+    assert _gpu(build_serve_argv("m", _entry(), gpu_util="0.80")) == "0.80"
+
+
+def test_entry_gpu_memory_utilization_wins_over_env():
+    # Entry > env > default: qwen3.8's 122,880-with-the-head configuration only exists
+    # at 0.95, and an entry that is only self-consistent under one deploy/kvllm.env is
+    # not a registry entry.
+    argv = build_serve_argv("m", _entry(gpu_memory_utilization=0.95), gpu_util="0.80")
+    assert _gpu(argv) == "0.95"
+    assert argv.count("--gpu-memory-utilization") == 1
+
+
+def test_gpu_memory_utilization_absent_by_default():
+    assert "gpu_memory_utilization" not in _entry()
+    assert _gpu(build_serve_argv("m", _entry())) == DEFAULT_GPU_UTIL
+
+
+def test_effective_gpu_util_levels():
+    assert effective_gpu_util({}) == DEFAULT_GPU_UTIL
+    assert effective_gpu_util({}, "0.80") == "0.80"
+    assert effective_gpu_util({"gpu_memory_utilization": 0.95}, "0.80") == "0.95"

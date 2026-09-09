@@ -25,6 +25,12 @@ KVLLM_GPU_UTIL=0.90
 # HF_TOKEN=hf_xxx                      # only for gated models (e.g. llama-3.1-8b-instruct)
 ```
 
+`KVLLM_GPU_UTIL` is the deployment's fraction. A registry entry that only exists at one
+fraction carries its own `gpu_memory_utilization` and wins (entry > env > default):
+`qwen3.8-27b-nvfp4` serves at 0.95 whatever this file says, because its 122,880-token
+window with the draft head does not fit at 0.90 (sprint 20). `just models-show <key>`
+prints the fraction the serve will actually use.
+
 ## Enable (auto-start at boot)
 
 ```sh

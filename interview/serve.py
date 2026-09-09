@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 
 from kvllm import evalctl
-from kvllm.registry import build_serve_argv, get_model
+from kvllm.registry import build_serve_argv, effective_gpu_util, get_model
 
 REPO = Path(__file__).resolve().parent.parent
 LOG_DIR = REPO / "eval-logs" / "serve"
@@ -45,12 +45,17 @@ def apply_overrides(
     no_spec: bool = False,
     chat_kwargs: dict | None = None,
     extra: list[str] | None = None,
+    gpu_util: str | float | None = None,
 ) -> dict:
     """Registry entry + overrides → the entry to serve. Pure; the tests cover it.
 
     `kv_cache_dtype="auto"` clears the field (vLLM's default); `no_spec` drops any
-    draft head; `chat_kwargs` merges over the entry's own defaults."""
+    draft head; `chat_kwargs` merges over the entry's own defaults; `gpu_util` lands
+    on the entry as `gpu_memory_utilization`, which is where the registry reads the
+    fraction from first (entry > env > default, sprint 20)."""
     e = dict(entry)
+    if gpu_util is not None:
+        e["gpu_memory_utilization"] = float(gpu_util)
     if max_model_len:
         e["max_model_len"] = int(max_model_len)
     if kv_cache_dtype:
@@ -118,10 +123,9 @@ def cmd_start(args: argparse.Namespace) -> int:
         no_spec=args.no_spec,
         chat_kwargs=json.loads(args.chat_kwargs) if args.chat_kwargs else None,
         extra=args.extra,
+        gpu_util=args.gpu_util,
     )
-    argv = build_serve_argv(
-        args.key, entry, port=str(args.port), gpu_util=str(args.gpu_util)
-    )
+    argv = build_serve_argv(args.key, entry, port=str(args.port))
     tag = args.tag or time.strftime("%H%M%S")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"interview-{args.key}-{tag}.log"
@@ -156,7 +160,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         "kv_cache_dtype": entry.get("kv_cache_dtype"),
         "speculative_config": entry.get("speculative_config"),
         "chat_template_kwargs": entry.get("chat_template_kwargs"),
-        "gpu_util": args.gpu_util,
+        "gpu_util": effective_gpu_util(entry),
     }
     if args.no_wait:
         print(json.dumps(row | {"pid": proc.pid, "waited": False}))
@@ -243,7 +247,11 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--no-spec", action="store_true", help="drop any draft head")
     s.add_argument("--chat-kwargs", default=None, help="JSON merged over the entry's")
     s.add_argument("--extra", nargs="*", default=None, help="extra vllm serve args")
-    s.add_argument("--gpu-util", default=os.environ.get("KVLLM_GPU_UTIL", "0.90"))
+    s.add_argument(
+        "--gpu-util",
+        default=None,
+        help="GPU fraction; overrides the entry's own and KVLLM_GPU_UTIL",
+    )
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--no-wait", action="store_true")
     s.set_defaults(func=cmd_start)

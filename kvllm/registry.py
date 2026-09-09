@@ -8,7 +8,9 @@ CLI:
 `serve` builds the vLLM argv from the registry entry and `os.execvp`s into it, so signals
 (Ctrl-C, systemd SIGTERM) pass straight through to vLLM. Serve-time knobs that aren't model
 properties — port and GPU memory fraction — come from the environment (KVLLM_PORT,
-KVLLM_GPU_UTIL), matching the justfile defaults.
+KVLLM_GPU_UTIL), matching the justfile defaults. The fraction alone can also be a model
+property: an entry's `gpu_memory_utilization` wins over the environment (entry > env >
+default), for a configuration that only exists at one fraction (see `effective_gpu_util`).
 """
 
 from __future__ import annotations
@@ -64,6 +66,18 @@ def get_model(key: str, registry: dict[str, dict] | None = None) -> dict:
     return registry[key]
 
 
+def effective_gpu_util(entry: dict, gpu_util: str | float = DEFAULT_GPU_UTIL) -> str:
+    """The GPU fraction a serve of `entry` uses: entry > env (KVLLM_GPU_UTIL) > 0.90.
+
+    Opt-in per entry, like `max_num_batched_tokens`: most models are served at whatever
+    the deployment says, but qwen3.8-27b-nvfp4's 122,880-with-the-draft-head configuration
+    only exists at 0.95 (sprint 19), and an entry that is only self-consistent under one
+    `deploy/kvllm.env` is not a registry entry. `gpu_util` is the environment level.
+    """
+    own = entry.get("gpu_memory_utilization")
+    return str(own if own is not None else gpu_util)
+
+
 def build_serve_argv(
     key: str,
     entry: dict,
@@ -89,7 +103,7 @@ def build_serve_argv(
         "--port",
         str(port),
         "--gpu-memory-utilization",
-        str(gpu_util),
+        effective_gpu_util(entry, gpu_util),
     ]
     if "max_model_len" in entry:
         argv += ["--max-model-len", str(entry["max_model_len"])]
@@ -199,6 +213,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         "trust_remote_code",
         "enforce_eager",
         "max_model_len",
+        "gpu_memory_utilization",
         "max_num_batched_tokens",
         "speculative_config",
         "chat_template_kwargs",
