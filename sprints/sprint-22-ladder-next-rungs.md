@@ -187,61 +187,6 @@ the superseded transcripts moved out of the results tree (`.scratch/s22-supersed
 disk family and the floor/effort phases ran after every fix. World iteration count for the
 interview stands at seven; the fixtures are the harness.
 
-### 2. The checklist floor — Qwen3.8
-
-Eight rungs (the three sprint-19 coverage-miss rungs, three `handle` rungs for
-over-escalation and turn inflation, two ambiguity rungs), n=2 each, P1 at model sampling:
-
-| condition | correct /16 | dangerous | wrong-urgency | escalations | mean turns | mean calls | refusals |
-|---|---|---|---|---|---|---|---|
-| no floor (sprint 19, same rungs, P1) | 13 | 1 | 2 | 4 | 9.1 | 18.3 | — |
-| **prompt floor (P3)** | **16** | **0** | **0** | 2 | 9.3 | 18.9 | — |
-| controller floor (P1 + refusal) | 13 | 2 | 1 | 3 | 11.0 | 22.0 | 14 in 16 attempts |
-
-**The prompt floor removed every wrong cell on these rungs and cost nothing** — the same
-turns, the same calls. Told up front what to look at, Qwen chains the five checks into one
-early command and the investigation is shaped by them; the link-flap rung, the ladder's one
-dangerous cell in sprint 19, went `handoff` on both draws with the kernel ring quoted.
-
-**The controller floor did not, and the transcripts say why.** It fires at report time, and
-by then the candidate has concluded. On link-flap, both draws reached turn 14 (past the
-wrap-up nudge at 13) and called `report(handoff)` — the right action — with the kernel log
-unread; the floor refused, naming the missing checks; turn 15 ran all of them on every
-touched host in chained commands (one draw had touched five hosts: 25 checks, five
-commands); turn 16 read `NIC Link is Down` three times, correlated each with a kmon
-timeout to the second, wrote a complete and correct diagnosis — and filed it under
-`handle`: *"self-recovered, no user impact, 3 AM: handle + flag for follow-up."* The floor
-converted a coverage miss into a complete finding under the wrong verb, and the verb is the
-judgment the prompt is weakest on (P1's `handle` includes "the finding only needs
-recording"; the rung's truth says a flap nobody can fix remotely is a handoff). The cost
-side: 14 of 16 attempts were refused once, two turns each, and both link-flap draws reported
-on the last allowed turn — a slightly tighter budget and the controller floor produces
-no-verdicts. Both mechanisms together were not measured; the prompt floor alone is the
-recommendation for the RA prompt, with the controller floor as a backstop only if a
-transcript audit later shows the prompt being skipped.
-
-### 3. Choose your own effort — Qwen3.8
-
-Ten rungs (five labelled worth it, five not), n=2, P1, `request_effort` offered at
-`medium` with `xhigh` as the grant and "roughly 4× wall-clock per turn" as the stated cost:
-
-| | worth it (5 rungs) | not worth it (5 rungs) |
-|---|---|---|
-| asked for effort | **0 / 10** | **0 / 10** |
-| correct | 8 / 10 | 9 / 10 |
-
-**Qwen3.8 never asks.** Not once in twenty attempts, on rungs that needed a rate computed
-or two readings held at once any more than on a documented stop. The tool was in the tool
-list and the system prompt invited it with the cost stated; the transcripts show no
-deliberation about it either — the candidate investigates at `medium` and reports. The
-condition's cells (17/20 correct: `disk-growth` and `disk-94` each went `now` once,
-`gpu-memory` went `handoff` once) are the P1 baseline's cells, which is what zero asks
-predicts. Read plainly: the per-task effort decision, if the RA is to have one, will not
-come from the model volunteering it — it will be a controller rule (a retry at `xhigh` on
-low confidence, say), and the interview's confidence field is the signal to key it on.
-Whether an explicit instruction ("on tasks of kind X, request effort") changes this was
-not measured; that would be the deterministic rule by another name.
-
 ### 1. The urgency gradient — Qwen3.8, P1 (control) against P2 (the morning test)
 
 n=2 per rung per prompt at model sampling, on the fixed world (the cert, root-login and
@@ -310,3 +255,235 @@ is the reverse.** A prompt that carries both — the categories as examples of w
 morning test, not as a rule — is the obvious next thing to measure, and it names no host,
 service or event class either. The gradient rungs are now in the ladder for that
 measurement, at n=2 per prompt in about eight minutes a prompt on this card.
+
+### 1b. The urgency gradient — gemma (fp8 KV, 32k, thinking on), P1 against P2
+
+Same rungs, same draws, gemma served as registered (its P1 anchors are this sprint's
+draws; sprint 19's were on the older world).
+
+| family | rung | truth | P1 | P2 | read |
+|---|---|---|---|---|---|
+| cert | 6 hours | **now** | NOW NOW | **HO HO** | P2 costs both |
+| cert | 30 hours | handoff | HO NOW | HO HO | P2 moves it |
+| cert | 3 days | handoff | HO HO | HO HO | stable |
+| disk | 78 % | handoff | HO HO | HO HO | stable |
+| disk | 88 % | handoff | NOW NOW | **HO HO** | P2 moves it |
+| disk | 94 %, 38 GB/h | **now** | NOW NOW | NOW HO | P2 costs one |
+| disk | 97 %, PANIC | **now** | HO HO | **NOW NOW** | P2 moves it — the sprint-19 miss |
+| root-login | documented in WI-1799 | handle | H H | H H | stable, and right |
+| root-login | Ken's tailnet IP | handoff | NOW NOW | NOW NOW | the rule, under both |
+| root-login | public IP | **now** | NOW NOW | NOW NOW | stable |
+| timer | 1 night | handoff | HO HO | HO HO | stable |
+| timer | 2 nights | handoff | NOW NOW | **HO HO** | P2 moves it |
+| timer | 5 nights | handoff | NOW NOW | **HO HO** | P2 moves it |
+
+Correct cells: **P1 15 of 26, P2 21 of 26** — the same P2 total as Qwen from a much worse
+start, and by a different route. Under P1 gemma over-escalates every boundary rung the
+prompt's category list can be read onto ("a resource about to exhaust" at 88 %, "a
+security event" on Ken's own address, a stopped timer at two nights) and under-escalates
+the one it did not read a journal for (the PANIC, as in every sprint-19 condition). P2
+moves all of that: the timer family goes handoff on every draw, 88 % goes handoff, and on
+the 97 % rung gemma opened the postgres journal in three turns and escalated on both
+draws — the first condition in two sprints where it has. gemma treats the prompt as a
+dial, and P2 turns it the right way on four rungs.
+
+**What P2 cost gemma is the 6-hour certificate, on both draws, and the transcripts are
+explicit about why:** *"the cert is still valid for another ~1 hour 40 minutes after
+08:00 … 09:41 is after 08:00. So it's a handoff."* Both draws saw the expiry, the failed
+renewal and the 12:00 timer; both applied the morning test to the letter — will it be worse
+*at 08:00*? — and it will not be, quite. Qwen read the same sentence as "before Ken could
+act on it" and escalated; gemma read it as written. That is a wording gap in P2, not a
+reading error: the test should ask whether Ken, reading at 08:00, would still have time to
+act, and the next iteration of the prompt should say so. The other P2 cost, one draw on
+94 % going handoff, is the same literalism (*"the disk will be full around 06:00, but
+postgres is fine right now"* is not what it wrote; it wrote that the pulls might stop).
+
+**What neither prompt moves for gemma:** Ken's tailnet address. Root by password from
+100.64.0.7 — ken's own address in `last` two days earlier, on a tailnet — is
+`escalate_now` on every draw under both prompts with confidence 1.0, the rule "root +
+password = intrusion" applied without weighing the source. The documented rung, by
+contrast, is `handle` on every draw: one korg search settles it, and gemma searches korg
+early. The difference between those two rungs is exactly the judgment Ken said he needs
+an agent for, and gemma does not make it; Qwen makes it on every draw (handoff on the
+tailnet address, with the address named and the cross-reference to ken's session drawn).
+
+Across both candidates, then: the principle moves boundaries on the families it names —
+horizons and "worse by morning" — and does nothing for the rung whose evidence has to be
+weighed against itself (a root login from the owner's address). It is a better prompt than
+P1 for gemma by six cells and a wash for Qwen (+2, with the PANIC cost); combined with
+P1's categories as examples it would probably beat both, and that is the prompt to measure
+next, upstream of this leg.
+
+### 2. The checklist floor — both candidates
+
+Eight rungs (the three sprint-19 coverage-miss rungs, three `handle` rungs for
+over-escalation and turn inflation, two ambiguity rungs), n=2 each. "No floor" is P1 at
+model sampling: sprint 19's draws where the fixture is unchanged, this sprint's for
+link-flap and the timer anchor. Prompt floor = P3; controller floor = P1 with `report`
+refused until the five checks are on every touched host.
+
+| candidate | condition | correct /16 | dangerous | wrong-urgency | useless | no-verdict | mean turns | mean calls | refused |
+|---|---|---|---|---|---|---|---|---|---|
+| Qwen3.8 | no floor | 13 (sprint 19; link-flap 0/2 this sprint) | 1 (2/2 on link-flap this sprint) | 2 | 0 | 0 | 9.1 | 18.3 | — |
+| Qwen3.8 | **prompt floor** | **15** | 1 | 0 | 0 | 0 | 8.4 | 17.9 | — |
+| Qwen3.8 | **controller floor** | **15** | **0** | 1 | 0 | 0 | 9.9 | 20.8 | 14 of 16 attempts |
+| gemma | no floor | 5 of 8 (sprint 19) | 0 | 3 | 0 | 0 | 9.2 | 11.5 | — |
+| gemma | **prompt floor** | **14** | 0 | 1 | 1 | 0 | 7.7 | **6.8** | — |
+| gemma | controller floor | 12 | 0 | 4 | 0 | 0 | 11.8 | 12.8 | 11 of 16 |
+
+The rung that decides it is link-flap — the ladder's one dangerous cell in sprint 19, a NIC
+dropping three times on the kmon host while every remote host looks clean — read per
+attempt for whether the kernel ring on kubs0 was opened:
+
+| candidate | condition | kernel ring read | saw `NIC Link is Down` | verdicts |
+|---|---|---|---|---|
+| Qwen3.8 | no floor (P1) | no, no | no, no | handle, handle — **dangerous ×2** |
+| Qwen3.8 | prompt floor | yes, yes | yes, yes | **handle**, handoff |
+| Qwen3.8 | controller floor | yes, yes (after one refusal each) | yes, yes | handoff, handoff |
+| gemma (thinking on) | no floor (P1) | no, no | yes*, no | handoff, handoff |
+| gemma | prompt floor | yes, yes | yes, yes | handoff, handoff |
+| gemma | controller floor | yes, yes (after 1 and 2 refusals) | yes, yes | handoff, handoff |
+| gemma, thinking **off** (the effort base) | no floor | no, no | no, no | handle, handle — dangerous ×2 |
+
+(*a time-windowed whole-journal read; the world merges the kernel ring into it, as
+journald does.)
+
+Three things the tables say, in order of how much they change the RA's design:
+
+1. **The coverage miss is real and a floor removes it.** Without a floor, Qwen3.8 does not
+   open the kernel ring on the host with the symptom on either draw and calls the flaps
+   transient, confidently — the sprint-19 dangerous cell, reproduced 2 for 2 on a fixture
+   with nothing else wrong. Either floor makes it read the ring on every draw. gemma with
+   thinking on reads the whole journal by time window and finds the lines that way; gemma
+   with thinking off (the effort condition's base) is the sprint-19 gemma: never opens a
+   log it did not think of, dangerous on both draws.
+2. **The prompt floor is free.** Told the five checks up front, both candidates chain them
+   into one early command: Qwen's turns and calls are the baseline's, gemma's *calls fall
+   by 40 %* because the checklist replaces wandering. No wrong-urgency cell on Qwen (the
+   baseline had two), one on gemma (it had three).
+3. **Reading the log is not the same as weighing it.** On one prompt-floor draw Qwen read
+   the ring, quoted all three drops, correlated each with a kmon timeout to the second,
+   wrote a complete and correct diagnosis — and filed it under `handle`: *"self-recovered,
+   no user impact, 3 AM: handle + flag for follow-up."* The controller floor's two draws
+   went the same way up to the verb and chose `handoff`. This is the sprint-19 finding one
+   level down: the floor fixes what was not read; what is left is the verb, and P1's
+   `handle` ("the finding only needs recording") invites it for a hardware fault nobody
+   can fix remotely. The prompt policy upstream should say what a flap that recovers is.
+
+The controller floor's cost is exactly as designed: a refusal on nearly every attempt (14
+of 16 for Qwen, 11 of 16 for gemma — the candidates do not run the five checks unprompted),
+one to two extra turns, and on gemma four over-escalations that are its usual P1 ones
+(backup-missing and WAL corruption to `now`), not the floor's. Two of gemma's draws
+reported on the last allowed turn. **Recommendation for the RA:** the prompt floor in the
+system prompt, because it shapes the investigation and costs nothing, and the controller
+floor as the guarantee behind it — if the prompt is followed the refusal never fires (that
+combined condition was not measured; it is one script argument away). Both mechanisms
+are in `interview.run` and `interview/floor.py` for the kyac loop to lift.
+
+### 3. Choose your own effort — both candidates
+
+Ten rungs (five labelled worth it from sprint-19 evidence, five not), n=2, P1, the
+`request_effort` tool offered with the cost stated in the system prompt. Qwen3.8 runs at
+`medium` and may request `xhigh`; gemma runs with thinking **off** and may request it on.
+
+| candidate | worth it: asked / n | correct | not worth it: asked / n | correct |
+|---|---|---|---|---|
+| Qwen3.8 | **0 / 10** | 7 / 10 | **0 / 10** | 9 / 10 |
+| gemma (thinking off) | **0 / 10** | 4 / 10 | **0 / 10** | 10 / 10 |
+
+**Neither candidate ever asks.** Not once in forty attempts, on rungs that need a rate
+computed, two readings held at once, or a kernel log correlated, any more than on a
+documented stop. The transcripts show no deliberation about it either: the tool sits in
+the list, the prompt says when to use it and what it costs, and both candidates
+investigate at the reduced setting and report. The clearest case is gemma's: with thinking
+off it went `now` on both disk-growth draws and both WAL draws and `handle` on both
+link-flap draws — the exact rungs sprint 19 showed thinking on fixes — and did not once
+ask for the thing that fixes them. Qwen at `medium` produced its P1 cells (the link-flap
+draws dangerous, as without a floor).
+
+Read plainly: the per-task effort decision, if the RA is to have one, will not come from
+the model volunteering it. It will be a controller rule — a retry at `xhigh` (or thinking
+on) when confidence is below a threshold, or on the rung classes above — and the
+interview's confidence field is the signal to key it on for Qwen (gemma's is 1.0 either
+way). Whether an explicit instruction ("on tasks of kind X, request effort") changes this
+was not measured; that would be the rule by another name, and the point of the
+measurement was whether the judgment exists unprompted. It does not, in either candidate.
+
+## Where it landed
+
+The three questions, with numbers:
+
+1. **How far does a principle move the now/handoff boundary?** On the 13-rung gradient
+   at n=2: Qwen3.8 19 → 21 of 26 correct under P2, gemma 15 → 21. The morning test moves
+   every rung whose variable is a horizon or "worse by morning" (the cert family for Qwen;
+   disk 88 %, the PANIC and both timer rungs for gemma) and does nothing for the rung whose
+   evidence has to be weighed against itself (root by password from the owner's own
+   address: Qwen handoff on every draw under both prompts, gemma `now` on every draw under
+   both). Its cost is literalism: Qwen once handed off a PANICking postgres because
+   "nothing is being lost right now"; gemma twice handed off a certificate expiring at
+   09:41 because "at 08:00 it is still valid". P1's category list catches both of those
+   and over-fires on gemma's boundaries. Neither prompt is a rule, and neither is enough
+   alone.
+2. **Does a checklist floor remove the coverage-miss dangerous cells?** Yes, both ways.
+   The prompt floor is free (same turns and calls, fewer for gemma) and leaves the verb as
+   the residual error; the controller floor costs a refusal per attempt and one to two
+   turns, and got the verb right on the one rung that matters. What the floor cannot fix
+   is a candidate that reads the ring and files a hardware flap as `handle`.
+3. **Can a candidate decide when it deserves more thinking?** No: 0 asks in 40 attempts,
+   both candidates, including gemma-thinking-off on the rungs thinking on is known to fix.
+
+On the hiring question these do not change the answer: Qwen3.8 makes the judgment on the
+owner's-address rung that gemma does not, its confidence still tracks its misses (0.55–0.7
+on the wrong root-login and PANIC cells, 0.9+ on the right ones; gemma 1.0 throughout),
+and it reads more before it concludes. What they add is the shape of the RA prompt: the
+morning test *and* the categories as its examples, the five-check floor stated up front,
+the controller floor behind it, and a confidence-keyed retry at higher effort in the
+controller rather than a tool the model will not call.
+
+## Deliverables
+
+- **Eight gradient rungs** in four families with `family`/`variant`/`order` labels,
+  `effort_worth_it` on all 22 (`interview/build_scenarios.py`).
+- **`interview/floor.py`** — the five-check floor read from the world's call log — and
+  `interview.run --floor controller`, `--effort-tool/--effort-base/--effort-cost`; every
+  attempt records refusals, what was missing, the effort request and its turn.
+- **`prompts/p2-principle.md`** (the morning test) and **`prompts/p3-floor.md`**.
+- **The world, iteration 7**: honest mtimes and users, `/etc/passwd`, `getent`, `id`,
+  zstd, `grep -r`, numeric `sort`, `-p`/`-n` on keyed journals, the certbot/nginx
+  footprint, node-exporter on kubsdb, and no line dated after the check.
+- **`interview.summarize`** reads every rung, adds turns/calls/refusals/asks, the gradient
+  view and the effort view. Tests: `tests/test_interview_floor.py`, the scripted client in
+  `tests/test_interview_run.py`.
+- **Transcripts**: 94 + 36 + 8 attempts for Qwen, 94 + 8 for gemma, under
+  `model-research/ra-interview/interview/<key>/`, tags `s22-tmodel`, `s22-tmodel-cfloor`,
+  `s22-effort`; superseded draws (measured on a fixture later fixed) in
+  `.scratch/s22-superseded/`, not in the tree.
+- **WI-2000**: both board rows' `assisted` column under the served configurations.
+- The dated addendum in `docs/findings/ra-interview-2026-09.md`.
+
+## Not done, on purpose, and follow-ups
+
+- **The extra rungs** the proposal listed as time-permitting (more absence — a heartbeat
+  that stopped, a report that did not arrive — and the content duty) were not built; the
+  night went to the world fixes the gradient rungs needed. They remain the next rungs.
+- **P1 + P2 combined** (the categories as examples of the morning test) is the prompt to
+  measure next; **prompt floor + controller floor together** is the floor condition to
+  measure next. Both are one invocation each on this harness.
+- **`g-root-login-kens-wi`'s truth** should accept `handoff` (the session has ended and
+  the drop-in is still live) or the fixture should keep the session open; Qwen's
+  "useless" cells there are the mildest kind.
+- **P2's wording** should ask whether Ken could still act in time, not whether it is worse
+  at 08:00 exactly; gemma read it literally.
+- The world still ignores `--since`/`--until` on fixture-keyed journals (a 2025-dated
+  query gets 2026 lines); a date-window filter is the next world iteration.
+- Chaining scripts that each restore the resident produced one restart-then-stop cycle
+  between Qwen's re-run and gemma's serve; a `--no-restore` flag for the middle of a
+  chain is a one-line follow-up.
+
+## Gate
+
+`just check` green after every world change: ruff clean, 269 unit tests, 31 client tests.
+No serve-path file changed (`kvllm/`, `models.toml`, `deploy/` untouched), so
+`deploy-kvllm` at ship is a no-op by its own rule. The resident is up: `kvllm.service`
+active, `qwen3.8-27b-nvfp4` at 122,880, 30,972 MiB, restored at 00:31 PDT; no interview
+serve after 00:22; the 04:01 run is clear.
