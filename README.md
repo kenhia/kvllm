@@ -69,7 +69,7 @@ the same file. Suite design and scoring math: [`docs/findings/methodology-2026-0
 |---|---|
 | [`kvllm/`](kvllm/) | the package: model registry/serving, eval runner + orchestration, scoring/leaderboard, helper web app |
 | [`suites/`](suites/) | eval suite **source** (Inspect AI tasks + fixtures + self-tests) |
-| [`interview/`](interview/) | the **RA interview** (sprint 19): unranked, adaptive probes for the resident-agent decision, plus envelope tools (serve-with-overrides, effort screen, long-context probe); results under `model-research/ra-interview/` |
+| [`interview/`](interview/) | the **RA interview** (sprints 19 and 22): unranked, adaptive probes for the resident-agent decision — a 22-rung ladder with an urgency gradient, a checklist floor and an effort-request condition — plus envelope tools (serve-with-overrides, effort screen, long-context probe); results under `model-research/ra-interview/` |
 | [`model-research/`](model-research/) | research **output**: surveys, candidate deep-dives, and `evals/` (scorecards + leaderboard) |
 | [`docs/`](docs/) | usage docs (01–04: backend contract, quantization, deployment, helper app) + [`findings/`](docs/findings/) |
 | [`sprints/`](sprints/) | how this was built, sprint by sprint; [`planning/`](sprints/planning/) has the architecture docs |
