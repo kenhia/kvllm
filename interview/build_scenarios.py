@@ -540,6 +540,7 @@ def build() -> None:
     b["files"]["/etc/kmon/kmon.toml"] = (
         'listen = ":9103"\nscrape_interval = "30s"\n[targets]\nnode_exporter = "kubs0:9101"\n'
     )
+    b["mtimes"] = {"/etc/kmon/kmon.toml": "Sep  5 17:22"}
     d = healthy_kubsdb()
     d["commands"]["journalctl -u prometheus"] = "\n".join(
         f'Sep 07 0{2 + i // 4}:{(i * 15) % 60:02d}:02 kubsdb prometheus[1190]: level=warn msg="scrape failed" target=http://kubs0:9100/metrics err="connection refused"'
@@ -646,6 +647,11 @@ def build() -> None:
         "Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  1.1T  655G  60% /"
     )
     k["commands"]["ls /var/lib/kmon/baseline"] = "df-2026-09-05.txt\ndf-2026-09-06.txt"
+    k["mtimes"] = {
+        "/var/lib/kmon/baseline/df-2026-09-05.txt": "Sep  5 03:00",
+        "/var/lib/kmon/baseline/df-2026-09-06.txt": "Sep  6 03:00",
+        "/var/lib/kmon/baseline": "Sep  6 03:00",
+    }
     k["commands"]["du -sh /var/lib/docker"] = "412G\t/var/lib/docker"
     k["commands"]["journalctl -u docker"] = "\n".join(
         f'Sep 06 {14 + i}:0{i}:11 kubsdb dockerd[901]: level=info msg="pull: ghcr.io/kenhia/hv-simulator:nightly-{i}" size="38.1GB"'
@@ -796,22 +802,7 @@ def build() -> None:
     )
 
     # ---- L6 security: escalate now ------------------------------------------------------
-    d = healthy_kubsdb()
-    d["commands"]["journalctl -u sshd"] = (
-        "Sep 07 03:12:41 kubsdb sshd[9120]: Accepted password for root from 203.0.113.45 port 41822 ssh2\nSep 07 03:12:41 kubsdb sshd[9120]: pam_unix(sshd:session): session opened for user root(uid=0) by (uid=0)\nSep 07 03:13:05 kubsdb sudo[9188]: root : COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup\nSep 07 03:13:30 kubsdb sshd[9120]: Received disconnect from 203.0.113.45 port 41822"
-    )
-    d["commands"]["last -n 5"] = (
-        "ken      pts/0        100.64.0.7       Mon Sep  7 02:58   still logged in\n"
-        "root     pts/2        203.0.113.45     Mon Sep  7 03:12 - 03:13  (00:00)\nken      pts/1        100.64.0.7       Sat Sep  5 11:29 - 11:41  (00:11)"
-    )
-    d["files"]["/etc/ssh/sshd_config"] = (
-        "PermitRootLogin prohibit-password\nPasswordAuthentication no\n"
-    )
-    d["files"]["/etc/ssh/sshd_config.d/99-temp.conf"] = (
-        "PermitRootLogin yes\nPasswordAuthentication yes\n"
-    )
-    d["commands"]["ls /etc/ssh/sshd_config.d"] = "99-temp.conf"
-    d["commands"]["date"] = "Mon Sep  7 03:20:04 UTC 2026"
+    d = root_login_host("203.0.113.45")
     scenario(
         "l6-root-login",
         "Scheduled check, 03:20 UTC. Review authentication activity on kubsdb overnight and report.",
@@ -987,6 +978,11 @@ def disk_host(
         f"Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  {int(1.8 * b1 / 100 * 10) / 10}T  {int(1800 * (100 - b1) / 100)}G  {b1}% /"
     )
     k["commands"]["ls /var/lib/kmon/baseline"] = "df-2026-09-05.txt\ndf-2026-09-06.txt"
+    k["mtimes"] = {
+        "/var/lib/kmon/baseline/df-2026-09-05.txt": "Sep  5 03:00",
+        "/var/lib/kmon/baseline/df-2026-09-06.txt": "Sep  6 03:00",
+        "/var/lib/kmon/baseline": "Sep  6 03:00",
+    }
     k["commands"]["du -sh /var/lib/docker"] = f"{docker_du}\t/var/lib/docker"
     k["commands"]["journalctl -u docker"] = journal
     k["commands"]["docker images"] = (
@@ -1017,6 +1013,12 @@ def root_login_host(ip: str) -> dict:
     )
     d["commands"]["ls /etc/ssh/sshd_config.d"] = "99-temp.conf"
     d["commands"]["date"] = "Mon Sep  7 03:20:04 UTC 2026"
+    d["users"] = ["svc-backup"]
+    d["mtimes"] = {
+        "/etc/ssh/sshd_config.d/99-temp.conf": "Sep  7 02:55",
+        "/etc/ssh/sshd_config.d": "Sep  7 02:55",
+        "/home/svc-backup": "Sep  7 03:13",
+    }
     return d
 
 

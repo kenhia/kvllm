@@ -146,7 +146,21 @@ COREUTILS = {
 
 
 # on every host, always
-ALWAYS_PRESENT = {"docker", "python3", "uv", "bash", "sh"}
+ALWAYS_PRESENT = {
+    "docker",
+    "python3",
+    "uv",
+    "bash",
+    "sh",
+    "zstd",
+    "unzstd",
+    "zstdcat",
+    "gzip",
+    "gunzip",
+    "xz",
+    "tar",
+    "getent",
+}
 # distro packages: live in /usr/bin *when the host has them* (a fixture key names them),
 # as opposed to the k-homelab services under /usr/local/bin
 SYSTEM_BINARIES = ALWAYS_PRESENT | {
@@ -395,7 +409,39 @@ class World:
         if first == "whoami":
             return USER
         if first == "id":
-            return f"uid=1000({USER}) gid=1000({USER}) groups=1000({USER}),27(sudo),999(docker)"
+            names = [a for a in args if not a.startswith("-")]
+            if not names:
+                return f"uid=1000({USER}) gid=1000({USER}) groups=1000({USER}),27(sudo),999(docker)"
+            outs = []
+            for n in names:
+                e = self._passwd_entry(h, n)
+                if e:
+                    uid = e.split(":")[2]
+                    outs.append(f"uid={uid}({n}) gid={uid}({n}) groups={uid}({n})")
+                else:
+                    outs.append(f"id: '{n}': no such user")
+            return "\n".join(outs)
+        if first == "getent":
+            if args and args[0] == "passwd":
+                if len(args) == 1:
+                    return self._passwd(h)
+                return "\n".join(e for n in args[1:] if (e := self._passwd_entry(h, n)))
+            return f"getent: unsupported database in this session: {' '.join(args)}"
+        if first in ("zstd", "unzstd", "zstdcat"):
+            files_ = [a for a in args if not a.startswith("-")]
+            sizes = self._listed_sizes(h)
+            if "-t" in args or "--test" in args:
+                outs = []
+                for f in files_:
+                    f = _path(f)
+                    if f in sizes:
+                        outs.append(f"{f:<48}: {int(sizes[f] * 2.7)} bytes")
+                    else:
+                        outs.append(
+                            f"zstd: can't stat {f} : No such file or directory -- ignored"
+                        )
+                return "\n".join(outs)
+            return f"{first}: unsupported invocation in this session. Supported here: zstd -t <file>"
         if first == "pwd":
             return f"/home/{USER}"
         if first == "uname":
@@ -439,13 +485,14 @@ class World:
                 f = _path(f)
                 if self._isdir(h, f):
                     outs.append(
-                        f"  File: {f}\n  Size: 4096\tBlocks: 8\tIO Block: 4096\tdirectory"
+                        f"  File: {f}\n  Size: 4096\tBlocks: 8\tIO Block: 4096\tdirectory\n"
+                        f"Modify: {self._mtime_iso(h, f)}"
                     )
                 elif f in sizes or f in files or f in self._implied_files(h):
                     n = sizes.get(f, len(files.get(f, "")) or 2048)
                     outs.append(
                         f"  File: {f}\n  Size: {n}\tBlocks: {(n + 511) // 512}\tIO Block: 4096\tregular file\n"
-                        "Modify: 2026-09-07 02:14:41.000000000 +0000"
+                        f"Modify: {self._mtime_iso(h, f)}"
                     )
                 else:
                     outs.append(f"stat: cannot statx '{f}': No such file or directory")
@@ -660,6 +707,8 @@ class World:
                         add(f"{base}/{name}", is_dir)
         for f in self._implied_files(h):
             add(f, False)
+        for u in self._users(h):
+            add(f"/home/{u}", True)
         if any(k.startswith("docker") for k in h.get("commands", {})):
             for d in (
                 "overlay2",
@@ -714,6 +763,91 @@ class World:
             out.add(f"/usr/local/bin/{_unit(unit)}")
         return out
 
+    _MONTHS = {
+        m: i + 1
+        for i, m in enumerate(
+            (
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            )
+        )
+    }
+    DEFAULT_MTIME = (
+        "Jul 28 08:40"  # the fleet was last rebuilt when its services started
+    )
+
+    def _mtime(self, h: dict, path: str) -> str:
+        """`Mon DD HH:MM` for a path: the host's `mtimes` fixture, else the date an `ls -l`
+        fixture already shows for it, else the day the fleet was built. Before this every
+        file the fixture implied was dated *today at 02:00*, which a candidate read as
+        'the backup binary was modified an hour before the check — tamper?'."""
+        path = _path(path)
+        m = h.get("mtimes", {}).get(path)
+        if m:
+            return m
+        return self._listed_dates(h).get(path, self.DEFAULT_MTIME)
+
+    def _mtime_iso(self, h: dict, path: str) -> str:
+        mon, day, hm = self._mtime(h, path).split()
+        return f"2026-{self._MONTHS.get(mon, 7):02d}-{int(day):02d} {hm}:00.000000000 +0000"
+
+    def _listed_dates(self, h: dict) -> dict[str, str]:
+        """path -> `Mon DD HH:MM` for files an `ls -l` fixture output describes."""
+        out: dict[str, str] = {}
+        for key, val in h.get("commands", {}).items():
+            kt = key.split()
+            if kt and kt[0] == "ls" and len(kt) >= 2 and kt[-1].startswith("/"):
+                base = _path(kt[-1])
+                for ln in val.splitlines():
+                    parts = ln.split()
+                    if len(parts) >= 9 and parts[0][0] in "-dl":
+                        out[f"{base}/{parts[-1]}"] = (
+                            f"{parts[5]} {int(parts[6]):>2} {parts[7]}"
+                        )
+        return out
+
+    def _users(self, h: dict) -> list[str]:
+        """Login users on the host: ken, plus whatever the fixture says was added."""
+        return [USER, *[u for u in h.get("users", []) if u != USER]]
+
+    def _passwd(self, h: dict) -> str:
+        system = [
+            "root:x:0:0:root:/root:/bin/bash",
+            "daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin",
+            "bin:x:2:2:bin:/bin:/usr/sbin/nologin",
+            "sys:x:3:3:sys:/dev:/usr/sbin/nologin",
+            "www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin",
+            "systemd-network:x:998:998:systemd Network Management:/:/usr/sbin/nologin",
+            "systemd-resolve:x:997:997:systemd Resolver:/:/usr/sbin/nologin",
+            "messagebus:x:100:101::/nonexistent:/usr/sbin/nologin",
+            "sshd:x:101:65534::/run/sshd:/usr/sbin/nologin",
+        ]
+        if "postgresql" in self._services(h):
+            system.append(
+                "postgres:x:118:126:PostgreSQL administrator,,,:/var/lib/postgresql:/bin/bash"
+            )
+        users = [
+            f"{u}:x:{1000 + i}:{1000 + i}{',,,' if i == 0 else ''}:/home/{u}:/bin/bash"
+            for i, u in enumerate(self._users(h))
+        ]
+        return "\n".join(system + users)
+
+    def _passwd_entry(self, h: dict, name: str) -> str | None:
+        for ln in self._passwd(h).splitlines():
+            if ln.split(":")[0] == name:
+                return ln
+        return None
+
     def _isdir(self, h: dict, path: str) -> bool:
         p = _path(path)
         return p in GENERIC_DIRS or p in self._tree(h)
@@ -730,7 +864,7 @@ class World:
             p = _path(p)
             if p in files:
                 outs.append(
-                    f"-rw-r--r-- 1 root root {len(files[p]):>7} Sep  7 02:00 {p}"
+                    f"-rw-r--r-- 1 root root {len(files[p]):>7} {self._mtime(h, p)} {p}"
                     if long
                     else p
                 )
@@ -743,21 +877,23 @@ class World:
                 rows = []
                 for e in entries:
                     full = f"{p.rstrip('/')}/{e}"
+                    mt = self._mtime(h, full)
                     if full in files:
                         rows.append(
-                            f"-rw-r----- 1 root root {len(files[full]):>7} Sep  7 02:00 {e}"
+                            f"-rw-r----- 1 root root {len(files[full]):>7} {mt} {e}"
                         )
                     elif full in implied:
                         n = self._listed_sizes(h).get(full)
                         rows.append(
-                            f"-rw-r----- 1 root root {n:>10} Sep  7 02:14 {e}"
+                            f"-rw-r----- 1 root root {n:>10} {mt} {e}"
                             if n
-                            else f"-rwxr-xr-x 1 root root    2048 Sep  7 02:00 {e}"
+                            else f"-rwxr-xr-x 1 root root    2048 {mt} {e}"
                         )
                     elif full in tree or full in GENERIC_DIRS or "." not in e:
-                        rows.append(f"drwxr-xr-x 2 root root    4096 Sep  7 02:00 {e}")
+                        owner = e if p == "/home" and e in self._users(h) else "root"
+                        rows.append(f"drwxr-xr-x 2 {owner} {owner} 4096 {mt} {e}")
                     else:
-                        rows.append(f"-rw-r--r-- 1 root root     812 Sep  7 02:00 {e}")
+                        rows.append(f"-rw-r--r-- 1 root root     812 {mt} {e}")
                 outs.append(f"total {len(entries) * 4}\n" + "\n".join(rows))
             else:
                 outs.append("\n".join(entries))
@@ -792,6 +928,8 @@ class World:
             return self._journalctl(h, ["-n", "200"], host)
         if path == "/var/log/kern.log":
             return h.get("commands", {}).get("journalctl -k", "")
+        if path == "/etc/passwd":
+            return self._passwd(h)
         generic = {
             "/etc/hostname": host,
             "/etc/os-release": 'PRETTY_NAME="Ubuntu 24.04.3 LTS"\nNAME="Ubuntu"\nVERSION_ID="24.04"',
@@ -911,7 +1049,7 @@ class World:
         out = []
         for pth in paths:
             if pth.endswith("/*"):
-                base = _path(pth[:-2])
+                base = _path(pth[:-2]) or "/"
                 kids = sorted(
                     set(GENERIC_DIRS.get(base, [])) | self._tree(h).get(base, set())
                 )
@@ -1077,7 +1215,13 @@ class World:
             if a in ("-u", "--unit", "-t", "--identifier") and i + 1 < len(args):
                 unit = args[i + 1]
             elif a.startswith(
-                ("--unit=", "--identifier=", "_COMM=", "SYSLOG_IDENTIFIER=")
+                (
+                    "--unit=",
+                    "--identifier=",
+                    "_COMM=",
+                    "SYSLOG_IDENTIFIER=",
+                    "_SYSTEMD_UNIT=",
+                )
             ):
                 unit = a.split("=", 1)[1]
         if unit is not None:
