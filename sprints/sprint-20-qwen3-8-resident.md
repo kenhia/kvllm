@@ -178,7 +178,7 @@ sleep; wait for the restored unit to answer `/v1/models` first.**
 | agentic | 74% (0.63–0.77) | **33%** (0.33–0.50) | 0.170 |
 | judged | 77% (flat) | **75%** (0.68–0.85) | 0.170 |
 | vision | 100% | **97%** (0.97–1.00) | 0.030 |
-| composite / rank | ≈ 0.92, rank 2, worth trying | **≈ 0.83, rank 4, ⚠️ has issues** | |
+| composite / rank | ≈ 0.92, rank 2, worth trying | **≈ 0.83, rank 5, ⚠️ has issues** | |
 
 Published: run 1 (the median by mean pass rate). The board's `assisted` 87% for gemma
 still carries forward from 2026-09-07 (thinking off) — a weight-0 labeled condition that
@@ -300,3 +300,27 @@ this sprint: `kvllm/registry.py`, `models.toml` (and `kvllm/evalctl.py`,
 merged `main`; it should find the same argv it finds now. The box is serving the resident
 from this branch's checkout, which is byte-identical on the serve path to what `main` will
 carry after the merge.
+
+## Deployed
+
+**2026-09-09 02:27 UTC (2026-09-08 19:27 PDT), kai, from merged `main` `b147a62`**
+(`deploy-kvllm`, sprint-ship Phase 7, on the karc ship turn after the overseer's clearance,
+comment 1453 / handoff korg:2001).
+
+Serve-path files since the sprint-19 stamp `0fd23aa`: `kvllm/registry.py`, `models.toml`,
+`deploy/kvllm.env.example` (a comment) — a real restart. `deploy/install.sh` re-rendered
+both units (byte-identical to the ones installed) and daemon-reloaded. No eval in flight.
+
+- **Drain:** 2 MiB / 0 compute processes immediately on stop.
+- **Restart:** `/v1/models` answered after 51 s; `kvllm-helper.service` restarted.
+- **Verified:** served id `qwen3.8-27b-nvfp4` equals `KVLLM_MODEL_KEY`, `max_model_len
+  122880`; `NRestarts=0`; 30,972 MiB (this configuration's band); the running `vllm serve`
+  argv is byte-identical to `registry show`; the API server process's PATH begins
+  `/usr/local/cuda/bin` (`serve_env` on the unit, from committed code); 122,880 KV tokens
+  at 1.00×, engine init 6.3 s on a warm cache.
+- **Smoke:** answered `OK`, `finish_reason: stop`, 18 reasoning tokens.
+- Stamped `b147a62`.
+
+The box serves the resident Ken decided on 2026-09-08, from committed `main`, in the
+configuration sprint 19 interviewed. The first real-load test of GPU 0.95 is kmon's 04:01
+PDT run; program korg:1994's standing fallback is 0.90 / 65,536 with the head.
