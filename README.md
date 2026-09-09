@@ -54,6 +54,7 @@ just eval-all                       # sweep the registry (resumable; skips curre
 just eval <key> --suite assisted    # the unranked controller-scaffolding condition
 just eval claude-haiku-4-5          # frontier baseline through the same suites ($)
 just eval-repeat <key> --suite agentic --n 3   # N runs of ONE model → the noise floor
+just board-rebuild                  # regenerate the leaderboard after an eval-config.toml edit
 just test-coding-suite              # suite self-tests (Docker only, no GPU)
 just test-agentic-suite
 ```
