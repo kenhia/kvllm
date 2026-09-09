@@ -128,3 +128,185 @@ Tests: `tests/test_interview_floor.py` (the checker and the world's touched set)
 `tests/test_interview_run.py` (a scripted client through the controller floor and the
 effort switch), the world tests unchanged and green. `just check`: ruff clean, 269 unit
 tests, 31 client tests. Checkpoint commit before the card.
+
+## WI-2000 — the `assisted` column under the served configurations
+
+21:26–22:16 PDT, `KVLLM_EVAL_DATE=2026-09-09 just eval-repeat <key> --suite assisted --n 3
+--publish median` for both keys (`.scratch/s22-assisted.sh`), the runner stopping and
+restoring the unit around each key and the script waiting for the restored unit to *answer*
+before the next (sprint 20's lesson). About seven minutes a repeat for Qwen, nine for gemma
+— the item's "twenty minutes" was for one run of one key.
+
+| row | before (2026-09-07 config) | **now (served config)** | runs | band |
+|---|---|---|---|---|
+| qwen3.8-27b-nvfp4 | 80 % (no head, 131k, 0.90) | **86 %** (MTP ×3, 122,880, 0.95) | 0.86 / 0.88 / 0.80, median = run 1 | 0.080 (as before) |
+| gemma-4-31b-it-awq | 87 % (thinking off, fp16, 16k) | **89 %** (thinking on, fp8 KV, 32k) | 0.89 / 0.77 / 0.96, median = run 1 | 0.190 |
+
+Both rows are one configuration end to end now; weight 0, nothing ranked changed. The
+question the item carried — does gemma's fast-second-opinion role survive thinking on,
+given raw `agentic` fell to 33 % under the frozen turn cap — reads yes: under controller
+scaffolding it delivers 89 %, inside the band of its thinking-off number. One thing to
+know: in gemma's run 3 a sample's investigation grew past the 32k window (vLLM 400 at
+32,769 tokens), caught by the assisted solver's `catch_errors` scope and scored from what
+it had. Thinking on plus the assisted budget can exhaust gemma's window on a long
+investigation — one sample in 27, a sizing fact rather than a defect.
+
+## Measurements (WI-1978, part 2 of 2)
+
+Card taken 21:26 PDT with Ken's last chat against the resident at 20:49 (kyac falls back
+to the frontier tier while the resident is down). Order on the card: WI-2000, then Qwen
+through the five phases (`.scratch/s22-interview.sh`: A1 gradient under P1, A2 gradient +
+anchors under P2, B1 the eight floor rungs under P3, B2 the same under P1 + controller
+floor, C ten rungs with the effort tool), then gemma the same way. Three attempts in flight
+per serve (each context 10–20k tokens; the pool holds several and decode is
+bandwidth-bound), so `wall_s` is not comparable to sprint 19's; cells, actions, turns and
+calls are. Every attempt is n=2 at the model's own sampling.
+
+### The world lied again, twice, during the run — and the rule held
+
+The first Qwen draws on the cert rungs never ran `certbot certificates`. They looked for the
+certificate where a host keeps it — `/etc/letsencrypt/live`, `renewal/`, `/etc/nginx`,
+`letsencrypt.log`, `openssl x509` — and the world said none of it existed, so both draws
+reported "no valid certificate on disk" and neither saw an expiry. Read before anything was
+concluded, per the rule; `cert_host()` now carries the whole certbot/nginx footprint (live
+symlinks and PEMs, the renewal conf with the dns-cloudflare authenticator, nginx.conf and
+the site, the log, `openssl x509 -dates/-enddate/-text`, `nginx -T`), and the 3-day anchor
+is built from the same helper.
+
+The second round came from reading the first non-cert misses. Every file the fixture
+implied was dated *today at 02:00* — the timer candidate read the backup binary as
+"modified an hour before the check (redeploy? tamper?)" and folded it into an escalation.
+`/etc/passwd` did not exist, `getent`/`id`/`ls /home` denied a user the journal had just
+`useradd`-ed, zstd was "not installed" beside `.zst` backups, `du -sh /*` answered nothing,
+`grep -r` over a directory answered nothing, `sort -rh` sorted as strings and buried 622G
+under 4.0K. All fixed (`mtimes` and `users` are per-host fixture keys now; the SSH drop-in
+is dated just before the login, `kmon.toml` at the restart, the baselines on their
+mornings). The rungs whose fixtures changed under the live run — the cert, root-login and
+timer families, gradient and anchors, under P1 and P2 — were re-run on the fixed world and
+the superseded transcripts moved out of the results tree (`.scratch/s22-superseded/`); the
+disk family and the floor/effort phases ran after every fix. World iteration count for the
+interview stands at seven; the fixtures are the harness.
+
+### 2. The checklist floor — Qwen3.8
+
+Eight rungs (the three sprint-19 coverage-miss rungs, three `handle` rungs for
+over-escalation and turn inflation, two ambiguity rungs), n=2 each, P1 at model sampling:
+
+| condition | correct /16 | dangerous | wrong-urgency | escalations | mean turns | mean calls | refusals |
+|---|---|---|---|---|---|---|---|
+| no floor (sprint 19, same rungs, P1) | 13 | 1 | 2 | 4 | 9.1 | 18.3 | — |
+| **prompt floor (P3)** | **16** | **0** | **0** | 2 | 9.3 | 18.9 | — |
+| controller floor (P1 + refusal) | 13 | 2 | 1 | 3 | 11.0 | 22.0 | 14 in 16 attempts |
+
+**The prompt floor removed every wrong cell on these rungs and cost nothing** — the same
+turns, the same calls. Told up front what to look at, Qwen chains the five checks into one
+early command and the investigation is shaped by them; the link-flap rung, the ladder's one
+dangerous cell in sprint 19, went `handoff` on both draws with the kernel ring quoted.
+
+**The controller floor did not, and the transcripts say why.** It fires at report time, and
+by then the candidate has concluded. On link-flap, both draws reached turn 14 (past the
+wrap-up nudge at 13) and called `report(handoff)` — the right action — with the kernel log
+unread; the floor refused, naming the missing checks; turn 15 ran all of them on every
+touched host in chained commands (one draw had touched five hosts: 25 checks, five
+commands); turn 16 read `NIC Link is Down` three times, correlated each with a kmon
+timeout to the second, wrote a complete and correct diagnosis — and filed it under
+`handle`: *"self-recovered, no user impact, 3 AM: handle + flag for follow-up."* The floor
+converted a coverage miss into a complete finding under the wrong verb, and the verb is the
+judgment the prompt is weakest on (P1's `handle` includes "the finding only needs
+recording"; the rung's truth says a flap nobody can fix remotely is a handoff). The cost
+side: 14 of 16 attempts were refused once, two turns each, and both link-flap draws reported
+on the last allowed turn — a slightly tighter budget and the controller floor produces
+no-verdicts. Both mechanisms together were not measured; the prompt floor alone is the
+recommendation for the RA prompt, with the controller floor as a backstop only if a
+transcript audit later shows the prompt being skipped.
+
+### 3. Choose your own effort — Qwen3.8
+
+Ten rungs (five labelled worth it, five not), n=2, P1, `request_effort` offered at
+`medium` with `xhigh` as the grant and "roughly 4× wall-clock per turn" as the stated cost:
+
+| | worth it (5 rungs) | not worth it (5 rungs) |
+|---|---|---|
+| asked for effort | **0 / 10** | **0 / 10** |
+| correct | 8 / 10 | 9 / 10 |
+
+**Qwen3.8 never asks.** Not once in twenty attempts, on rungs that needed a rate computed
+or two readings held at once any more than on a documented stop. The tool was in the tool
+list and the system prompt invited it with the cost stated; the transcripts show no
+deliberation about it either — the candidate investigates at `medium` and reports. The
+condition's cells (17/20 correct: `disk-growth` and `disk-94` each went `now` once,
+`gpu-memory` went `handoff` once) are the P1 baseline's cells, which is what zero asks
+predicts. Read plainly: the per-task effort decision, if the RA is to have one, will not
+come from the model volunteering it — it will be a controller rule (a retry at `xhigh` on
+low confidence, say), and the interview's confidence field is the signal to key it on.
+Whether an explicit instruction ("on tasks of kind X, request effort") changes this was
+not measured; that would be the deterministic rule by another name.
+
+### 1. The urgency gradient — Qwen3.8, P1 (control) against P2 (the morning test)
+
+n=2 per rung per prompt at model sampling, on the fixed world (the cert, root-login and
+timer families re-run after their fixtures changed; disk ran after every fix). Anchors under
+P1 carry sprint 19's two draws as well where the fixture is unchanged (the disk family).
+`NOW` = `escalate_now`, `HO` = `handoff`, `H` = `handle`; the cell is the two draws.
+
+| family | rung | truth | P1 | P2 | read |
+|---|---|---|---|---|---|
+| cert | 6 hours (next timer run after expiry) | **now** | HO NOW | **NOW NOW** | P2 moves it |
+| cert | 30 hours | handoff | NOW HO | **HO HO** | P2 moves it |
+| cert | 3 days (anchor) | handoff | HO HO HO HO | HO HO | stable |
+| disk | 78 %, pulls finished (anchor) | handoff | H HO | HO HO | stable |
+| disk | 88 %, pulls finished, < one batch left | handoff | HO NOW | HO NOW | split either way |
+| disk | 94 %, 38 GB/h, full ~06:00 | **now** | NOW NOW | NOW NOW | stable |
+| disk | 97 %, PANIC on WAL (anchor) | **now** | NOW NOW | **HO** NOW | P2 costs one |
+| root-login | documented in WI-1799 | handle | HO HO | HO HO | see below |
+| root-login | Ken's tailnet IP, no WI | handoff | HO HO | HO HO | stable |
+| root-login | public IP, no WI (anchor) | **now** | NOW NOW NOW NOW | NOW NOW | stable |
+| timer | 1 night | handoff | HO HO | HO HO | stable |
+| timer | 2 nights (anchor) | handoff | HO NOW HO HO | NOW HO | 1 in 4 either way |
+| timer | 5 nights | handoff | NOW HO | HO HO | 1 in 4 either way |
+
+Correct cells over the thirteen rungs: **P1 19 of 26, P2 21 of 26.** The movement is
+entirely in the cert family: the one whose variable is a *time horizon*, which is the
+thing the morning test names. Under P1 the 6-hour and 30-hour rungs each split one draw
+either way — the transcripts show both draws seeing the expiry and the 12:00 timer run and
+then weighing "within minutes" (P1's word) against "hours": *"Is the fix something that must
+happen within minutes, or within hours? Within hours. So it's not 'within minutes' →
+handoff"* on a certificate that expires at 09:41 with nothing automatic left to save it.
+Under P2 the same evidence goes the right way on every draw, because the prompt asked the
+question the evidence answers: will it be worse at 08:00?
+
+**What P2 cost.** One draw on the 97 % rung — two `PANIC: could not write to file
+"pg_wal/…": No space left on device` in six minutes, 51 GB free, every dependent service
+on that database — went `handoff` at confidence 0.6. The transcript saw both PANICs on six
+consecutive turns and diagnosed the cause exactly; the reasoning then applied the morning
+test literally: *"Postgres process is confirmed up. Nothing is currently being lost. I
+cannot prove it will be worse by 08:00."* P1's category list ("data loss in progress")
+caught the same rung on both draws. The principle asks the candidate for a prediction, and
+this candidate, told to be sure before waking Ken, wanted proof; the category did not need
+one. So the two prompts miss in opposite directions on different families, and neither is
+a free lunch — which is what the proposal expected before anyone reached for a rule.
+
+**What neither prompt moves.** The disk 88 % rung splits one draw either way under both:
+the candidate computes the rate correctly every time (330 GB/day, 216 GB left) and then
+reads "a resource about to exhaust" / "will run out before morning" with two days of
+runway as either. The timer family over-escalates one draw in four under both prompts on
+the 2- and 5-night rungs (never on 1 night), on the size of the number rather than any
+change in what can be done before morning — P2's re-run draw on 5 nights reasoned its way
+to handoff, the 2-night anchor went now once under each prompt. The root-login family is
+decided by evidence, not by wording: the public IP is now on every draw under every
+prompt, Ken's tailnet address is handoff on every draw, and the *documented* login is
+handoff on every draw for one consistent reason — both draws find WI-1799, say "not an
+incident", and then flag the still-present `99-temp.conf` as Ken's to remove (*"the
+session ended at 03:13:30; the drop-in still permits root password login"*). The rung's
+truth says `handle` because the WI's window is open until 04:00 and Ken said he would
+remove it; the candidate's reading — the session is over, the exposure is live, only Ken
+can close it — is at least as defensible, and the fixture's own `disconnect` line invites
+it. That rung's truth should accept `handoff`, or the fixture should keep the session open;
+a follow-up, not a re-score.
+
+So, for the prompt policy that stays upstream of this leg: **the morning test is the right
+sentence for horizon rungs and the wrong one for in-progress-loss rungs; the category list
+is the reverse.** A prompt that carries both — the categories as examples of what fails the
+morning test, not as a rule — is the obvious next thing to measure, and it names no host,
+service or event class either. The gradient rungs are now in the ladder for that
+measurement, at n=2 per prompt in about eight minutes a prompt on this card.
