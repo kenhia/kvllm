@@ -962,6 +962,7 @@ class World:
             "/etc/hosts",
             "/etc/fstab",
             "/proc/mounts",
+            "/etc/passwd",
             "/var/log/auth.log",
             "/var/log/syslog",
             "/var/log/kern.log",
@@ -1312,7 +1313,25 @@ class World:
         if cmd == "wc":
             return str(len(lines)) if "-l" in args or not args else str(len(text))
         if cmd == "sort":
-            return "\n".join(sorted(lines, reverse="-r" in args))
+            # `sort -rh` on du output is the idiom; string order would bury 622G under 4.0K
+            flags = "".join(a[1:] for a in args if a.startswith("-") and a[1:2] != "-")
+            rev = "r" in flags or "--reverse" in args
+            units = {"": 1, "K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
+            if "h" in flags or "--human-numeric-sort" in args:
+
+                def hkey(ln: str) -> float:
+                    m = re.match(r"\s*([\d.]+)([KMGT]?)", ln)
+                    return float(m.group(1)) * units[m.group(2)] if m else -1.0
+
+                return "\n".join(sorted(lines, key=hkey, reverse=rev))
+            if "n" in flags or "--numeric-sort" in args:
+
+                def nkey(ln: str) -> float:
+                    m = re.match(r"\s*(-?[\d.]+)", ln)
+                    return float(m.group(1)) if m else float("-inf")
+
+                return "\n".join(sorted(lines, key=nkey, reverse=rev))
+            return "\n".join(sorted(lines, reverse=rev))
         if cmd == "uniq":
             out = []
             for ln in lines:

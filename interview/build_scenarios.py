@@ -1011,7 +1011,6 @@ def root_login_host(ip: str) -> dict:
     d["files"]["/etc/ssh/sshd_config.d/99-temp.conf"] = (
         "PermitRootLogin yes\nPasswordAuthentication yes\n"
     )
-    d["commands"]["ls /etc/ssh/sshd_config.d"] = "99-temp.conf"
     d["commands"]["date"] = "Mon Sep  7 03:20:04 UTC 2026"
     d["users"] = ["svc-backup"]
     d["mtimes"] = {
