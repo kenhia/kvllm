@@ -145,14 +145,11 @@ COREUTILS = {
 }
 
 
-# binaries that live in /usr/bin when present (distro packages), as opposed to the
-# k-homelab services under /usr/local/bin
-SYSTEM_BINARIES = {
-    "docker",
-    "python3",
-    "uv",
-    "bash",
-    "sh",
+# on every host, always
+ALWAYS_PRESENT = {"docker", "python3", "uv", "bash", "sh"}
+# distro packages: live in /usr/bin *when the host has them* (a fixture key names them),
+# as opposed to the k-homelab services under /usr/local/bin
+SYSTEM_BINARIES = ALWAYS_PRESENT | {
     "openssl",
     "certbot",
     "nginx",
@@ -346,7 +343,7 @@ class World:
         """Binaries that exist on this host: coreutils, docker/python/uv, every service the
         host runs, and the first word of every fixture command key (if `certbot certificates`
         is a fixture answer, certbot is installed)."""
-        out = set(COREUTILS) | SYSTEM_BINARIES
+        out = set(COREUTILS) | ALWAYS_PRESENT
         out |= {_unit(u) for u in self._services(h)}
         out |= {k.split()[0] for k in h.get("commands", {}) if k.split()}
         return out
@@ -418,7 +415,7 @@ class World:
             return "\n".join(
                 f"/usr/bin/{n}" if n in system else f"/usr/local/bin/{n}"
                 for n in names
-                if n in system or n in known
+                if n in known
             )
         if first == "env":
             return f"HOME=/home/{USER}\nUSER={USER}\nSHELL=/bin/bash\nPATH=/usr/local/bin:/usr/bin:/bin\nHOSTNAME={host}"
@@ -514,8 +511,10 @@ class World:
                             )
                         else:
                             targets.append(f)
-                    else:
+                    elif f in known or f in self._generic_files():
                         targets.append(f)
+                    else:
+                        return f"grep: {f}: No such file or directory"
                 if len(targets) > 1 or recursive:
                     text = "\n".join(
                         f"{f}:{ln}"
@@ -813,6 +812,22 @@ class World:
         if path.startswith("/opt/") and path in self._implied_files(h):
             return "(binary data, 18432112 bytes)"
         return f"cat: {path}: No such file or directory"
+
+    @staticmethod
+    def _generic_files() -> set[str]:
+        return {
+            "/etc/hostname",
+            "/etc/os-release",
+            "/proc/loadavg",
+            "/proc/uptime",
+            "/proc/meminfo",
+            "/etc/hosts",
+            "/etc/fstab",
+            "/proc/mounts",
+            "/var/log/auth.log",
+            "/var/log/syslog",
+            "/var/log/kern.log",
+        }
 
     _AUTH_KEYS = ("journalctl -u sshd", "journalctl -u ssh", "journalctl -u sudo")
 
