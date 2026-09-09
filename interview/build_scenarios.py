@@ -182,6 +182,9 @@ def healthy_kubsdb() -> dict:
             "systemctl status nginx": active(
                 "nginx", "Tue 2026-07-28 08:40:12 UTC; 5 weeks ago", 1195
             ),
+            "systemctl status node-exporter": active(
+                "node-exporter", "Tue 2026-07-28 08:40:10 UTC; 5 weeks ago", 1180
+            ),
             "ss -tlnp": ss(
                 [
                     ("postgres", 5432),
@@ -192,6 +195,7 @@ def healthy_kubsdb() -> dict:
                     ("grafana", 3000),
                     ("registry", 5000),
                     ("nginx", 443),
+                    ("node_exporter", 9101),
                 ]
             ),
             "df -h": df(61, "1.8T", "1.1T", "650G"),
@@ -478,6 +482,7 @@ def build() -> None:
             ("grafana", 3000),
             ("registry", 5000),
             ("nginx", 443),
+            ("node_exporter", 9101),
         ]
     )
     k["commands"]["free -m"] = (
@@ -575,6 +580,7 @@ def build() -> None:
             ("grafana", 3000),
             ("registry", 5000),
             ("nginx", 443),
+            ("node_exporter", 9101),
             ("kbeacon", 8931),
         ]
     )
