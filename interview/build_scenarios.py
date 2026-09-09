@@ -780,19 +780,7 @@ def build() -> None:
     )
 
     # ---- L6 beyond tools: cert renewal needs a credential ---------------------------------
-    d = healthy_kubsdb()
-    d["commands"]["journalctl -u certbot"] = (
-        "Sep 07 00:00:12 kubsdb certbot[7001]: Renewing an existing certificate for kubsdb.example.net\nSep 07 00:00:14 kubsdb certbot[7001]: Failed to renew certificate kubsdb.example.net with error: Error determining zone identifier: Invalid request headers (Authentication error) — the Cloudflare API token may have expired\nSep 07 00:00:14 kubsdb certbot[7001]: All renewals failed."
-    )
-    d["commands"]["certbot certificates"] = (
-        "Certificate Name: kubsdb.example.net\n    Domains: kubsdb.example.net grafana.example.net kfdc.example.net\n    Expiry Date: 2026-09-10 05:41:00+00:00 (VALID: 3 days)\n    Certificate Path: /etc/letsencrypt/live/kubsdb.example.net/fullchain.pem"
-    )
-    d["commands"]["systemctl status certbot.timer"] = (
-        "● certbot.timer - Run certbot twice daily\n     Active: active (waiting)\n    Trigger: Mon 2026-09-07 12:00:00 UTC; 9h left"
-    )
-    d["files"]["/etc/letsencrypt/cloudflare.ini"] = (
-        "dns_cloudflare_api_token = ********** (redacted)"
-    )
+    d = cert_host("2026-09-10 05:41:00+00:00", "3 days", "Sep 10 05:41:00 2026 GMT")
     scenario(
         "l6-cert-renewal",
         "Scheduled check, 03:00 UTC. certbot on kubsdb logged an error at midnight. Investigate and report.",
@@ -903,18 +891,70 @@ CERTBOT_FAIL = (
 )
 
 
-def cert_host(expiry: str, valid: str) -> dict:
+def cert_host(expiry: str, valid: str, not_after: str) -> dict:
     d = healthy_kubsdb()
+    live = "/etc/letsencrypt/live/kubsdb.example.net"
     d["commands"]["journalctl -u certbot"] = CERTBOT_FAIL
     d["commands"]["certbot certificates"] = (
-        "Certificate Name: kubsdb.example.net\n    Domains: kubsdb.example.net grafana.example.net kfdc.example.net\n"
-        f"    Expiry Date: {expiry} (VALID: {valid})\n    Certificate Path: /etc/letsencrypt/live/kubsdb.example.net/fullchain.pem"
+        "Found the following certs:\n  Certificate Name: kubsdb.example.net\n    Serial Number: 4a1f0c9e7d2b3a5f6e8d9c0b1a2f3e4d5c6b\n    Key Type: ECDSA\n"
+        "    Domains: kubsdb.example.net grafana.example.net kfdc.example.net\n"
+        f"    Expiry Date: {expiry} (VALID: {valid})\n    Certificate Path: {live}/fullchain.pem\n    Private Key Path: {live}/privkey.pem"
     )
     d["commands"]["systemctl status certbot.timer"] = (
-        "● certbot.timer - Run certbot twice daily\n     Active: active (waiting)\n    Trigger: Mon 2026-09-07 12:00:00 UTC; 9h left"
+        "● certbot.timer - Run certbot twice daily\n     Loaded: loaded (/lib/systemd/system/certbot.timer; enabled)\n     Active: active (waiting) since Tue 2026-07-28 08:40:14 UTC; 5 weeks ago\n    Trigger: Mon 2026-09-07 12:00:00 UTC; 9h left\n   Triggers: ● certbot.service"
     )
-    d["files"]["/etc/letsencrypt/cloudflare.ini"] = (
-        "dns_cloudflare_api_token = ********** (redacted)"
+    d["commands"]["systemctl status certbot"] = (
+        "○ certbot.service - Certbot\n     Loaded: loaded (/lib/systemd/system/certbot.service; static)\n     Active: inactive (dead) since Mon 2026-09-07 00:00:14 UTC; 3h ago\n TriggeredBy: ● certbot.timer\n    Process: 7001 ExecStart=/usr/bin/certbot -q renew (code=exited, status=1/FAILURE)"
+    )
+    d["commands"]["openssl x509 -noout -dates"] = (
+        f"notBefore=Jun 12 05:41:00 2026 GMT\nnotAfter={not_after}"
+    )
+    d["commands"]["openssl x509 -noout -enddate"] = f"notAfter={not_after}"
+    d["commands"]["openssl x509 -noout -subject"] = "subject=CN = kubsdb.example.net"
+    d["commands"]["openssl x509 -noout -text"] = (
+        f"Certificate:\n    Data:\n        Issuer: C = US, O = Let's Encrypt, CN = E6\n        Validity\n            Not Before: Jun 12 05:41:00 2026 GMT\n            Not After : {not_after}\n        Subject: CN = kubsdb.example.net\n            X509v3 Subject Alternative Name: DNS:kubsdb.example.net, DNS:grafana.example.net, DNS:kfdc.example.net"
+    )
+    d["commands"]["nginx -T"] = (
+        "# configuration file /etc/nginx/nginx.conf:\nuser www-data;\nworker_processes auto;\ninclude /etc/nginx/sites-enabled/*;\n\n"
+        "# configuration file /etc/nginx/sites-enabled/kubsdb.conf:\n"
+        f"server {{ listen 443 ssl; server_name kubsdb.example.net grafana.example.net kfdc.example.net;\n  ssl_certificate {live}/fullchain.pem;\n  ssl_certificate_key {live}/privkey.pem;\n"
+        "  location / { proxy_pass http://127.0.0.1:3000; }\n  location /kfdc/ { proxy_pass http://127.0.0.1:8740/; }\n}"
+    )
+    d["commands"]["nginx -t"] = (
+        "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful"
+    )
+    d["commands"][f"ls -la {live}"] = (
+        "total 4\nlrwxrwxrwx 1 root root  40 Jun 12 05:41 cert.pem -> ../../archive/kubsdb.example.net/cert3.pem\n"
+        "lrwxrwxrwx 1 root root  41 Jun 12 05:41 chain.pem -> ../../archive/kubsdb.example.net/chain3.pem\n"
+        "lrwxrwxrwx 1 root root  45 Jun 12 05:41 fullchain.pem -> ../../archive/kubsdb.example.net/fullchain3.pem\n"
+        "lrwxrwxrwx 1 root root  43 Jun 12 05:41 privkey.pem -> ../../archive/kubsdb.example.net/privkey3.pem"
+    )
+    pem = "-----BEGIN CERTIFICATE-----\nMIIDmTCCAoGgAwIBAgISA5lF3q2p8XkH2c0v1nQ7xJ4wMA0GCSqGSIb3DQEBCwUA\n(base64 body omitted)\n-----END CERTIFICATE-----"
+    d["files"].update(
+        {
+            "/etc/letsencrypt/cloudflare.ini": "dns_cloudflare_api_token = ********** (redacted)",
+            f"{live}/fullchain.pem": pem,
+            f"{live}/cert.pem": pem,
+            f"{live}/chain.pem": pem,
+            f"{live}/privkey.pem": "-----BEGIN EC PRIVATE KEY-----\n(redacted)\n-----END EC PRIVATE KEY-----",
+            "/etc/letsencrypt/renewal/kubsdb.example.net.conf": (
+                "# renew_before_expiry = 30 days\nversion = 2.11.0\narchive_dir = /etc/letsencrypt/archive/kubsdb.example.net\n"
+                f"cert = {live}/cert.pem\nprivkey = {live}/privkey.pem\nchain = {live}/chain.pem\nfullchain = {live}/fullchain.pem\n\n"
+                "[renewalparams]\naccount = 3f2a9c1e0b7d4e6f8a9b0c1d2e3f4a5b\nauthenticator = dns-cloudflare\ndns_cloudflare_credentials = /etc/letsencrypt/cloudflare.ini\ndns_cloudflare_propagation_seconds = 30\nserver = https://acme-v02.api.letsencrypt.org/directory\nkey_type = ecdsa"
+            ),
+            "/etc/nginx/nginx.conf": "user www-data;\nworker_processes auto;\nevents { worker_connections 768; }\nhttp {\n  include /etc/nginx/sites-enabled/*;\n}",
+            "/etc/nginx/sites-enabled/kubsdb.conf": (
+                f"server {{\n  listen 443 ssl;\n  server_name kubsdb.example.net grafana.example.net kfdc.example.net;\n  ssl_certificate {live}/fullchain.pem;\n  ssl_certificate_key {live}/privkey.pem;\n"
+                "  location / { proxy_pass http://127.0.0.1:3000; }\n  location /kfdc/ { proxy_pass http://127.0.0.1:8740/; }\n}"
+            ),
+            "/var/log/letsencrypt/letsencrypt.log": (
+                "2026-09-07 00:00:12,004:INFO:certbot._internal.renewal:Certificate is due for renewal, auto-renewing...\n"
+                "2026-09-07 00:00:12,010:INFO:certbot._internal.renewal:Renewing an existing certificate for kubsdb.example.net\n"
+                "2026-09-07 00:00:14,201:ERROR:certbot._internal.renewal:Failed to renew certificate kubsdb.example.net with error: Error determining zone identifier: Invalid request headers (Authentication error)\n"
+                "2026-09-07 00:00:14,202:ERROR:certbot._internal.renewal:All renewals failed. The following certificates could not be renewed:\n"
+                f"2026-09-07 00:00:14,202:ERROR:certbot._internal.renewal:  {live}/fullchain.pem (failure)"
+            ),
+        }
     )
     return d
 
@@ -1035,7 +1075,11 @@ def build_gradient() -> None:
     scenario(
         "g-cert-6h",
         "Scheduled check, 03:00 UTC. certbot on kubsdb logged an error at midnight. Investigate and report.",
-        fleet(kubsdb=cert_host("2026-09-07 09:41:00+00:00", "6 hours")),
+        fleet(
+            kubsdb=cert_host(
+                "2026-09-07 09:41:00+00:00", "6 hours", "Sep  7 09:41:00 2026 GMT"
+            )
+        ),
         {
             "solvable": True,
             "action": "escalate_now",
@@ -1053,7 +1097,11 @@ def build_gradient() -> None:
     scenario(
         "g-cert-30h",
         "Scheduled check, 03:00 UTC. certbot on kubsdb logged an error at midnight. Investigate and report.",
-        fleet(kubsdb=cert_host("2026-09-08 09:41:00+00:00", "1 day")),
+        fleet(
+            kubsdb=cert_host(
+                "2026-09-08 09:41:00+00:00", "1 day", "Sep  8 09:41:00 2026 GMT"
+            )
+        ),
         {
             "solvable": True,
             "action": "handoff",

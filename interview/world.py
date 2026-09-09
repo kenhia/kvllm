@@ -145,6 +145,27 @@ COREUTILS = {
 }
 
 
+# binaries that live in /usr/bin when present (distro packages), as opposed to the
+# k-homelab services under /usr/local/bin
+SYSTEM_BINARIES = {
+    "docker",
+    "python3",
+    "uv",
+    "bash",
+    "sh",
+    "openssl",
+    "certbot",
+    "nginx",
+    "restic",
+    "smartctl",
+    "ethtool",
+    "nvidia-smi",
+    "psql",
+    "curl",
+    "wget",
+}
+
+
 def _tokens(command: str) -> list[str]:
     lx = shlex.shlex(command, posix=True, punctuation_chars=";|&<>")
     lx.whitespace_split = True
@@ -305,7 +326,11 @@ class World:
 
     def _match(self, h: dict, tokens: list[str]) -> str | None:
         """Longest fixture key whose tokens appear, in order, in the command's tokens."""
-        norm = [_unit(_path(t)) for t in tokens]
+        # `journalctl -u certbot*` is a glob a real journalctl accepts; match it as its stem
+        norm = [
+            _unit(_path(t[:-1] if len(t) > 1 and t.endswith("*") else t))
+            for t in tokens
+        ]
         best, best_len = None, 0
         for key, val in h.get("commands", {}).items():
             kt = [_unit(t) for t in key.split()]
@@ -321,7 +346,7 @@ class World:
         """Binaries that exist on this host: coreutils, docker/python/uv, every service the
         host runs, and the first word of every fixture command key (if `certbot certificates`
         is a fixture answer, certbot is installed)."""
-        out = set(COREUTILS) | {"docker", "python3", "uv", "bash", "sh"}
+        out = set(COREUTILS) | SYSTEM_BINARIES
         out |= {_unit(u) for u in self._services(h)}
         out |= {k.split()[0] for k in h.get("commands", {}) if k.split()}
         return out
@@ -389,7 +414,7 @@ class World:
         if first in ("which", "type", "command"):
             names = [a for a in args if not a.startswith("-")]
             known = self._binaries(h)
-            system = COREUTILS | {"docker", "python3", "uv", "bash", "sh"}
+            system = COREUTILS | SYSTEM_BINARIES
             return "\n".join(
                 f"/usr/bin/{n}" if n in system else f"/usr/local/bin/{n}"
                 for n in names
@@ -472,7 +497,33 @@ class World:
             flags = [a for a in args if a.startswith("-")]
             rest = [a for a in args if not a.startswith("-")]
             if len(rest) >= 2:
-                text = "\n".join(self._cat(host, h, f) for f in rest[1:])
+                # `grep -r PATTERN /etc/nginx` walks the directory: every file the fixture
+                # implies under it, each line prefixed with its path, as grep does
+                recursive = any(
+                    f in ("-r", "-R", "--recursive") or (f[1:2] != "-" and "r" in f[1:])
+                    for f in flags
+                )
+                known = set(h.get("files", {})) | self._implied_files(h)
+                targets: list[str] = []
+                for f in rest[1:]:
+                    f = _path(f)
+                    if self._isdir(h, f):
+                        if recursive:
+                            targets += sorted(
+                                k for k in known if k.startswith(f.rstrip("/") + "/")
+                            )
+                        else:
+                            targets.append(f)
+                    else:
+                        targets.append(f)
+                if len(targets) > 1 or recursive:
+                    text = "\n".join(
+                        f"{f}:{ln}"
+                        for f in targets
+                        for ln in self._cat(host, h, f).splitlines()
+                    )
+                else:
+                    text = "\n".join(self._cat(host, h, f) for f in targets)
                 return self._filter(["grep", *flags, rest[0]], text)
             return ""
         if first == "df":
@@ -1015,6 +1066,7 @@ class World:
             ):
                 unit = a.split("=", 1)[1]
         if unit is not None:
+            unit = unit[:-1] if len(unit) > 1 and unit.endswith("*") else unit
             if _unit(unit) in ("ssh", "sshd", "sudo"):
                 return self._journal_flags(args, self._auth_log(h, host))
             return "-- No entries --"
