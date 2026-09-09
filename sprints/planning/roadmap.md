@@ -9,11 +9,23 @@
 
 ## Now
 
-- **kprojects harness migration** (korg #1234) — managed conventions block in
-  both agent files, harness layout, `just check` kept as the gate. Repo layout
-  change only: the vLLM service and the served model are not touched.
+- **Qwen3.8 as the resident agent — program korg:1994.** Ken's decision of
+  2026-09-08 (WI-1973, on sprint 19's interview:
+  `docs/findings/ra-interview-2026-09.md`). Slice 1 is kvllm sprint 20
+  (korg:1984): `qwen3.8-27b-nvfp4` served as interviewed (MTP ×3, 122,880 at
+  GPU 0.95, `medium`), gemma re-served as its best self (fp8 KV, 32k, thinking
+  on), both rows re-scored under their served configurations, `kvllm-client`
+  0.2.0 with reasoning-model defaults, switch and deploy. The caller slices
+  (kyac, kmon) live in their own repos. kvllm's own follow-ups from it: watch
+  GPU 0.95 under a day of real load (fallback 0.90 / 65,536 with the head — the
+  leg's call, recorded, not Ken's), and the ladder's next rungs (WI-1978,
+  card-exclusive, its own slice).
 
 ## Next
+
+- **The frontier baseline on the new harness** — the `[noise]` band in
+  `eval-config.toml` still comes from the 2026-08-20 sonnet round on the old
+  stack; ~$3 for N=3, needs Ken's go (standing offer, no slice).
 
 - **kvllm-client consumer conversions** — sprint 13 gave the discovery +
   local/frontier + fallback pattern one home (`client/`); kmon, kagent and
