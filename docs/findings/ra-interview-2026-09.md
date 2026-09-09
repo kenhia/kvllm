@@ -167,3 +167,62 @@ to context and confidence, and its speed would start to count. An RA design wher
 now-versus-handoff call is made by something other than the model would neutralise
 Qwen3.8's main remaining weakness and gemma's too. And a new model, in a few months,
 goes through the same fourteen scenarios before anyone argues about it.
+
+## Addendum, 2026-09-09 (sprint 22): the next rungs
+
+_Three measurements the September interview said it should make next, made
+([`sprints/sprint-22-ladder-next-rungs.md`](../../sprints/sprint-22-ladder-next-rungs.md)
+has every number and quote). Both candidates at their served configurations, n=2 at model
+sampling per cell, the fixture fixed seven times before any of it could be read._
+
+**The ladder is a gradient now.** Eight new rungs vary severity and horizon on faults the
+ladder already had: a certificate at 6 h / 30 h / 3 d, a disk at 78 / 88 / 94 / 97 %, a
+root login documented in a work item / from Ken's own address / from a public IP, a
+backup timer stopped 1 / 2 / 5 nights.
+
+**1. A principle moves the boundary on the families it names, and nowhere else.** A prompt
+that replaces "a security event, a resource about to exhaust" with the *morning test*
+("will it be materially worse by the time Ken reads a handoff at 08:00?") took Qwen3.8
+from 19 to 21 of 26 correct on the gradient and gemma from 15 to 21. Every rung it moved
+is one whose variable is a time horizon: the certificate at 6 hours (Qwen: from one draw
+each way to `now` on both), the disk at 88 %, the timers, the PANICking postgres gemma had
+handed off in every previous condition. The rung it does not touch is the one whose
+evidence has to be weighed against itself — root by password from the owner's own tailnet
+address, no work item — where Qwen hands off on every draw under both prompts and gemma
+escalates on every draw under both, the rule applied without reading the source. The
+principle's cost is literalism: Qwen once handed off the PANIC ("nothing is being lost
+right now"), gemma twice handed off the 6-hour certificate ("at 08:00 it is still valid").
+The category list catches those and over-fires on gemma's boundaries. The prompt to
+measure next carries both — the categories as examples of what fails the morning test —
+and still names no host, service or event class.
+
+**2. A checklist floor removes the coverage-miss dangerous cells, and the prompt-level one
+is free.** Five checks on every host the candidate touched (failed units, the
+priority-filtered journal, the kernel ring, disk, auth), stated in the prompt or enforced
+by the loop refusing a `handle`/`handoff` report until they are done. On the link-flap
+rung — sprint 19's dangerous cell — Qwen3.8 without a floor never opens the kernel ring on
+the host with the symptom and calls the flaps transient on both draws; with either floor
+it reads the ring on every draw. The prompt floor costs nothing (Qwen's turns and calls
+unchanged; gemma's calls *down* 40 %, the checklist replacing wandering) and takes Qwen
+from 13 to 15 of 16 on the eight floor rungs with no wrong-urgency cell; the controller
+floor also reaches 15 of 16, at a refusal on nearly every attempt and one to two extra
+turns. What no floor fixes: a candidate that reads the ring, quotes all three drops,
+correlates them with the timeouts to the second, and files a hardware fault nobody can fix
+remotely as `handle` — once under the prompt floor. The residual error after the floor is
+the verb, and that is the prompt's to define.
+
+**3. Neither candidate decides when it deserves more thinking.** Offered a
+`request_effort` tool with the cost stated — Qwen3.8 at `medium` with `xhigh` on request,
+gemma with thinking off and thinking on on request — neither asked once in forty attempts,
+including gemma on the exact rungs thinking on is known to fix (it went `now` on both
+disk-growth draws, both WAL draws, and `handle` on both link-flap draws, without asking).
+The per-task effort decision will be a controller rule keyed on confidence (Qwen's still
+tracks its misses: 0.55–0.7 on the wrong cells, 0.9+ on the right ones; gemma's is 1.0
+throughout), not a judgment the model volunteers.
+
+**For the RA prompt and loop, then:** the morning test with the categories as its examples;
+the five-check floor stated in the prompt, with the controller's refusal behind it as the
+guarantee; a confidence-keyed retry at higher effort in the controller. None of it changes
+the hire. Also on the board today: both rows' `assisted` column re-measured under the
+served configurations (Qwen 80 → 86 %, gemma 87 → 89 %), so each row is one configuration
+end to end.

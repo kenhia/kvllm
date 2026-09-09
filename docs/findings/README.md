@@ -32,7 +32,10 @@ or planning local-agent projects, and for sharing.
   surprised us, and what it means for building the RA. **Dated — a September 2026
   snapshot**; the next candidate runs the same interview. **Decision taken 2026-09-08:
   Qwen3.8 is the resident** (Ken, WI-1973); sprint 20 served it as interviewed and
-  re-served gemma as its best self.
+  re-served gemma as its best self. **Addendum 2026-09-09 (sprint 22):** the ladder is an
+  urgency gradient now, a principle moves the now/handoff boundary only on horizon rungs,
+  a checklist floor removes the coverage-miss dangerous cells (the prompt-level one for
+  free), and neither candidate asks for more effort when offered it.
 - [`local-vs-frontier-2026-07.html`](local-vs-frontier-2026-07.html) — rich self-contained
   report (charts, findings, methodology overview) prepared for the All-The-Vibes community.
   Open in a browser; safe to share as a single file. Generated from live board data by a

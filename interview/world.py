@@ -145,6 +145,38 @@ COREUTILS = {
 }
 
 
+# on every host, always
+ALWAYS_PRESENT = {
+    "docker",
+    "python3",
+    "uv",
+    "bash",
+    "sh",
+    "zstd",
+    "unzstd",
+    "zstdcat",
+    "gzip",
+    "gunzip",
+    "xz",
+    "tar",
+    "getent",
+}
+# distro packages: live in /usr/bin *when the host has them* (a fixture key names them),
+# as opposed to the k-homelab services under /usr/local/bin
+SYSTEM_BINARIES = ALWAYS_PRESENT | {
+    "openssl",
+    "certbot",
+    "nginx",
+    "restic",
+    "smartctl",
+    "ethtool",
+    "nvidia-smi",
+    "psql",
+    "curl",
+    "wget",
+}
+
+
 def _tokens(command: str) -> list[str]:
     lx = shlex.shlex(command, posix=True, punctuation_chars=";|&<>")
     lx.whitespace_split = True
@@ -205,6 +237,9 @@ class World:
     def __init__(self, w: dict):
         self.w = w
         self.calls: list[dict] = []
+        # hosts the candidate ran something on AND that answered — the set the checklist
+        # floor (interview.floor) holds it to; an unreachable host cannot be checked
+        self.touched: set[str] = set()
 
     # --- entry points ------------------------------------------------------------------
     def dispatch(self, name: str, args: dict) -> str:
@@ -233,13 +268,14 @@ class World:
         "timeout ",
         "watch ",
     )
-    _SINGLETON = {"df", "free", "ss", "netstat", "uptime", "lsblk", "mount"}
+    _SINGLETON = {"df", "free", "ss", "netstat", "uptime", "lsblk", "mount", "last"}
     _LOOP = re.compile(r"(?:^|[;&|]\s*)(?:for|while|until|if|case|function)\s")
 
     def run_command(self, host: str, command: str) -> str:
         h = self._host(host)
         if h is None:
             return f"ssh: Could not resolve hostname {host}: Name or service not known"
+        self.touched.add(host)
         if any(k in command for k in self.REFUSED) or self._LOOP.search(command):
             return (
                 "error: this read-only session runs simple commands only — no scripts, loops, "
@@ -260,6 +296,7 @@ class World:
         h = self._host(host)
         if h is None:
             return f"ssh: Could not resolve hostname {host}: Name or service not known"
+        self.touched.add(host)
         return self._cat(host, h, path)
 
     def manifest_lookup(self, service: str) -> str:
@@ -281,7 +318,7 @@ class World:
         return fmt(_unit(service), v)
 
     def korg_search(self, query: str) -> str:
-        terms = [t for t in re.split(r"\W+", query.lower()) if t]
+        terms = [t for t in re.split(r"\W+", query.lower()) if len(t) >= 3]
         hits = [
             wi
             for wi in self.w.get("korg", [])
@@ -300,7 +337,11 @@ class World:
 
     def _match(self, h: dict, tokens: list[str]) -> str | None:
         """Longest fixture key whose tokens appear, in order, in the command's tokens."""
-        norm = [_unit(_path(t)) for t in tokens]
+        # `journalctl -u certbot*` is a glob a real journalctl accepts; match it as its stem
+        norm = [
+            _unit(_path(t[:-1] if len(t) > 1 and t.endswith("*") else t))
+            for t in tokens
+        ]
         best, best_len = None, 0
         for key, val in h.get("commands", {}).items():
             kt = [_unit(t) for t in key.split()]
@@ -316,7 +357,7 @@ class World:
         """Binaries that exist on this host: coreutils, docker/python/uv, every service the
         host runs, and the first word of every fixture command key (if `certbot certificates`
         is a fixture answer, certbot is installed)."""
-        out = set(COREUTILS) | {"docker", "python3", "uv", "bash", "sh"}
+        out = set(COREUTILS) | ALWAYS_PRESENT
         out |= {_unit(u) for u in self._services(h)}
         out |= {k.split()[0] for k in h.get("commands", {}) if k.split()}
         return out
@@ -340,9 +381,11 @@ class World:
         if not tokens:
             return ""
         fixture = self._match(h, tokens)
-        if fixture is not None:
-            return fixture
         first, args = tokens[0], tokens[1:]
+        if fixture is not None:
+            if first in ("journalctl", "sudo") and "journalctl" in tokens[:2]:
+                return self._journal_flags(args, fixture)
+            return fixture
         if first in self._SINGLETON:
             # one filesystem, one memory, one socket table: flags do not change the answer
             for key, val in h.get("commands", {}).items():
@@ -366,7 +409,39 @@ class World:
         if first == "whoami":
             return USER
         if first == "id":
-            return f"uid=1000({USER}) gid=1000({USER}) groups=1000({USER}),27(sudo),999(docker)"
+            names = [a for a in args if not a.startswith("-")]
+            if not names:
+                return f"uid=1000({USER}) gid=1000({USER}) groups=1000({USER}),27(sudo),999(docker)"
+            outs = []
+            for n in names:
+                e = self._passwd_entry(h, n)
+                if e:
+                    uid = e.split(":")[2]
+                    outs.append(f"uid={uid}({n}) gid={uid}({n}) groups={uid}({n})")
+                else:
+                    outs.append(f"id: '{n}': no such user")
+            return "\n".join(outs)
+        if first == "getent":
+            if args and args[0] == "passwd":
+                if len(args) == 1:
+                    return self._passwd(h)
+                return "\n".join(e for n in args[1:] if (e := self._passwd_entry(h, n)))
+            return f"getent: unsupported database in this session: {' '.join(args)}"
+        if first in ("zstd", "unzstd", "zstdcat"):
+            files_ = [a for a in args if not a.startswith("-")]
+            sizes = self._listed_sizes(h)
+            if "-t" in args or "--test" in args:
+                outs = []
+                for f in files_:
+                    f = _path(f)
+                    if f in sizes:
+                        outs.append(f"{f:<48}: {int(sizes[f] * 2.7)} bytes")
+                    else:
+                        outs.append(
+                            f"zstd: can't stat {f} : No such file or directory -- ignored"
+                        )
+                return "\n".join(outs)
+            return f"{first}: unsupported invocation in this session. Supported here: zstd -t <file>"
         if first == "pwd":
             return f"/home/{USER}"
         if first == "uname":
@@ -382,11 +457,11 @@ class World:
         if first in ("which", "type", "command"):
             names = [a for a in args if not a.startswith("-")]
             known = self._binaries(h)
-            system = COREUTILS | {"docker", "python3", "uv", "bash", "sh"}
+            system = COREUTILS | SYSTEM_BINARIES
             return "\n".join(
                 f"/usr/bin/{n}" if n in system else f"/usr/local/bin/{n}"
                 for n in names
-                if n in system or n in known
+                if n in known
             )
         if first == "env":
             return f"HOME=/home/{USER}\nUSER={USER}\nSHELL=/bin/bash\nPATH=/usr/local/bin:/usr/bin:/bin\nHOSTNAME={host}"
@@ -410,13 +485,14 @@ class World:
                 f = _path(f)
                 if self._isdir(h, f):
                     outs.append(
-                        f"  File: {f}\n  Size: 4096\tBlocks: 8\tIO Block: 4096\tdirectory"
+                        f"  File: {f}\n  Size: 4096\tBlocks: 8\tIO Block: 4096\tdirectory\n"
+                        f"Modify: {self._mtime_iso(h, f)}"
                     )
                 elif f in sizes or f in files or f in self._implied_files(h):
                     n = sizes.get(f, len(files.get(f, "")) or 2048)
                     outs.append(
                         f"  File: {f}\n  Size: {n}\tBlocks: {(n + 511) // 512}\tIO Block: 4096\tregular file\n"
-                        "Modify: 2026-09-07 02:14:41.000000000 +0000"
+                        f"Modify: {self._mtime_iso(h, f)}"
                     )
                 else:
                     outs.append(f"stat: cannot statx '{f}': No such file or directory")
@@ -465,7 +541,35 @@ class World:
             flags = [a for a in args if a.startswith("-")]
             rest = [a for a in args if not a.startswith("-")]
             if len(rest) >= 2:
-                text = "\n".join(self._cat(host, h, f) for f in rest[1:])
+                # `grep -r PATTERN /etc/nginx` walks the directory: every file the fixture
+                # implies under it, each line prefixed with its path, as grep does
+                recursive = any(
+                    f in ("-r", "-R", "--recursive") or (f[1:2] != "-" and "r" in f[1:])
+                    for f in flags
+                )
+                known = set(h.get("files", {})) | self._implied_files(h)
+                targets: list[str] = []
+                for f in rest[1:]:
+                    f = _path(f)
+                    if self._isdir(h, f):
+                        if recursive:
+                            targets += sorted(
+                                k for k in known if k.startswith(f.rstrip("/") + "/")
+                            )
+                        else:
+                            targets.append(f)
+                    elif f in known or f in self._generic_files():
+                        targets.append(f)
+                    else:
+                        return f"grep: {f}: No such file or directory"
+                if len(targets) > 1 or recursive:
+                    text = "\n".join(
+                        f"{f}:{ln}"
+                        for f in targets
+                        for ln in self._cat(host, h, f).splitlines()
+                    )
+                else:
+                    text = "\n".join(self._cat(host, h, f) for f in targets)
                 return self._filter(["grep", *flags, rest[0]], text)
             return ""
         if first == "df":
@@ -501,7 +605,7 @@ class World:
         if first == "systemctl":
             return self._systemctl(h, args)
         if first == "journalctl":
-            return self._journalctl(h, args)
+            return self._journalctl(h, args, host)
         if first == "docker":
             if any(k.startswith("docker") for k in h.get("commands", {})):
                 return (
@@ -603,6 +707,8 @@ class World:
                         add(f"{base}/{name}", is_dir)
         for f in self._implied_files(h):
             add(f, False)
+        for u in self._users(h):
+            add(f"/home/{u}", True)
         if any(k.startswith("docker") for k in h.get("commands", {})):
             for d in (
                 "overlay2",
@@ -657,6 +763,91 @@ class World:
             out.add(f"/usr/local/bin/{_unit(unit)}")
         return out
 
+    _MONTHS = {
+        m: i + 1
+        for i, m in enumerate(
+            (
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            )
+        )
+    }
+    DEFAULT_MTIME = (
+        "Jul 28 08:40"  # the fleet was last rebuilt when its services started
+    )
+
+    def _mtime(self, h: dict, path: str) -> str:
+        """`Mon DD HH:MM` for a path: the host's `mtimes` fixture, else the date an `ls -l`
+        fixture already shows for it, else the day the fleet was built. Before this every
+        file the fixture implied was dated *today at 02:00*, which a candidate read as
+        'the backup binary was modified an hour before the check — tamper?'."""
+        path = _path(path)
+        m = h.get("mtimes", {}).get(path)
+        if m:
+            return m
+        return self._listed_dates(h).get(path, self.DEFAULT_MTIME)
+
+    def _mtime_iso(self, h: dict, path: str) -> str:
+        mon, day, hm = self._mtime(h, path).split()
+        return f"2026-{self._MONTHS.get(mon, 7):02d}-{int(day):02d} {hm}:00.000000000 +0000"
+
+    def _listed_dates(self, h: dict) -> dict[str, str]:
+        """path -> `Mon DD HH:MM` for files an `ls -l` fixture output describes."""
+        out: dict[str, str] = {}
+        for key, val in h.get("commands", {}).items():
+            kt = key.split()
+            if kt and kt[0] == "ls" and len(kt) >= 2 and kt[-1].startswith("/"):
+                base = _path(kt[-1])
+                for ln in val.splitlines():
+                    parts = ln.split()
+                    if len(parts) >= 9 and parts[0][0] in "-dl":
+                        out[f"{base}/{parts[-1]}"] = (
+                            f"{parts[5]} {int(parts[6]):>2} {parts[7]}"
+                        )
+        return out
+
+    def _users(self, h: dict) -> list[str]:
+        """Login users on the host: ken, plus whatever the fixture says was added."""
+        return [USER, *[u for u in h.get("users", []) if u != USER]]
+
+    def _passwd(self, h: dict) -> str:
+        system = [
+            "root:x:0:0:root:/root:/bin/bash",
+            "daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin",
+            "bin:x:2:2:bin:/bin:/usr/sbin/nologin",
+            "sys:x:3:3:sys:/dev:/usr/sbin/nologin",
+            "www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin",
+            "systemd-network:x:998:998:systemd Network Management:/:/usr/sbin/nologin",
+            "systemd-resolve:x:997:997:systemd Resolver:/:/usr/sbin/nologin",
+            "messagebus:x:100:101::/nonexistent:/usr/sbin/nologin",
+            "sshd:x:101:65534::/run/sshd:/usr/sbin/nologin",
+        ]
+        if "postgresql" in self._services(h):
+            system.append(
+                "postgres:x:118:126:PostgreSQL administrator,,,:/var/lib/postgresql:/bin/bash"
+            )
+        users = [
+            f"{u}:x:{1000 + i}:{1000 + i}{',,,' if i == 0 else ''}:/home/{u}:/bin/bash"
+            for i, u in enumerate(self._users(h))
+        ]
+        return "\n".join(system + users)
+
+    def _passwd_entry(self, h: dict, name: str) -> str | None:
+        for ln in self._passwd(h).splitlines():
+            if ln.split(":")[0] == name:
+                return ln
+        return None
+
     def _isdir(self, h: dict, path: str) -> bool:
         p = _path(path)
         return p in GENERIC_DIRS or p in self._tree(h)
@@ -673,7 +864,7 @@ class World:
             p = _path(p)
             if p in files:
                 outs.append(
-                    f"-rw-r--r-- 1 root root {len(files[p]):>7} Sep  7 02:00 {p}"
+                    f"-rw-r--r-- 1 root root {len(files[p]):>7} {self._mtime(h, p)} {p}"
                     if long
                     else p
                 )
@@ -686,21 +877,23 @@ class World:
                 rows = []
                 for e in entries:
                     full = f"{p.rstrip('/')}/{e}"
+                    mt = self._mtime(h, full)
                     if full in files:
                         rows.append(
-                            f"-rw-r----- 1 root root {len(files[full]):>7} Sep  7 02:00 {e}"
+                            f"-rw-r----- 1 root root {len(files[full]):>7} {mt} {e}"
                         )
                     elif full in implied:
                         n = self._listed_sizes(h).get(full)
                         rows.append(
-                            f"-rw-r----- 1 root root {n:>10} Sep  7 02:14 {e}"
+                            f"-rw-r----- 1 root root {n:>10} {mt} {e}"
                             if n
-                            else f"-rwxr-xr-x 1 root root    2048 Sep  7 02:00 {e}"
+                            else f"-rwxr-xr-x 1 root root    2048 {mt} {e}"
                         )
                     elif full in tree or full in GENERIC_DIRS or "." not in e:
-                        rows.append(f"drwxr-xr-x 2 root root    4096 Sep  7 02:00 {e}")
+                        owner = e if p == "/home" and e in self._users(h) else "root"
+                        rows.append(f"drwxr-xr-x 2 {owner} {owner} 4096 {mt} {e}")
                     else:
-                        rows.append(f"-rw-r--r-- 1 root root     812 Sep  7 02:00 {e}")
+                        rows.append(f"-rw-r--r-- 1 root root     812 {mt} {e}")
                 outs.append(f"total {len(entries) * 4}\n" + "\n".join(rows))
             else:
                 outs.append("\n".join(entries))
@@ -729,6 +922,14 @@ class World:
         m = re.match(r"/usr/local/bin/([^/]+)$", path)
         if m and any(_unit(u) == m.group(1) for u in svcs):
             return f'#!/bin/sh\n# managed by k-homelab\nexec /opt/{m.group(1)}/{m.group(1)} "$@"'
+        if path == "/var/log/auth.log":
+            return self._auth_log(h, host)
+        if path == "/var/log/syslog":
+            return self._journalctl(h, ["-n", "200"], host)
+        if path == "/var/log/kern.log":
+            return h.get("commands", {}).get("journalctl -k", "")
+        if path == "/etc/passwd":
+            return self._passwd(h)
         generic = {
             "/etc/hostname": host,
             "/etc/os-release": 'PRETTY_NAME="Ubuntu 24.04.3 LTS"\nNAME="Ubuntu"\nVERSION_ID="24.04"',
@@ -749,6 +950,53 @@ class World:
         if path.startswith("/opt/") and path in self._implied_files(h):
             return "(binary data, 18432112 bytes)"
         return f"cat: {path}: No such file or directory"
+
+    @staticmethod
+    def _generic_files() -> set[str]:
+        return {
+            "/etc/hostname",
+            "/etc/os-release",
+            "/proc/loadavg",
+            "/proc/uptime",
+            "/proc/meminfo",
+            "/etc/hosts",
+            "/etc/fstab",
+            "/proc/mounts",
+            "/etc/passwd",
+            "/var/log/auth.log",
+            "/var/log/syslog",
+            "/var/log/kern.log",
+        }
+
+    _AUTH_KEYS = ("journalctl -u sshd", "journalctl -u ssh", "journalctl -u sudo")
+
+    def _auth_journal(self, h: dict) -> str | None:
+        """The host's sshd journal fixture, whichever unit name it was keyed under."""
+        for key, val in h.get("commands", {}).items():
+            if key.startswith(self._AUTH_KEYS):
+                return val
+        return None
+
+    def _auth_log(self, h: dict, host: str) -> str:
+        """/var/log/auth.log: the sshd/sudo lines. A host with no auth fixture shows the same
+        quiet picture `last`/`who` show — ken's own session — so the file, the journal and
+        the login table never disagree."""
+        fx = self._auth_journal(h)
+        if fx is not None:
+            return fx
+        seen = set()
+        lines = []
+        for key, val in h.get("commands", {}).items():
+            if key.startswith("journalctl"):
+                for ln in val.splitlines():
+                    if re.search(r"\b(sshd|sudo)\[\d+\]", ln) and ln not in seen:
+                        seen.add(ln)
+                        lines.append(ln)
+        lines += [
+            f"Sep 07 02:58:01 {host} sshd[1201]: Accepted publickey for {USER} from 100.64.0.7 port 50122 ssh2: ED25519",
+            f"Sep 07 02:58:01 {host} sshd[1201]: pam_unix(sshd:session): session opened for user {USER}(uid=1000) by (uid=0)",
+        ]
+        return "\n".join(sorted(lines))
 
     _SIZES = {"K": 1, "M": 1024, "G": 1024**2, "T": 1024**3}
 
@@ -802,7 +1050,7 @@ class World:
         out = []
         for pth in paths:
             if pth.endswith("/*"):
-                base = _path(pth[:-2])
+                base = _path(pth[:-2]) or "/"
                 kids = sorted(
                     set(GENERIC_DIRS.get(base, [])) | self._tree(h).get(base, set())
                 )
@@ -934,13 +1182,54 @@ class World:
             return f"Failed to {cmd} {a[-1] if len(a) > 1 else ''}: Access denied (read-only session)"
         return f"Unknown command verb {cmd}."
 
-    def _journalctl(self, h: dict, args: list[str]) -> str:
+    _PRIORITY = re.compile(
+        r"\b(WARN|WARNING|ERR|ERROR|FATAL|PANIC|CRIT|CRITICAL|Failed|failed|error|Killed|denied|refused)\b",
+        re.I,
+    )
+
+    def _journal_flags(self, args: list[str], text: str) -> str:
+        """`-p`/`--priority` keeps only lines a real journald would rate warning or worse;
+        `-n N` keeps the last N. Applied to fixture answers too, so a keyed journal never
+        contradicts its own flags."""
+        lines = text.splitlines()
+        if "-p" in args or any(a.startswith("--priority") for a in args):
+            lines = [ln for ln in lines if self._PRIORITY.search(ln)]
+        n = None
+        if (
+            "-n" in args
+            and args.index("-n") + 1 < len(args)
+            and args[args.index("-n") + 1].isdigit()
+        ):
+            n = int(args[args.index("-n") + 1])
+        for a in args:
+            if a.startswith("--lines="):
+                n = int(a.split("=", 1)[1]) if a.split("=", 1)[1].isdigit() else n
+        if n is not None:
+            lines = lines[-n:]
+        return "\n".join(lines) or "-- No entries --"
+
+    def _journalctl(self, h: dict, args: list[str], host: str = "") -> str:
         if "-k" in args or "--dmesg" in args:
             return h.get("commands", {}).get("journalctl -k", "-- No entries --")
-        if "-u" in args or "--unit" in args:
-            i = args.index("-u") if "-u" in args else args.index("--unit")
-            if i + 1 < len(args):
-                return "-- No entries --"
+        unit = None
+        for i, a in enumerate(args):
+            if a in ("-u", "--unit", "-t", "--identifier") and i + 1 < len(args):
+                unit = args[i + 1]
+            elif a.startswith(
+                (
+                    "--unit=",
+                    "--identifier=",
+                    "_COMM=",
+                    "SYSLOG_IDENTIFIER=",
+                    "_SYSTEMD_UNIT=",
+                )
+            ):
+                unit = a.split("=", 1)[1]
+        if unit is not None:
+            unit = unit[:-1] if len(unit) > 1 and unit.endswith("*") else unit
+            if _unit(unit) in ("ssh", "sshd", "sudo"):
+                return self._journal_flags(args, self._auth_log(h, host))
+            return "-- No entries --"
         merged = []
         for key, val in h.get("commands", {}).items():
             # the whole journal includes the kernel ring: `journalctl --since …` on a real
@@ -958,13 +1247,7 @@ class World:
         ):
             n = int(args[args.index("-n") + 1])
         if "-p" in args or any(a.startswith("--priority") for a in args):
-            lines = [
-                ln
-                for ln in lines
-                if re.search(
-                    r"\b(WARN|ERROR|FATAL|PANIC|Failed|failed|error|Killed)\b", ln
-                )
-            ]
+            lines = [ln for ln in lines if self._PRIORITY.search(ln)]
         return "\n".join(lines[-n:]) or "-- No entries --"
 
     def _filter(self, st: list[str], text: str) -> str:
@@ -1030,7 +1313,25 @@ class World:
         if cmd == "wc":
             return str(len(lines)) if "-l" in args or not args else str(len(text))
         if cmd == "sort":
-            return "\n".join(sorted(lines, reverse="-r" in args))
+            # `sort -rh` on du output is the idiom; string order would bury 622G under 4.0K
+            flags = "".join(a[1:] for a in args if a.startswith("-") and a[1:2] != "-")
+            rev = "r" in flags or "--reverse" in args
+            units = {"": 1, "K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
+            if "h" in flags or "--human-numeric-sort" in args:
+
+                def hkey(ln: str) -> float:
+                    m = re.match(r"\s*([\d.]+)([KMGT]?)", ln)
+                    return float(m.group(1)) * units[m.group(2)] if m else -1.0
+
+                return "\n".join(sorted(lines, key=hkey, reverse=rev))
+            if "n" in flags or "--numeric-sort" in args:
+
+                def nkey(ln: str) -> float:
+                    m = re.match(r"\s*(-?[\d.]+)", ln)
+                    return float(m.group(1)) if m else float("-inf")
+
+                return "\n".join(sorted(lines, key=nkey, reverse=rev))
+            return "\n".join(sorted(lines, reverse=rev))
         if cmd == "uniq":
             out = []
             for ln in lines:

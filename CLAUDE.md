@@ -17,8 +17,10 @@ weighted leaderboard). Human owner: Ken. Read this, then go straight to what you
   minutes**: which candidate, why, where each fails, and what would change the answer.
   Taken 2026-09-08: `qwen3.8-27b-nvfp4` is the resident, served as interviewed since
   sprint 20; gemma is the second opinion at fp8 KV / 32k / thinking on.
-- `interview/README.md` — the RA interview (sprint 19): the unranked, adaptive protocol for
-  deciding whether a local model can fill the resident-agent slot, and the envelope tools
+- `interview/README.md` — the RA interview (sprints 19 and 22): the unranked, adaptive
+  protocol for deciding whether a local model can fill the resident-agent slot — 22 rungs
+  including an urgency gradient, prompts P0–P3, a checklist floor (prompt- or
+  controller-level) and an effort-request condition — and the envelope tools
   (serve-with-overrides, effort screen, long-context probe). Results and transcripts under
   `model-research/ra-interview/`. Its world is a fake shell; when a transcript shows the
   candidate probing the environment, fix the world before reading anything into the model.
