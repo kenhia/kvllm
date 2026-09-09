@@ -7,6 +7,12 @@ number, every transcript quote) and the protocol is
 snapshot of two models on one card in September 2026, and the next candidate goes
 through the same interview in an afternoon._
 
+> **Status (2026-09-09).** Ken hired Qwen3.8 on 2026-09-08 (WI-1973). kvllm sprint 20
+> serves `qwen3.8-27b-nvfp4` as interviewed (MTP ×3, 122,880 at GPU 0.95, `medium`), re-serves
+> gemma as its best self (fp8 KV, 32k, thinking on), and re-scored both under those
+> configurations. This is the dated finding program korg:1480 asked for: which local
+> model serves which role, with `models.toml` matching it.
+
 ## The question, and why the board could not answer it
 
 Ken wants a resident agent (RA) on kai's 5090: a local model that watches the homelab

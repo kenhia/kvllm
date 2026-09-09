@@ -24,6 +24,30 @@ decays as models ship. Methodology + how to regenerate: run `just eval-all`, rea
 > The role guidance, the local-vs-frontier qualitative split, and the hybrid architecture
 > readout are unaffected — none of them turned on the 0.01 board gap.
 
+> **Superseding note — 2026-09-09 (kvllm sprint 20).** The resident-agent role is no longer
+> decided by this board. Ken hired **`qwen3.8-27b-nvfp4`** on 2026-09-08 (WI-1973) on the
+> strength of sprint 19's interview — [ra-interview-2026-09.md](ra-interview-2026-09.md)
+> is the dated finding for that decision — and since sprint 20 kai serves it as
+> interviewed: MTP draft head ×3 (~2× decode), 122,880 of context at GPU fraction 0.95,
+> fp8 KV, `reasoning_effort: medium` (per-request `xhigh` via `chat_template_kwargs`),
+> callers on the model's own sampling. So:
+>
+> - The "Autonomous-ish generalist → gemma-4-31b-awq" row below, and the headline's gemma
+>   ① for autonomous work, describe the board, not the RA. For an unattended agent the
+>   interview found what the board could not: Qwen3.8 keeps looking, notices absence,
+>   says how sure it is, and holds 128k; gemma over-reports and stops early.
+> - **gemma-4-31b-awq is re-served as its best self, not retired**: fp8 KV, 32,768 of
+>   context, thinking **on** (every row before 2026-09-09 had it off). It is the fast
+>   second opinion (73 tok/s, ~80 s cold start on 0.28.0 — not the 302 s below) and the
+>   vision candidate. Both rows were re-scored under their served configurations on
+>   2026-09-09 under unchanged ranked conditions; the current numbers are on
+>   [the board](../../model-research/evals/leaderboard.md).
+> - Consumers of `kvllm-client` ≥ 0.2.0 inherit reasoning-model defaults (model sampling,
+>   an 8k answer budget, window discovery, empty answers treated as failures) — see
+>   [`client/README.md`](../../client/README.md).
+>
+> The controller readout, the escalation triggers and the cost anchors still stand.
+
 ## Headline
 
 **Local models now win our homelab board outright.** gemma-4-31b (AWQ) holds ① at composite

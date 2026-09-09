@@ -42,7 +42,9 @@ just smoke                          # tool-calling + LangChain smoke tests
 Point any OpenAI client at `base_url="http://localhost:8000/v1"`, `api_key="EMPTY"`,
 `model="<registry key>"` — or use [`client/`](client/), the `kvllm-client` library the
 homelab services share (auto-discovery via `/v1/models` + ChatAnthropic escalation). vLLM holds **one model per process**; `just service-switch <key>`
-changes the model the systemd service serves.
+changes the model the systemd service serves. The resident is `qwen3.8-27b-nvfp4`
+since 2026-09-08 ([why](docs/findings/ra-interview-2026-09.md)); `gemma-4-31b-it-awq` is
+the second opinion.
 
 ## Quick start — evaluating
 

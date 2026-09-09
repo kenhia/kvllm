@@ -9,7 +9,9 @@ or planning local-agent projects, and for sharing.
   pattern. Mostly evergreen.
 - [`local-model-guidance-2026-07.md`](local-model-guidance-2026-07.md) — which local model
   for which role, hybrid local+frontier architecture readout, serving configs, cost anchors.
-  **Dated — decays with the model landscape**; regenerate via `just eval-all`.
+  **Dated — decays with the model landscape**; regenerate via `just eval-all`. Superseded
+  on the resident-agent question by the interview (below) since 2026-09-08; its top note
+  says what moved.
 - [`controller-vs-model-2026-08-21.md`](controller-vs-model-2026-08-21.md) — **the
   scaffolding is worth more than the model.** Same model, same tasks, same judge: changing
   only the harness's budget shape moved one model +86 points, against a frontier-vs-local
@@ -28,7 +30,9 @@ or planning local-agent projects, and for sharing.
   Qwen3.8 did better and why (it keeps looking, it notices absence, it says how sure it
   is, it holds 128k), where gemma still shines (thinking on, fp8 KV, speed, vision), what
   surprised us, and what it means for building the RA. **Dated — a September 2026
-  snapshot**; the next candidate runs the same interview.
+  snapshot**; the next candidate runs the same interview. **Decision taken 2026-09-08:
+  Qwen3.8 is the resident** (Ken, WI-1973); sprint 20 served it as interviewed and
+  re-served gemma as its best self.
 - [`local-vs-frontier-2026-07.html`](local-vs-frontier-2026-07.html) — rich self-contained
   report (charts, findings, methodology overview) prepared for the All-The-Vibes community.
   Open in a browser; safe to share as a single file. Generated from live board data by a

@@ -55,3 +55,13 @@ def test_parse_kv_stats_reads_last_report():
 
 def test_parse_kv_stats_empty_on_failed_start():
     assert parse_kv_stats("ValueError: no KV for you") == {}
+
+
+def test_gpu_util_override_lands_on_the_entry():
+    # The registry reads the fraction from the entry first, so an envelope override
+    # has to be written there — passing it to build_serve_argv would be shadowed by
+    # an entry that carries its own (qwen3.8 at 0.95 since sprint 20).
+    e = apply_overrides(_qwen(), gpu_util="0.90")
+    assert e["gpu_memory_utilization"] == 0.90
+    assert "gpu_memory_utilization" not in _qwen()
+    assert "gpu_memory_utilization" not in apply_overrides(_qwen())
