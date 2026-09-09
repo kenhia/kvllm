@@ -129,6 +129,19 @@ is the total uncertainty."
 
 **Rank ordering inside the noise floor is not a result.**
 
+> **Re-measured 2026-09-09 (kvllm sprint 21, korg:1998) — all five weighted suites, all
+> three rows on the same harness and board day.** Composite bands: `claude-sonnet-5`
+> 0.908–0.955 (**0.047**), `qwen3.8-27b-nvfp4` 0.911–0.951 (**0.040**), `gemma-4-31b-it-awq`
+> 0.801–0.871 (**0.070**). Point 1 above was a property of `temperature=0.0`, not of
+> locality: since sprint 20 the local rows run at their served generation configs (Qwen at
+> its template's T=1.0 / top-p 0.95, gemma with thinking on), and at those settings a local
+> model is as noisy as the hosted one — `agentic` moves 0.17–0.18 for all three. What
+> remains asymmetric is the provider-drift confound, which only the hosted row has, and it
+> is not small: Sonnet's `agentic` median moved 0.86 → 0.66 between the two measurement
+> nights under the same suite version, wider than either night's within-night band. Points
+> 2 and 3 stand. `[noise] composite_band` is **0.070**: the rule is unchanged (the noisier
+> model governs), and on this stack the noisier row is gemma, not the hosted one.
+
 The harness that produces this is `kvllm.repeat` (`just eval-repeat`), and it is a separate
 entry point for a reason: `inspect_ai.eval_set` **resumes from completed logs**, so a plain
 `for i in 1 2 3; do just eval ...; done` re-reports run 1 and yields a spread of exactly

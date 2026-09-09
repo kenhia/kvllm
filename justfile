@@ -138,6 +138,11 @@ eval-all *flags:
 eval-repeat key *flags:
     uv run --group eval python -m kvllm.repeat {{key}} {{flags}}
 
+# Regenerate the leaderboard from the existing scorecards — after editing eval-config.toml
+# ([weights], [noise], [speed], [verdict]); no model runs, no scorecard rewrites.
+board-rebuild:
+    uv run --group eval python -c "from kvllm import score, evalrun; print(*score.write_leaderboard({c: v[1] for c, v in evalrun._suites().items()}), sep='\n')"
+
 # Prove the Docker sandbox path works (mock model, no GPU). Set DOCKER_HOST to test remote.
 eval-sandbox-smoke:
     uv run --group eval python suites/sandbox_smoke.py
