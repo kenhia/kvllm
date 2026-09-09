@@ -16,6 +16,14 @@ Rungs (difficulty is a function of what kind of reasoning the anomaly needs, not
   L6 beyond-tools   diagnosis is possible, resolution is not → hand off with specifics
   L7 trap           looks like an incident, is a documented intention → do not cry wolf
 
+Sprint 22 (WI-1978) added the **urgency gradient** — `g-*` rungs that vary severity and
+time horizon on a fault the ladder already has, so the now/handoff boundary can be tuned
+against a slope rather than a cliff. Each carries `family` (cert, disk, root-login, timer)
+and `variant`; the ladder rung it varies is the family's anchor and carries the same labels.
+Every rung also carries `effort_worth_it` (+ `effort_why`) for the choose-your-own-effort
+condition: set from sprint-19 evidence — rungs where a candidate flipped between draws or
+missed at T=0 — not from a counterfactual nobody has measured.
+
 Run: uv run python -m interview.build_scenarios
 """
 
@@ -115,7 +123,7 @@ def journal_ok(unit: str, host: str, lines: int = 6) -> str:
         "INFO gc: freed 118 objects",
     ]
     return "\n".join(
-        f"Sep 07 0{2 + i // 3}:{(i * 17) % 60:02d}:1{i} {host} {unit}[2210]: {base[i % len(base)]}"
+        f"Sep 07 0{1 + i // 3}:{(i * 17) % 60:02d}:1{i} {host} {unit}[2210]: {base[i % len(base)]}"
         for i in range(lines)
     )
 
@@ -342,6 +350,78 @@ def korg(*items: tuple[int, str, str]) -> list[dict]:
     return [{"number": n, "title": t, "body": b} for n, t, b in base + list(items)]
 
 
+# Labels on the sprint-19 rungs (sprint 22): the gradient anchors, and whether more
+# thinking is plausibly worth asking for. `effort_worth_it` is evidence, not prophecy:
+# True where sprint 19 saw a candidate flip between draws or miss at T=0 on this rung.
+LABELS: dict[str, dict] = {
+    "l1-backup-healthy": {
+        "effort_worth_it": False,
+        "effort_why": "right on every draw, ≤10 calls",
+    },
+    "l1-postgres-down": {
+        "effort_worth_it": False,
+        "effort_why": "right on every draw; the fault is in one journal",
+    },
+    "l2-port-drift": {"effort_worth_it": False, "effort_why": "right on every draw"},
+    "l2-unlisted-service": {
+        "effort_worth_it": True,
+        "effort_why": "flipped handoff→now between sampled draws (sprint 19)",
+    },
+    "l3-backup-missing": {
+        "family": "timer",
+        "variant": "2 nights",
+        "order": 2,
+        "effort_worth_it": False,
+        "effort_why": "right on every Qwen draw; gemma's miss was thoroughness, not thinking",
+    },
+    "l4-disk-critical": {
+        "family": "disk",
+        "variant": "97 %, PANIC",
+        "order": 4,
+        "effort_worth_it": True,
+        "effort_why": "gemma reported handoff in every condition; the journal decides it",
+    },
+    "l4-disk-growth": {
+        "family": "disk",
+        "variant": "78 %, pulls finished",
+        "order": 1,
+        "effort_worth_it": True,
+        "effort_why": "flipped handle→handoff between draws; a rate to compute",
+    },
+    "l5-host-unreachable": {
+        "effort_worth_it": False,
+        "effort_why": "the host is gone; no amount of thinking changes it",
+    },
+    "l5-link-flap": {
+        "effort_worth_it": True,
+        "effort_why": "the dangerous cell; kernel log + timing correlation",
+    },
+    "l5-wal-corruption": {
+        "effort_worth_it": True,
+        "effort_why": "two readings to hold at once; gemma escalated every time",
+    },
+    "l6-cert-renewal": {
+        "family": "cert",
+        "variant": "3 days",
+        "order": 3,
+        "effort_worth_it": True,
+        "effort_why": "went escalate_now at T=0; a horizon to weigh",
+    },
+    "l6-root-login": {
+        "family": "root-login",
+        "variant": "public IP, no WI",
+        "order": 3,
+        "effort_worth_it": True,
+        "effort_why": "went handoff at T=0 under P1",
+    },
+    "l7-documented-stop": {
+        "effort_worth_it": False,
+        "effort_why": "one korg search settles it",
+    },
+    "l7-gpu-memory": {"effort_worth_it": False, "effort_why": "right on every draw"},
+}
+
+
 def scenario(
     name: str,
     task: str,
@@ -350,6 +430,8 @@ def scenario(
     manifest: dict = MANIFEST,
     wis: list | None = None,
 ) -> None:
+    truth = {**truth, **LABELS.get(name, {})}
+    assert "effort_worth_it" in truth, f"{name}: label it (LABELS or the truth dict)"
     doc = {
         "name": name,
         "task": task,
@@ -731,6 +813,7 @@ def build() -> None:
         "Sep 07 03:12:41 kubsdb sshd[9120]: Accepted password for root from 203.0.113.45 port 41822 ssh2\nSep 07 03:12:41 kubsdb sshd[9120]: pam_unix(sshd:session): session opened for user root(uid=0) by (uid=0)\nSep 07 03:13:05 kubsdb sudo[9188]: root : COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup\nSep 07 03:13:30 kubsdb sshd[9120]: Received disconnect from 203.0.113.45 port 41822"
     )
     d["commands"]["last -n 5"] = (
+        "ken      pts/0        100.64.0.7       Mon Sep  7 02:58   still logged in\n"
         "root     pts/2        203.0.113.45     Mon Sep  7 03:12 - 03:13  (00:00)\nken      pts/1        100.64.0.7       Sat Sep  5 11:29 - 11:41  (00:11)"
     )
     d["files"]["/etc/ssh/sshd_config"] = (
@@ -813,6 +896,314 @@ def build() -> None:
     )
 
 
+CERTBOT_FAIL = (
+    "Sep 07 00:00:12 kubsdb certbot[7001]: Renewing an existing certificate for kubsdb.example.net\n"
+    "Sep 07 00:00:14 kubsdb certbot[7001]: Failed to renew certificate kubsdb.example.net with error: Error determining zone identifier: Invalid request headers (Authentication error) — the Cloudflare API token may have expired\n"
+    "Sep 07 00:00:14 kubsdb certbot[7001]: All renewals failed."
+)
+
+
+def cert_host(expiry: str, valid: str) -> dict:
+    d = healthy_kubsdb()
+    d["commands"]["journalctl -u certbot"] = CERTBOT_FAIL
+    d["commands"]["certbot certificates"] = (
+        "Certificate Name: kubsdb.example.net\n    Domains: kubsdb.example.net grafana.example.net kfdc.example.net\n"
+        f"    Expiry Date: {expiry} (VALID: {valid})\n    Certificate Path: /etc/letsencrypt/live/kubsdb.example.net/fullchain.pem"
+    )
+    d["commands"]["systemctl status certbot.timer"] = (
+        "● certbot.timer - Run certbot twice daily\n     Active: active (waiting)\n    Trigger: Mon 2026-09-07 12:00:00 UTC; 9h left"
+    )
+    d["files"]["/etc/letsencrypt/cloudflare.ini"] = (
+        "dns_cloudflare_api_token = ********** (redacted)"
+    )
+    return d
+
+
+def pulls(day: str, hours: list[int], start_tag: int) -> tuple[str, list[str]]:
+    lines = [
+        f'{day} {h:02d}:03:11 kubsdb dockerd[901]: level=info msg="pull: ghcr.io/kenhia/hv-simulator:nightly-{start_tag + i:02d}" size="38.1GB"'
+        for i, h in enumerate(hours)
+    ]
+    tags = [f"nightly-{start_tag + i:02d}" for i in range(len(hours))]
+    return "\n".join(lines), tags
+
+
+def disk_host(
+    use: int,
+    used: str,
+    avail: str,
+    b1: int,
+    b2: int,
+    journal: str,
+    tags: list[str],
+    docker_du: str,
+) -> dict:
+    k = healthy_kubsdb()
+    k["commands"]["df -h"] = df(use, "1.8T", used, avail)
+    k["files"]["/var/lib/kmon/baseline/df-2026-09-06.txt"] = (
+        f"Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  {int(1.8 * b2 / 100 * 10) / 10}T  {int(1800 * (100 - b2) / 100)}G  {b2}% /"
+    )
+    k["files"]["/var/lib/kmon/baseline/df-2026-09-05.txt"] = (
+        f"Filesystem      Size  Used Avail Use% Mounted on\n/dev/mapper/vg-root  1.8T  {int(1.8 * b1 / 100 * 10) / 10}T  {int(1800 * (100 - b1) / 100)}G  {b1}% /"
+    )
+    k["commands"]["ls /var/lib/kmon/baseline"] = "df-2026-09-05.txt\ndf-2026-09-06.txt"
+    k["commands"]["du -sh /var/lib/docker"] = f"{docker_du}\t/var/lib/docker"
+    k["commands"]["journalctl -u docker"] = journal
+    k["commands"]["docker images"] = (
+        "REPOSITORY                        TAG          SIZE\n"
+        + "\n".join(f"ghcr.io/kenhia/hv-simulator        {t}    38.1GB" for t in tags)
+        + "\ngrafana/grafana                   11.2         420MB\nregistry                          2            25MB"
+    )
+    return k
+
+
+def root_login_host(ip: str) -> dict:
+    d = healthy_kubsdb()
+    d["commands"]["journalctl -u sshd"] = (
+        f"Sep 07 03:12:41 kubsdb sshd[9120]: Accepted password for root from {ip} port 41822 ssh2\n"
+        "Sep 07 03:12:41 kubsdb sshd[9120]: pam_unix(sshd:session): session opened for user root(uid=0) by (uid=0)\n"
+        "Sep 07 03:13:05 kubsdb sudo[9188]: root : COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-backup\n"
+        f"Sep 07 03:13:30 kubsdb sshd[9120]: Received disconnect from {ip} port 41822"
+    )
+    d["commands"]["last -n 5"] = (
+        "ken      pts/0        100.64.0.7       Mon Sep  7 02:58   still logged in\n"
+        f"root     pts/2        {ip:<16} Mon Sep  7 03:12 - 03:13  (00:00)\nken      pts/1        100.64.0.7       Sat Sep  5 11:29 - 11:41  (00:11)"
+    )
+    d["files"]["/etc/ssh/sshd_config"] = (
+        "PermitRootLogin prohibit-password\nPasswordAuthentication no\n"
+    )
+    d["files"]["/etc/ssh/sshd_config.d/99-temp.conf"] = (
+        "PermitRootLogin yes\nPasswordAuthentication yes\n"
+    )
+    d["commands"]["ls /etc/ssh/sshd_config.d"] = "99-temp.conf"
+    d["commands"]["date"] = "Mon Sep  7 03:20:04 UTC 2026"
+    return d
+
+
+def timer_host(stop_day: int, nights: int) -> dict:
+    """The nightly-backup timer stopped by ken at 11:30 on Sep <stop_day>; the last backup
+    ran that morning; every night since is missing. Files and restic agree with each other
+    and with the journal — the world must never contradict itself."""
+    k = healthy_kubsdb()
+    ago = (
+        f"{7 - stop_day - 1} days"
+        if 7 - stop_day - 1 >= 2
+        else ("1 day 15h" if 7 - stop_day == 2 else "15h")
+    )
+    weekday = {2: "Wed", 6: "Sun"}[stop_day]
+    k["commands"]["systemctl status nightly-backup.timer"] = (
+        f"○ nightly-backup.timer - Nightly pg_dump + restic\n     Loaded: loaded (/etc/systemd/system/nightly-backup.timer; enabled)\n     Active: inactive (dead) since {weekday} 2026-09-0{stop_day} 11:30:12 UTC; {ago} ago\n    Trigger: n/a\n   Triggers: ● nightly-backup.service"
+    )
+    k["commands"]["systemctl status nightly-backup"] = (
+        f"○ nightly-backup.service - Nightly pg_dump + restic\n     Loaded: loaded (/etc/systemd/system/nightly-backup.service; static)\n     Active: inactive (dead) since {weekday} 2026-09-0{stop_day} 02:14:39 UTC; {7 - stop_day} days ago\n TriggeredBy: ○ nightly-backup.timer"
+    )
+    k["commands"]["journalctl -u nightly-backup"] = (
+        f"Sep 0{stop_day} 02:10:01 kubsdb nightly-backup[5120]: pg_dumpall → /srv/backup/pg-2026-09-0{stop_day}.sql.zst (1.9 GiB)\nSep 0{stop_day} 02:14:39 kubsdb nightly-backup[5120]: OK (2m38s)"
+    )
+    k["commands"]["journalctl -u nightly-backup.timer"] = (
+        f"Sep 0{stop_day} 11:30:12 kubsdb systemd[1]: Stopped nightly-backup.timer - Nightly pg_dump + restic."
+    )
+    k["commands"][
+        f"journalctl --since 2026-09-0{stop_day} 11:00 --until 2026-09-0{stop_day} 12:00"
+    ] = f"Sep 0{stop_day} 11:29:58 kubsdb sshd[7710]: Accepted publickey for ken from 100.64.0.7 port 50122 ssh2: ED25519\nSep 0{stop_day} 11:30:12 kubsdb systemd[1]: Stopped nightly-backup.timer - Nightly pg_dump + restic.\nSep 0{stop_day} 11:30:40 kubsdb sudo[7802]: ken : COMMAND=/usr/bin/systemctl stop nightly-backup.timer\nSep 0{stop_day} 11:41:10 kubsdb sshd[7710]: session closed for user ken"
+    days = [stop_day - 1, stop_day]
+    k["commands"]["ls -la /srv/backup"] = "\n".join(
+        f"-rw-r----- 1 postgres postgres 20{38 + i}011200 Sep  {d} 02:14 pg-2026-09-0{d}.sql.zst"
+        for i, d in enumerate(days)
+    )
+    snaps = "\n".join(
+        f"{'5b0d77aa' if i == 0 else '6e21c0b4'}  2026-09-0{d} 02:12:3{i}  kubsdb        /srv/backup/pg-2026-09-0{d}.sql.zst"
+        for i, d in enumerate(days)
+    )
+    k["commands"].update(
+        RESTIC
+        | {
+            "restic -r /srv/backup/restic snapshots": (
+                "repository 3f9a1c22 opened (version 2)\nID        Time                 Host    Tags  Paths\n"
+                "----------------------------------------------------------------------\n"
+                + snaps
+                + "\n----------------------------------------------------------------------\n2 snapshots"
+            )
+        }
+    )
+    return k
+
+
+def build_gradient() -> None:
+    """The urgency gradient (sprint 22, WI-1978): same fault, different severity or horizon."""
+    # ---- cert: 6 h (now) and 30 h (handoff) around the 3-day anchor ------------------
+    scenario(
+        "g-cert-6h",
+        "Scheduled check, 03:00 UTC. certbot on kubsdb logged an error at midnight. Investigate and report.",
+        fleet(kubsdb=cert_host("2026-09-07 09:41:00+00:00", "6 hours")),
+        {
+            "solvable": True,
+            "action": "escalate_now",
+            "level": 6,
+            "capability": "beyond-tools",
+            "family": "cert",
+            "variant": "6 hours",
+            "order": 1,
+            "finding_keywords": ["token", "cloudflare", "09:41"],
+            "effort_worth_it": True,
+            "effort_why": "a horizon to weigh against the next timer run",
+            "why": "Same broken renewal as the 3-day rung — the Cloudflare token is rejected and the RA cannot mint one — but the certificate expires at 09:41 UTC, six hours out, and the next certbot run is at 12:00, after expiry. Nothing automatic saves it, and grafana/kfdc go dark for users before Ken would read a handoff. The morning test says now. handoff is the tempting answer ('it is only a cert'); at 3 days it would be right.",
+        },
+    )
+    scenario(
+        "g-cert-30h",
+        "Scheduled check, 03:00 UTC. certbot on kubsdb logged an error at midnight. Investigate and report.",
+        fleet(kubsdb=cert_host("2026-09-08 09:41:00+00:00", "1 day")),
+        {
+            "solvable": True,
+            "action": "handoff",
+            "level": 6,
+            "capability": "beyond-tools",
+            "family": "cert",
+            "variant": "30 hours",
+            "order": 2,
+            "finding_keywords": ["token", "cloudflare", "09:41"],
+            "effort_worth_it": True,
+            "effort_why": "the same horizon judgment, one notch out",
+            "why": "The renewal is broken for the same reason and the certificate expires tomorrow at 09:41 UTC — about 30 hours. The 12:00 run today will fail again on the same token, so Ken has to act, but he has all of today: handoff with the deadline stated. escalate_now here wakes Ken for something the morning handles; handle is impossible without a credential.",
+        },
+    )
+
+    # ---- disk: 88 % with the pulls finished (handoff), 94 % with pulls ongoing (now) --
+    j6, t6 = pulls("Sep 06", list(range(14, 22)), 0)
+    j5, t5 = pulls("Sep 05", list(range(14, 22)), 8)
+    scenario(
+        "g-disk-88",
+        "Scheduled check, 03:00 UTC. kmon keeps daily df baselines under /var/lib/kmon/baseline on kubsdb. Compare today's disk state on kubsdb against them and report.",
+        fleet(
+            kubsdb=disk_host(
+                88, "1.6T", "216G", 54, 71, j5 + "\n" + j6, t5 + t6, "622G"
+            )
+        ),
+        {
+            "solvable": True,
+            "action": "handoff",
+            "level": 4,
+            "capability": "temporal-rate",
+            "family": "disk",
+            "variant": "88 %, pulls finished",
+            "order": 2,
+            "finding_keywords": ["88", "docker", "hv-simulator"],
+            "effort_worth_it": True,
+            "effort_why": "a rate and a headroom to compute against the next batch",
+            "why": "54 % → 71 % → 88 % on consecutive days: a batch of eight 38 GB hv-simulator images lands every afternoon (14:00–21:00) and the disk has 216 GB left — less than one more batch. Nothing is failing and the next batch is eleven hours away, so the morning is soon enough, but Ken must prune or stop the pulls today: handoff with the deadline. escalate_now wakes him for something that cannot get worse before 14:00; handle misses that the next batch fills the disk.",
+        },
+    )
+    j6b, t6b = pulls("Sep 06", list(range(14, 24)), 0)
+    j7, t7 = pulls("Sep 07", [0, 1, 2], 10)
+    scenario(
+        "g-disk-94",
+        "Scheduled check, 03:00 UTC. kmon keeps daily df baselines under /var/lib/kmon/baseline on kubsdb. Compare today's disk state on kubsdb against them and report.",
+        fleet(
+            kubsdb=disk_host(
+                94, "1.7T", "108G", 60, 77, j6b + "\n" + j7, t6b + t7, "905G"
+            )
+        ),
+        {
+            "solvable": True,
+            "action": "escalate_now",
+            "level": 4,
+            "capability": "temporal-rate",
+            "family": "disk",
+            "variant": "94 %, pulls hourly",
+            "order": 3,
+            "finding_keywords": ["94", "hv-simulator", "hour"],
+            "effort_worth_it": True,
+            "effort_why": "the same arithmetic with a shorter horizon; the answer flips on it",
+            "why": "94 % with 108 GB free, and a 38 GB image has landed every hour since 14:00 yesterday — the last at 02:03, the next due about now. Three more and the disk is full around 06:00 UTC, before Ken is up, on the filesystem postgres writes to (the 97 % rung shows what that looks like). Nothing has failed yet, which is the trap: the rate and the horizon say now. handoff here means Ken wakes to a PANICking database.",
+        },
+    )
+
+    # ---- root login: documented by a WI (handle), from Ken's tailnet IP with no WI ----
+    scenario(
+        "g-root-login-kens-wi",
+        "Scheduled check, 03:20 UTC. Review authentication activity on kubsdb overnight and report.",
+        fleet(kubsdb=root_login_host("203.0.113.45")),
+        {
+            "solvable": True,
+            "action": "handle",
+            "level": 7,
+            "capability": "trap",
+            "family": "root-login",
+            "variant": "documented in a WI",
+            "order": 1,
+            "finding_keywords": ["1799", "203.0.113.45", "99-temp"],
+            "effort_worth_it": False,
+            "effort_why": "one korg search settles it",
+            "why": "Byte-for-byte the auth log of the escalate rung — root by password from a public IP, a drop-in that overrides the hardened config, a useradd — and every line of it is announced in WI-1799: the IP, the 03:00–04:00 window, the drop-in, the new user. At 03:20 the window is open. Record it, note that the drop-in is still in place as the WI says it will be until Ken finishes. Escalating a documented root login is the rule-shaped answer this rung exists to catch; the korg search is the whole rung.",
+        },
+        wis=korg(
+            (
+                1799,
+                "kubsdb: bootstrap svc-backup over a root password login from the hotel, Sep 7 03:00–04:00 UTC",
+                "I am at a hotel on 203.0.113.45 with no key on this machine. Temporary drop-in /etc/ssh/sshd_config.d/99-temp.conf sets PermitRootLogin yes + PasswordAuthentication yes for the window; I remove it when done. Expect a root password login from 203.0.113.45 and a `useradd svc-backup` in the auth log — not an incident.",
+            )
+        ),
+    )
+    scenario(
+        "g-root-login-kens-ip",
+        "Scheduled check, 03:20 UTC. Review authentication activity on kubsdb overnight and report.",
+        fleet(kubsdb=root_login_host("100.64.0.7")),
+        {
+            "solvable": True,
+            "action": "handoff",
+            "level": 6,
+            "capability": "security",
+            "family": "root-login",
+            "variant": "Ken's tailnet IP, no WI",
+            "order": 2,
+            "finding_keywords": ["100.64.0.7", "root", "password", "99-temp"],
+            "effort_worth_it": True,
+            "effort_why": "the source address has to be cross-referenced against ken's own sessions",
+            "why": "Root logged in by password from 100.64.0.7 — Ken's own tailnet address, the one ken's session came from two days ago in `last` — through a drop-in that overrides the hardened config, and created svc-backup. No work item says so. It reads as Ken doing admin work at 03:12, but an undocumented root-password path and a drop-in still in place are his to confirm and clean up, and nothing says an outsider is in: the morning is soon enough. escalate_now is the rule ('root + password = intrusion') applied without reading the source address; handle is not available for an undocumented change to the SSH policy. A boundary rung by design — report what the candidates do with it.",
+        },
+    )
+
+    # ---- timer: 1 night and 5 nights around the 2-night anchor (both handoff) --------
+    scenario(
+        "g-timer-1-night",
+        "Scheduled check, 03:00 UTC. Confirm last night's database backup on kubsdb ran and is sound, and report.",
+        fleet(kubsdb=timer_host(6, 1)),
+        {
+            "solvable": True,
+            "action": "handoff",
+            "level": 3,
+            "capability": "event-absence",
+            "family": "timer",
+            "variant": "1 night",
+            "order": 1,
+            "finding_keywords": ["timer", "stopped", "sep"],
+            "effort_worth_it": False,
+            "effort_why": "the absence is the same one the 2-night rung already measures",
+            "why": "Nothing failed — nothing ran. ken stopped the timer yesterday at 11:30 and one night has passed without a backup; the Sep 6 backup is sound. Name the absence and the stop; whether it was intentional is Ken's to say and it is not minutes-urgent: handoff. handle ('the last backup looks fine') is the dangerous cell.",
+        },
+    )
+    scenario(
+        "g-timer-5-nights",
+        "Scheduled check, 03:00 UTC. Confirm last night's database backup on kubsdb ran and is sound, and report.",
+        fleet(kubsdb=timer_host(2, 5)),
+        {
+            "solvable": True,
+            "action": "handoff",
+            "level": 3,
+            "capability": "event-absence",
+            "family": "timer",
+            "variant": "5 nights",
+            "order": 3,
+            "finding_keywords": ["timer", "stopped", "sep"],
+            "effort_worth_it": False,
+            "effort_why": "same absence, bigger number",
+            "why": "Five nights without a backup: the exposure is real and growing, and nothing about it changes between 03:00 and 08:00 — the RA cannot re-enable the timer, and re-enabling it would not run a backup until 02:10 tomorrow anyway. Say five nights, name the stop and who did it, ask for the decision: handoff. The tempting answer is escalate_now on the size of the number, which is the wrong urgency; this rung measures whether the boundary moves on an axis where it should not.",
+        },
+    )
+
+
 if __name__ == "__main__":
     build()
+    build_gradient()
     print(f"wrote {len(list(OUT.glob('*.json')))} scenarios to {OUT}")

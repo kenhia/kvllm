@@ -205,6 +205,9 @@ class World:
     def __init__(self, w: dict):
         self.w = w
         self.calls: list[dict] = []
+        # hosts the candidate ran something on AND that answered — the set the checklist
+        # floor (interview.floor) holds it to; an unreachable host cannot be checked
+        self.touched: set[str] = set()
 
     # --- entry points ------------------------------------------------------------------
     def dispatch(self, name: str, args: dict) -> str:
@@ -233,13 +236,14 @@ class World:
         "timeout ",
         "watch ",
     )
-    _SINGLETON = {"df", "free", "ss", "netstat", "uptime", "lsblk", "mount"}
+    _SINGLETON = {"df", "free", "ss", "netstat", "uptime", "lsblk", "mount", "last"}
     _LOOP = re.compile(r"(?:^|[;&|]\s*)(?:for|while|until|if|case|function)\s")
 
     def run_command(self, host: str, command: str) -> str:
         h = self._host(host)
         if h is None:
             return f"ssh: Could not resolve hostname {host}: Name or service not known"
+        self.touched.add(host)
         if any(k in command for k in self.REFUSED) or self._LOOP.search(command):
             return (
                 "error: this read-only session runs simple commands only — no scripts, loops, "
@@ -260,6 +264,7 @@ class World:
         h = self._host(host)
         if h is None:
             return f"ssh: Could not resolve hostname {host}: Name or service not known"
+        self.touched.add(host)
         return self._cat(host, h, path)
 
     def manifest_lookup(self, service: str) -> str:
@@ -281,7 +286,7 @@ class World:
         return fmt(_unit(service), v)
 
     def korg_search(self, query: str) -> str:
-        terms = [t for t in re.split(r"\W+", query.lower()) if t]
+        terms = [t for t in re.split(r"\W+", query.lower()) if len(t) >= 3]
         hits = [
             wi
             for wi in self.w.get("korg", [])
@@ -340,9 +345,11 @@ class World:
         if not tokens:
             return ""
         fixture = self._match(h, tokens)
-        if fixture is not None:
-            return fixture
         first, args = tokens[0], tokens[1:]
+        if fixture is not None:
+            if first in ("journalctl", "sudo") and "journalctl" in tokens[:2]:
+                return self._journal_flags(args, fixture)
+            return fixture
         if first in self._SINGLETON:
             # one filesystem, one memory, one socket table: flags do not change the answer
             for key, val in h.get("commands", {}).items():
@@ -501,7 +508,7 @@ class World:
         if first == "systemctl":
             return self._systemctl(h, args)
         if first == "journalctl":
-            return self._journalctl(h, args)
+            return self._journalctl(h, args, host)
         if first == "docker":
             if any(k.startswith("docker") for k in h.get("commands", {})):
                 return (
@@ -729,6 +736,12 @@ class World:
         m = re.match(r"/usr/local/bin/([^/]+)$", path)
         if m and any(_unit(u) == m.group(1) for u in svcs):
             return f'#!/bin/sh\n# managed by k-homelab\nexec /opt/{m.group(1)}/{m.group(1)} "$@"'
+        if path == "/var/log/auth.log":
+            return self._auth_log(h, host)
+        if path == "/var/log/syslog":
+            return self._journalctl(h, ["-n", "200"], host)
+        if path == "/var/log/kern.log":
+            return h.get("commands", {}).get("journalctl -k", "")
         generic = {
             "/etc/hostname": host,
             "/etc/os-release": 'PRETTY_NAME="Ubuntu 24.04.3 LTS"\nNAME="Ubuntu"\nVERSION_ID="24.04"',
@@ -749,6 +762,36 @@ class World:
         if path.startswith("/opt/") and path in self._implied_files(h):
             return "(binary data, 18432112 bytes)"
         return f"cat: {path}: No such file or directory"
+
+    _AUTH_KEYS = ("journalctl -u sshd", "journalctl -u ssh", "journalctl -u sudo")
+
+    def _auth_journal(self, h: dict) -> str | None:
+        """The host's sshd journal fixture, whichever unit name it was keyed under."""
+        for key, val in h.get("commands", {}).items():
+            if key.startswith(self._AUTH_KEYS):
+                return val
+        return None
+
+    def _auth_log(self, h: dict, host: str) -> str:
+        """/var/log/auth.log: the sshd/sudo lines. A host with no auth fixture shows the same
+        quiet picture `last`/`who` show — ken's own session — so the file, the journal and
+        the login table never disagree."""
+        fx = self._auth_journal(h)
+        if fx is not None:
+            return fx
+        seen = set()
+        lines = []
+        for key, val in h.get("commands", {}).items():
+            if key.startswith("journalctl"):
+                for ln in val.splitlines():
+                    if re.search(r"\b(sshd|sudo)\[\d+\]", ln) and ln not in seen:
+                        seen.add(ln)
+                        lines.append(ln)
+        lines += [
+            f"Sep 07 02:58:01 {host} sshd[1201]: Accepted publickey for {USER} from 100.64.0.7 port 50122 ssh2: ED25519",
+            f"Sep 07 02:58:01 {host} sshd[1201]: pam_unix(sshd:session): session opened for user {USER}(uid=1000) by (uid=0)",
+        ]
+        return "\n".join(sorted(lines))
 
     _SIZES = {"K": 1, "M": 1024, "G": 1024**2, "T": 1024**3}
 
@@ -934,13 +977,47 @@ class World:
             return f"Failed to {cmd} {a[-1] if len(a) > 1 else ''}: Access denied (read-only session)"
         return f"Unknown command verb {cmd}."
 
-    def _journalctl(self, h: dict, args: list[str]) -> str:
+    _PRIORITY = re.compile(
+        r"\b(WARN|WARNING|ERR|ERROR|FATAL|PANIC|CRIT|CRITICAL|Failed|failed|error|Killed|denied|refused)\b",
+        re.I,
+    )
+
+    def _journal_flags(self, args: list[str], text: str) -> str:
+        """`-p`/`--priority` keeps only lines a real journald would rate warning or worse;
+        `-n N` keeps the last N. Applied to fixture answers too, so a keyed journal never
+        contradicts its own flags."""
+        lines = text.splitlines()
+        if "-p" in args or any(a.startswith("--priority") for a in args):
+            lines = [ln for ln in lines if self._PRIORITY.search(ln)]
+        n = None
+        if (
+            "-n" in args
+            and args.index("-n") + 1 < len(args)
+            and args[args.index("-n") + 1].isdigit()
+        ):
+            n = int(args[args.index("-n") + 1])
+        for a in args:
+            if a.startswith("--lines="):
+                n = int(a.split("=", 1)[1]) if a.split("=", 1)[1].isdigit() else n
+        if n is not None:
+            lines = lines[-n:]
+        return "\n".join(lines) or "-- No entries --"
+
+    def _journalctl(self, h: dict, args: list[str], host: str = "") -> str:
         if "-k" in args or "--dmesg" in args:
             return h.get("commands", {}).get("journalctl -k", "-- No entries --")
-        if "-u" in args or "--unit" in args:
-            i = args.index("-u") if "-u" in args else args.index("--unit")
-            if i + 1 < len(args):
-                return "-- No entries --"
+        unit = None
+        for i, a in enumerate(args):
+            if a in ("-u", "--unit", "-t", "--identifier") and i + 1 < len(args):
+                unit = args[i + 1]
+            elif a.startswith(
+                ("--unit=", "--identifier=", "_COMM=", "SYSLOG_IDENTIFIER=")
+            ):
+                unit = a.split("=", 1)[1]
+        if unit is not None:
+            if _unit(unit) in ("ssh", "sshd", "sudo"):
+                return self._journal_flags(args, self._auth_log(h, host))
+            return "-- No entries --"
         merged = []
         for key, val in h.get("commands", {}).items():
             # the whole journal includes the kernel ring: `journalctl --since …` on a real
@@ -958,13 +1035,7 @@ class World:
         ):
             n = int(args[args.index("-n") + 1])
         if "-p" in args or any(a.startswith("--priority") for a in args):
-            lines = [
-                ln
-                for ln in lines
-                if re.search(
-                    r"\b(WARN|ERROR|FATAL|PANIC|Failed|failed|error|Killed)\b", ln
-                )
-            ]
+            lines = [ln for ln in lines if self._PRIORITY.search(ln)]
         return "\n".join(lines[-n:]) or "-- No entries --"
 
     def _filter(self, st: list[str], text: str) -> str:
