@@ -487,3 +487,22 @@ No serve-path file changed (`kvllm/`, `models.toml`, `deploy/` untouched), so
 `deploy-kvllm` at ship is a no-op by its own rule. The resident is up: `kvllm.service`
 active, `qwen3.8-27b-nvfp4` at 122,880, 30,972 MiB, restored at 00:31 PDT; no interview
 serve after 00:22; the 04:01 run is clear.
+
+## Deployed
+
+**2026-09-09 00:43 PDT, kai, from merged `main` `07eb92f`** (`deploy-kvllm`, sprint-ship
+Phase 7, on the karc ship turn after the overseer's clearance, comment 1492 / handoff
+korg:2025).
+
+**Nothing to restart, by the skill's own rule.** The serve-path diff since the last stamp
+(`6a3ea09`, sprint 21's deploy) over `kvllm/registry.py`, `kvllm/helper.py`,
+`kvllm/__init__.py`, `models.toml`, `deploy/`, `pyproject.toml` and `uv.lock` is empty —
+this sprint changed `interview/`, `tests/`, `model-research/`, `docs/` and this record,
+none of which the running processes execute. No eval in flight. Stamp moved to
+`07eb92f` so the next deploy compares against the right commit.
+
+The resident was not touched by the deploy: `kvllm.service` active since 00:31 PDT (the
+last interview serve's restore), `NRestarts=0`, `/v1/models` → `qwen3.8-27b-nvfp4` at
+122,880, matching `KVLLM_MODEL_KEY`; 30,972 MiB; `kvllm-helper.service` active. The 04:04
+PDT kmon run is the first scheduled run on this code and the program's bar; the box is up
+for it.
