@@ -47,7 +47,7 @@ weighted leaderboard). Human owner: Ken. Read this, then go straight to what you
 ## Quick map
 
 `kvllm/` package (registry/serve, evalrun, evalctl, score, helper) · `client/` the
-`kvllm-client` distribution (shared LLM client for kagent/kmon/klams-mind; own pyproject —
+`kvllm-client` distribution (shared LLM client for kyac/kmon/klams-mind; own pyproject —
 no vLLM dependency) · `suites/` Inspect
 tasks + fixtures · `interview/` the RA interview + envelope probes (unranked; talks to a
 served /v1) · `model-research/` outputs incl. `evals/` scorecards+board · `docs/`
