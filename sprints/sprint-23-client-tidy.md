@@ -187,8 +187,9 @@ across-the-board removal, and a test that passed for both would prove nothing.
 ## Gate
 
 `just check` green: ruff check + ruff format clean (91 files), 269 repo tests, 46 client
-tests (33 before; 13 added). No GPU touched, no service restarted, nothing served changed —
-`nvidia-smi` never consulted because nothing here goes near the card.
+tests (33 before; 13 added). No GPU touched, no service restarted, nothing served changed.
+The only `nvidia-smi` read in the whole sprint is in **Deployed** below, and it is read-only:
+confirming the resident was still up and untouched, not preparing to restart it.
 
 ## Deployed
 
