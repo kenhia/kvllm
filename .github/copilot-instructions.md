@@ -82,7 +82,7 @@ then go straight to what you need.
 ### Quick map
 
 `kvllm/` package (registry/serve, evalrun, evalctl, score, helper) · `client/`
-the `kvllm-client` distribution (shared LLM client for kagent/kmon/klams-mind;
+the `kvllm-client` distribution (shared LLM client for kyac/kmon/klams-mind;
 own pyproject — no vLLM dependency) · `suites/` Inspect tasks + fixtures ·
 `model-research/` outputs incl. `evals/` scorecards+board · `docs/` usage docs +
 `findings/` · `sprints/` history + `planning/` architecture · `eval-logs/`

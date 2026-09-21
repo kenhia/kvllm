@@ -30,6 +30,11 @@ if TYPE_CHECKING:
 
 DEFAULT_BASE_URL = "http://localhost:8000/v1"
 DEFAULT_FRONTIER_MODEL = "claude-haiku-4-5"
+# Anthropic deprecates `temperature` per model, and a model that has lost it rejects the
+# request outright rather than ignoring the parameter (WI-2624). Measured against the live
+# API on 2026-09-13: claude-sonnet-5 400s with `temperature`, claude-haiku-4-5 does not.
+# The knowledge lives here, in the one place that talks to the API, so callers need none.
+TEMPERATURE_REFUSED = frozenset({"claude-sonnet-5"})
 # Reasoning counts toward max_tokens. Cross-referencing at `medium` effort used up to
 # 6,095 output tokens on Qwen3.8 and one draw in nine wanted more (sprint 19), so the
 # local tier's budget is 8k, not the 2k a gemma-era caller would have picked.
@@ -45,6 +50,8 @@ __all__ = [
     "FallbackResult",
     "KvllmChatOpenAI",
     "ServedModel",
+    "TEMPERATURE_REFUSED",
+    "TokenUsage",
     "adiscover_model",
     "aresolve_model",
     "aserved_model_info",
@@ -57,6 +64,7 @@ __all__ = [
     "resolve_model",
     "served_model_info",
     "template_kwargs",
+    "usage_of",
 ]
 
 
@@ -209,12 +217,21 @@ def local_model(
     streaming: bool = False,
     timeout: float = 10.0,
     request_timeout: float | None = None,
+    max_retries: int = 2,
 ) -> tuple[KvllmChatOpenAI, str]:
     """Return (llm, model_id) for the local tier at `base_url`.
 
     The default model="auto" discovers via /v1/models; pass an explicit name to
     skip the discovery round-trip. `timeout` bounds that discovery call;
     `request_timeout` bounds each completion (None = the OpenAI SDK's default).
+
+    `request_timeout` is per ATTEMPT, and `max_retries` is how many times a
+    failed attempt is retried, so the worst case a caller waits is
+    `request_timeout x (1 + max_retries)` — 900 s for kyac's 300 s budget at the
+    default of 2 (WI-2010). The default is the OpenAI SDK's own, so it is stated
+    here rather than changed. Pass `max_retries=0` to own the retry yourself:
+    the local tier's failure mode is a hung engine, not a flaky network, and
+    retrying a hung engine only delays the fallback.
 
     `temperature=None` (the default) sends no sampling parameters, so the served
     model's own generation_config applies — T=1.0 / top-p 0.95 / top-k 20 for
@@ -240,6 +257,7 @@ def local_model(
         temperature=temperature,
         max_tokens=max_tokens,
         streaming=streaming,
+        max_retries=max_retries,
         **extra,
     )
     return llm, model_id
@@ -248,21 +266,75 @@ def local_model(
 def frontier_model(
     model: str = DEFAULT_FRONTIER_MODEL,
     *,
-    temperature: float = 0.0,
+    temperature: float | None = 0.0,
     max_tokens: int = 2048,
+    max_retries: int = 2,
 ) -> tuple[ChatAnthropic, str]:
     """Return (llm, model_id) for the escalation tier.
 
     langchain-anthropic is the [anthropic] extra — imported lazily so
     local-only consumers don't need it installed.
+
+    `temperature` still defaults to 0.0 — the determinism this tier is chosen
+    for — but the parameter is OMITTED from the request when it is None, or when
+    `model` is in `TEMPERATURE_REFUSED`. Anthropic deprecates it per model, and a
+    model that has lost it 400s before generating a token; since this tier only
+    runs once the local one has already failed a gate, that is a tier which
+    cannot be reached exactly when it is needed (WI-2624). Callers get the fix
+    without passing anything.
+
+    `max_retries` is the same budget control `local_model` carries, for the same
+    reason (WI-2010): a failed attempt is retried, so retries multiply the
+    worst-case wall time. 2 is the Anthropic SDK's own default
+    (`anthropic.DEFAULT_MAX_RETRIES`), so this states it rather than changing it.
+    It matters more here than it looks: this tier is the LAST resort, so when it
+    hangs there is nothing after it to fall back to and the caller's own deadline
+    is all that is left — `max_retries=0` is how a caller with a deadline gets
+    one attempt.
     """
     from langchain_anthropic import ChatAnthropic
 
-    llm = ChatAnthropic(model=model, temperature=temperature, max_tokens=max_tokens)
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "max_retries": max_retries,
+    }
+    if temperature is not None and model not in TEMPERATURE_REFUSED:
+        kwargs["temperature"] = temperature
+    llm = ChatAnthropic(**kwargs)
     return llm, model
 
 
 # --- fallback -------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    """What one reply cost, from whichever tier answered.
+
+    Provider-neutral on purpose: read from LangChain's `usage_metadata`, which
+    ChatOpenAI (vLLM) and ChatAnthropic both populate, so a `FallbackResult`
+    reports the same shape whether the local tier or the frontier answered — and
+    a consumer stops needing its own per-tier callback to log this (WI-2019;
+    kyac's `ReasoningWatch` and kmon's `UsageWatch` were the second copy).
+
+    `reasoning` is the part of `completion` the model spent thinking — reasoning
+    counts toward `max_tokens`, so this is the field that explains a budget that
+    ran out. `cached` is the prompt prefix served from vLLM's prefix cache.
+
+    Both detail fields are None when the provider did not report them, which is
+    NOT the same as 0 and is the honest answer for `cached` on the local tier
+    today: vLLM only fills it in when served with `--enable-prompt-tokens-details`
+    (off by default, and kvllm does not pass it), so prefix-cache effectiveness is
+    read from the engine log rather than from here. See README, "The reasoning
+    field, and prefix caching".
+    """
+
+    prompt: int
+    completion: int
+    total: int
+    reasoning: int | None = None
+    cached: int | None = None
 
 
 @dataclass
@@ -274,6 +346,8 @@ class FallbackResult:
     # (vLLM's reasoning parser via KvllmChatOpenAI); None otherwise. The cause of an
     # escalation is the exception `on_fallback` receives, not this field.
     reasoning: str | None = None
+    # What the answering tier reported spending; None when it reported nothing.
+    usage: TokenUsage | None = None
 
 
 class EmptyAnswerError(RuntimeError):
@@ -299,6 +373,28 @@ def reasoning_of(message: Any) -> str | None:
     """The reasoning attached to a reply, if the model exposed one."""
     kwargs = getattr(message, "additional_kwargs", None) or {}
     return kwargs.get("reasoning") or None
+
+
+def usage_of(message: Any) -> TokenUsage | None:
+    """The token counts attached to a reply, if the provider reported any.
+
+    Reads LangChain's provider-neutral `usage_metadata`. Returns None when
+    nothing was reported, so a caller can tell "no usage" from "zero tokens".
+    """
+    meta = getattr(message, "usage_metadata", None) or {}
+    if not meta:
+        return None
+    prompt = int(meta.get("input_tokens") or 0)
+    completion = int(meta.get("output_tokens") or 0)
+    reasoning = (meta.get("output_token_details") or {}).get("reasoning")
+    cached = (meta.get("input_token_details") or {}).get("cache_read")
+    return TokenUsage(
+        prompt=prompt,
+        completion=completion,
+        total=int(meta.get("total_tokens") or prompt + completion),
+        reasoning=None if reasoning is None else int(reasoning),
+        cached=None if cached is None else int(cached),
+    )
 
 
 def _text_of(content: Any) -> str:
@@ -353,6 +449,7 @@ def invoke_with_fallback(
                     model_used=model_id,
                     escalated=False,
                     reasoning=reasoning,
+                    usage=usage_of(reply),
                 )
         raise EmptyAnswerError(model_id, reasoning, 1 + empty_retries)
     except Exception as exc:  # noqa: BLE001 — any local-tier failure means escalate
@@ -365,4 +462,5 @@ def invoke_with_fallback(
         model_used=model_id,
         escalated=True,
         reasoning=reasoning_of(reply),
+        usage=usage_of(reply),
     )

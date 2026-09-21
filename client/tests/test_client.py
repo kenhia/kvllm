@@ -162,6 +162,20 @@ def test_local_model_request_timeout_is_the_completion_timeout():
     assert llm.request_timeout == 300
 
 
+# --- WI-2010: request_timeout is per attempt, so the retry count is part of the budget ---
+
+
+def test_local_model_max_retries_defaults_to_the_sdk_default():
+    """Default 2 — stated in our signature, not changed. 300 s budget = 900 s worst case."""
+    llm, _ = kc.local_model(model="x", request_timeout=300)
+    assert llm.max_retries == 2
+
+
+def test_local_model_max_retries_zero_lets_a_caller_own_the_retry():
+    llm, _ = kc.local_model(model="x", request_timeout=300, max_retries=0)
+    assert llm.max_retries == 0
+
+
 def test_template_kwargs_override_per_call():
     llm, _ = kc.local_model(
         model="x", chat_template_kwargs={"reasoning_effort": "medium"}
@@ -189,6 +203,59 @@ def test_frontier_model_explicit(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     _, model_id = kc.frontier_model("claude-sonnet-5")
     assert model_id == "claude-sonnet-5"
+
+
+# --- WI-2624: `temperature` is deprecated per model, and a model that lost it 400s ---
+#
+# Asserted on the outgoing request payload, not on the attribute: the bug was a
+# parameter being SENT, so "absent from the payload" is the only claim that means
+# anything here.
+
+
+def test_frontier_model_still_sends_temperature_by_default(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    llm, _ = kc.frontier_model()
+    payload = llm._get_request_payload("hi")
+    assert payload["temperature"] == 0.0
+
+
+def test_frontier_model_omits_temperature_when_none(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    llm, _ = kc.frontier_model(temperature=None)
+    assert "temperature" not in llm._get_request_payload("hi")
+
+
+def test_frontier_model_omits_temperature_for_a_refused_model(monkeypatch):
+    """claude-sonnet-5 400s with `temperature` (measured 2026-09-13); callers pass nothing."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    assert "claude-sonnet-5" in kc.TEMPERATURE_REFUSED
+    llm, _ = kc.frontier_model("claude-sonnet-5")
+    assert "temperature" not in llm._get_request_payload("hi")
+
+
+def test_frontier_model_keeps_temperature_for_a_model_that_accepts_it(monkeypatch):
+    """The negative control: it is per model, not an across-the-board removal."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    assert "claude-haiku-4-5" not in kc.TEMPERATURE_REFUSED
+    llm, _ = kc.frontier_model("claude-haiku-4-5")
+    assert llm._get_request_payload("hi")["temperature"] == 0.0
+
+
+# --- WI-2010, the frontier half: the same retry budget, one tier over. The last
+# --- resort has nothing after it, so a caller with a deadline needs one attempt.
+
+
+def test_frontier_model_max_retries_defaults_to_the_sdk_default(monkeypatch):
+    """2 is `anthropic.DEFAULT_MAX_RETRIES`, stated here rather than changed."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    llm, _ = kc.frontier_model()
+    assert llm.max_retries == 2
+
+
+def test_frontier_model_max_retries_zero_gives_one_attempt(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    llm, _ = kc.frontier_model(max_retries=0)
+    assert llm.max_retries == 0
 
 
 # --- the reasoning field (vLLM 0.28.0 says `reasoning`, not `reasoning_content`) ---
@@ -300,12 +367,29 @@ class ScriptedLLM:
         return self.replies.pop(0)
 
 
-def _reply(content, reasoning=None, tool_calls=None):
-    return SimpleNamespace(
+def _reply(content, reasoning=None, tool_calls=None, usage=None):
+    reply = SimpleNamespace(
         content=content,
         additional_kwargs={"reasoning": reasoning} if reasoning else {},
         tool_calls=tool_calls or [],
     )
+    if usage is not None:
+        reply.usage_metadata = usage
+    return reply
+
+
+def _usage_metadata(prompt, completion, *, reasoning=None, cache_read=None):
+    """A LangChain `usage_metadata` mapping, shaped as the providers emit it."""
+    meta = {
+        "input_tokens": prompt,
+        "output_tokens": completion,
+        "total_tokens": prompt + completion,
+    }
+    if reasoning is not None:
+        meta["output_token_details"] = {"reasoning": reasoning}
+    if cache_read is not None:
+        meta["input_token_details"] = {"cache_read": cache_read}
+    return meta
 
 
 def test_empty_answer_is_retried_once_then_answered_locally():
@@ -374,3 +458,62 @@ def test_fallback_result_carries_local_reasoning():
         "msgs", local=lambda: (llm, "qwen"), frontier=_network_dead
     )
     assert out.reasoning == "because"
+
+
+# --- token usage (WI-2019: the library reports it, so consumers stop each writing
+# --- their own callback). Provider-neutral: `usage_metadata` is the LangChain field
+# --- both ChatOpenAI and ChatAnthropic populate.
+
+
+def test_usage_of_reads_prompt_completion_and_reasoning():
+    reply = _reply("x", usage=_usage_metadata(1200, 350, reasoning=300))
+    usage = kc.usage_of(reply)
+    assert (usage.prompt, usage.completion, usage.total) == (1200, 350, 1550)
+    assert usage.reasoning == 300
+
+
+def test_usage_of_returns_none_when_nothing_was_reported():
+    """None, not a zeroed TokenUsage — a caller must be able to tell them apart."""
+    assert kc.usage_of(_reply("x")) is None
+    assert kc.usage_of(SimpleNamespace(content="x")) is None
+
+
+def test_usage_of_leaves_unreported_details_none_rather_than_zero():
+    """vLLM reports no `cached_tokens` unless served with
+    --enable-prompt-tokens-details, so None is the honest answer, not 0."""
+    usage = kc.usage_of(_reply("x", usage=_usage_metadata(10, 5)))
+    assert usage.cached is None
+    assert usage.reasoning is None
+
+
+def test_usage_of_reads_cached_prompt_tokens_when_reported():
+    usage = kc.usage_of(_reply("x", usage=_usage_metadata(2000, 40, cache_read=1536)))
+    assert usage.cached == 1536
+
+
+def test_fallback_result_carries_local_usage():
+    llm = ScriptedLLM(_reply("report", usage=_usage_metadata(900, 120, reasoning=90)))
+    out = kc.invoke_with_fallback(
+        "msgs", local=lambda: (llm, "qwen"), frontier=_network_dead
+    )
+    assert not out.escalated
+    assert out.usage.prompt == 900
+    assert out.usage.reasoning == 90
+
+
+def test_fallback_result_carries_frontier_usage_after_escalating():
+    """Whichever tier answered — the point of reading a provider-neutral field."""
+    frontier = ScriptedLLM(_reply("rescued", usage=_usage_metadata(500, 60)))
+    out = kc.invoke_with_fallback(
+        "msgs", local=_network_dead, frontier=lambda: (frontier, "claude-haiku-4-5")
+    )
+    assert out.escalated
+    assert (out.usage.prompt, out.usage.completion) == (500, 60)
+
+
+def test_fallback_result_usage_is_none_when_the_tier_reported_none():
+    llm = ScriptedLLM(_reply("report"))
+    out = kc.invoke_with_fallback(
+        "msgs", local=lambda: (llm, "qwen"), frontier=_network_dead
+    )
+    assert out.usage is None
