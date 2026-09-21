@@ -189,3 +189,28 @@ across-the-board removal, and a test that passed for both would prove nothing.
 `just check` green: ruff check + ruff format clean (91 files), 269 repo tests, 46 client
 tests (33 before; 13 added). No GPU touched, no service restarted, nothing served changed —
 `nvidia-smi` never consulted because nothing here goes near the card.
+
+## Deployed
+
+**2026-09-21 13:59 PDT, kai, from merged `main` `1147fd4`** (`deploy-kvllm`, sprint-ship
+Phase 7, on the karc ship turn after the overseer's clearance, comment 2726 / handoffs
+korg:2994 and korg:2996).
+
+**Nothing to restart, by the skill's own rule.** The serve-path diff since the last stamp
+(`07eb92f`, sprint 22's deploy) over `kvllm/registry.py`, `kvllm/helper.py`,
+`kvllm/__init__.py`, `models.toml`, `deploy/`, `pyproject.toml` and `uv.lock` is **empty** —
+every file this sprint touched is under `client/` (its own distribution, no vLLM dependency),
+the two orientation docs, or this record, none of which the served processes execute. Stamp
+moved to `1147fd4` so the next deploy compares against the right commit.
+
+Worth noting for a later reader, because it is the one thing that could have made this a
+real deploy: `client/` is a **consumer-side** library. Changing `frontier_model` or
+`local_model` changes what kyac, kmon and klams-mind do on their next `uv lock`, and nothing
+at all about what kai serves. The escalation tier lives in the consumer's process, not in
+`kvllm.service`.
+
+The resident was not touched: `kvllm.service` active since **2026-09-13 19:35:53 PDT**,
+`NRestarts=0`, `/v1/models` → `qwen3.8-27b-nvfp4` at 122,880, VRAM 30,944 MiB — in band, and
+the same process that was running before this sprint started. The overseer's ruling ("no
+deploy applies — record the no-op, do not restart anything") and the skill's own predicate
+agreed, and the predicate was evaluated rather than assumed.
