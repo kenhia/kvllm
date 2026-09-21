@@ -241,6 +241,23 @@ def test_frontier_model_keeps_temperature_for_a_model_that_accepts_it(monkeypatc
     assert llm._get_request_payload("hi")["temperature"] == 0.0
 
 
+# --- WI-2010, the frontier half: the same retry budget, one tier over. The last
+# --- resort has nothing after it, so a caller with a deadline needs one attempt.
+
+
+def test_frontier_model_max_retries_defaults_to_the_sdk_default(monkeypatch):
+    """2 is `anthropic.DEFAULT_MAX_RETRIES`, stated here rather than changed."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    llm, _ = kc.frontier_model()
+    assert llm.max_retries == 2
+
+
+def test_frontier_model_max_retries_zero_gives_one_attempt(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    llm, _ = kc.frontier_model(max_retries=0)
+    assert llm.max_retries == 0
+
+
 # --- the reasoning field (vLLM 0.28.0 says `reasoning`, not `reasoning_content`) ---
 
 

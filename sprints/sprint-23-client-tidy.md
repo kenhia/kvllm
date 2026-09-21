@@ -143,8 +143,19 @@ across-the-board removal, and a test that passed for both would prove nothing.
 
 ## Repaired in passing
 
-Nothing. The gate was green on arrival and stayed green; no defect surfaced outside the four
-covered items.
+- **`frontier_model` gained `max_retries` too** — the same defect #2010 fixed, one tier over.
+  Found while doing #2010 and raised to the overseer rather than landed unilaterally, because
+  it is a public signature change and widening a covered item's scope is not a repair. The
+  overseer ruled it in on this branch ("the same defect one tier over, not new scope"), so it
+  is here: `max_retries: int = 2`, which is the **Anthropic** SDK's own default
+  (`anthropic.DEFAULT_MAX_RETRIES`, confirmed 2 in anthropic 0.116.0 / langchain-anthropic
+  1.4.8) — so no behaviour change on this tier either.
+
+  It is worth slightly more than the local-tier version. `frontier_model` has no
+  `request_timeout` at all, so a caller cannot bound a frontier call; and this tier is the
+  **last** resort, so when it hangs there is nothing after it to fall back to and the
+  caller's own deadline is all that is left. `max_retries=0` is how that caller gets one
+  attempt. Two tests, gate green.
 
 ## Follow-ups
 
@@ -157,13 +168,24 @@ covered items.
   model, which this sprint was explicitly scoped out of. Nothing downstream waits on it —
   consumers are correct either way — and the recommendation in it is to ride along with the
   next planned restart rather than spend one on this alone.
-- **`frontier_model` has no `max_retries` either**, so the frontier tier carries the same
-  hidden `timeout × 3` arithmetic #2010 was filed about for the local one. Not done and not
-  filed: it is a public signature change nobody has been bitten by, and widening #2010's
-  scope to it would have been scope creep rather than repair. Raised in the wrap-up for the
-  overseer's ruling.
+- ~~`frontier_model` has no `max_retries` either~~ — **ruled in by the overseer and landed
+  on this branch**; see "Repaired in passing".
+- **kmon's half of #2624** — deleting `controller.frontier_model`'s `TEMPERATURE_REFUSED` set
+  and its two tests, once kmon locks kvllm-client 0.3.0. The overseer is carrying this to a
+  kmon leg in flight in the same program; nothing filed from here.
+
+## Overseer rulings (handoff korg:2994, accepted)
+
+1. **`frontier_model` max_retries: do it here.** Landed — "Repaired in passing".
+2. **0.3.0 is the right version.** Kept.
+3. **No deploy step applies.** Confirmed: nothing on the serve path changed, so
+   `deploy-kvllm` no-ops by its own contract. The ship records that rather than restarting
+   anything — which also keeps the GPU discipline this slice was scoped around.
+4. **#2992 is a fair file** — a resident restart is Ken's call.
+5. **kmon's half** is the overseer's to route, not this leg's.
 
 ## Gate
 
-`just check` green: ruff check + ruff format clean (91 files), 269 repo tests, 44 client
-tests (33 before; 11 added). No GPU touched, no service restarted, nothing served changed.
+`just check` green: ruff check + ruff format clean (91 files), 269 repo tests, 46 client
+tests (33 before; 13 added). No GPU touched, no service restarted, nothing served changed —
+`nvidia-smi` never consulted because nothing here goes near the card.

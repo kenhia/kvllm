@@ -268,6 +268,7 @@ def frontier_model(
     *,
     temperature: float | None = 0.0,
     max_tokens: int = 2048,
+    max_retries: int = 2,
 ) -> tuple[ChatAnthropic, str]:
     """Return (llm, model_id) for the escalation tier.
 
@@ -281,10 +282,23 @@ def frontier_model(
     runs once the local one has already failed a gate, that is a tier which
     cannot be reached exactly when it is needed (WI-2624). Callers get the fix
     without passing anything.
+
+    `max_retries` is the same budget control `local_model` carries, for the same
+    reason (WI-2010): a failed attempt is retried, so retries multiply the
+    worst-case wall time. 2 is the Anthropic SDK's own default
+    (`anthropic.DEFAULT_MAX_RETRIES`), so this states it rather than changing it.
+    It matters more here than it looks: this tier is the LAST resort, so when it
+    hangs there is nothing after it to fall back to and the caller's own deadline
+    is all that is left — `max_retries=0` is how a caller with a deadline gets
+    one attempt.
     """
     from langchain_anthropic import ChatAnthropic
 
-    kwargs: dict[str, Any] = {"model": model, "max_tokens": max_tokens}
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "max_retries": max_retries,
+    }
     if temperature is not None and model not in TEMPERATURE_REFUSED:
         kwargs["temperature"] = temperature
     llm = ChatAnthropic(**kwargs)

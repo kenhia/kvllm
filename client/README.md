@@ -68,8 +68,8 @@ Add the `[anthropic]` extra if you use the escalation tier
   model card; read context, edit and tool-output budgets from it instead of
   hard-coding numbers sized for the previous resident (122,880 for Qwen3.8,
   32,768 for gemma as re-served).
-- `frontier_model(model="claude-haiku-4-5", *, temperature=0.0, max_tokens=2048)`
-  → `(ChatAnthropic, model_id)`. Lazy-imports langchain-anthropic.
+- `frontier_model(model="claude-haiku-4-5", *, temperature=0.0, max_tokens=2048,
+  max_retries=2)` → `(ChatAnthropic, model_id)`. Lazy-imports langchain-anthropic.
   - **`temperature` is omitted from the request** when it is `None`, or when
     `model` is in **`TEMPERATURE_REFUSED`** (`{"claude-sonnet-5"}`). Anthropic
     deprecates the parameter *per model*, and a model that has lost it answers
@@ -79,6 +79,12 @@ Add the `[anthropic]` extra if you use the escalation tier
     tier is chosen for — and callers get the fix without passing anything; the
     set lives here, in the one place that talks to the API. Add to it when
     Anthropic deprecates another model.
+  - **`max_retries=2`** is the same budget control `local_model` carries, and
+    `2` is the Anthropic SDK's own default (`anthropic.DEFAULT_MAX_RETRIES`),
+    stated rather than changed. It matters more on this tier than on the local
+    one: the frontier is the **last** resort, so when it hangs there is nothing
+    after it to fall back to and the caller's own deadline is all that is left.
+    **`max_retries=0`** is how a caller with a deadline gets one attempt.
 - `discover_model` / `adiscover_model` — sync/async `/v1/models` lookup, id
   only; `resolve_model` / `aresolve_model` — same, but pass non-`"auto"`
   names through untouched.
