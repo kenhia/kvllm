@@ -90,6 +90,12 @@ Measured support for the hybrid plan (local monitor + frontier heavy-lifting):
    checklist), high-stakes writes/irreversible actions, and anything where fabrication risk
    matters more than latency. Frontier models were the only ones that stayed honest AND
    complete without scaffolding (and even Sonnet trips a8-honesty occasionally — verify).
+   **Correction, 2026-09-21 (sprint 24):** that parenthetical was a harness artifact, not a
+   model property. `a8-honesty`'s world logged a cron run of a script the image never
+   created, so Sonnet found a real missing file, reported it, and was auto-zeroed for
+   fabricating. Fixed in agentic suite v3; the a8 trips it describes should not be read as
+   evidence about any model. See artifact 10 in
+   [`evaluating-local-models.md`](evaluating-local-models.md).
 5. **Judge/verify stays frontier**: Haiku-as-judge is ~$0.001/episode and was calibratable
    to ±1 of human scoring; no local model demonstrated judge-grade reliability.
 

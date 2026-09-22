@@ -152,6 +152,41 @@ neither of which is repairable from this repo.
 - **#2094 stays open**, with the finding above as a comment, pending the overseer's ruling on
   where it belongs.
 
+## Overseer rulings received before the ship (proposal comment 2894)
+
+Both of the calls I pushed back on were reversed in my favour, which is worth recording
+because it is why the shipped diff differs from the brief:
+
+1. **a8 cron line: do not drop it.** The overseer's own words — "my instruction treated
+   'stale cron line' as a fixed property of the world, when it was a property of the
+   *contradiction*, and materialising the script dissolved it." `scenarios.json` ships as
+   written above; the one-line edit was explicitly ruled against.
+2. **WI 2094 is kmon's.** The overseer `unrelate`d the `covers` edge and re-projected the
+   item to kmon, correcting the item's own "Why this is kvllm's and not kmon's" section in
+   the process. **So this proposal ships complete, not partial** — its only covered item is
+   #2005. kmon #3082 was accepted as correctly filed rather than repaired, and now sits in
+   the same project as 2094.
+
+## Docs updated at ship time
+
+The sprint made two existing docs misleading, both fixed here rather than filed:
+
+- **`docs/findings/evaluating-local-models.md` — added artifact 10.** The doc's own prime
+  rule is "audit the harness before believing the score", and this sprint is a new instance
+  of it that the existing artifact 7 does not cover. Artifact 7 (a fixture contradicting
+  itself) *announces itself* — the transcript shows the candidate probing the shell.
+  This one produces a clean transcript and a plausible low score, because the contradiction
+  is between the world and its **answer key**, and only the world is executable. That is the
+  generalisation worth keeping: a fixture has two halves and nothing tests their agreement,
+  so they drift silently and the drift is scored as a model defect.
+- **`docs/findings/local-model-guidance-2026-07.md` — corrected in place.** Its item 4 said
+  "even Sonnet trips a8-honesty occasionally — verify", which now reads as a model property
+  when it was this exact harness bug. Annotated with a dated correction rather than rewritten
+  — it is a dated snapshot and the original line is part of the record.
+- **`docs/findings/methodology-2026-07.html` — deliberately left alone.** It names a5/a8/a9
+  but its descriptions are still accurate (a8 is *more* "a perfectly healthy machine" now,
+  not less), and it is a dated published write-up rather than a living doc.
+
 ## Gates
 
 - `just check` — ruff check, ruff format, 269 unit tests, 46 client tests: **pass**.
