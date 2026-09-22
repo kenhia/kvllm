@@ -33,7 +33,12 @@ from inspect_ai.util import apply_limits, message_limit, time_limit
 from suites.judged import JUDGE_PROMPT, parse_judge_json
 
 VERSION = (
-    2  # v2 adds a9-sprint-plan (work selection / short-burst planning — Ken's #1 ask)
+    # v3 (WI-2005) makes the world stop contradicting its own reference facts. a8's box logged a
+    # cron run of a script that was not on disk; a9 inherited base's HEALTHY backup-sync while
+    # its work items said the sync had been failing since 6/30; a5's #105 read as deployed, so
+    # #102's blocker looked cleared. Careful models reported what they saw and were auto-zeroed
+    # as fabricating. Reference facts and rubrics are unchanged — only the world they describe.
+    3  # v2 added a9-sprint-plan (work selection / short-burst planning — Ken's #1 ask)
 )
 
 ASSETS = Path(__file__).resolve().parent / "agentic_assets"
