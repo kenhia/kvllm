@@ -196,3 +196,30 @@ The sprint made two existing docs misleading, both fixed here rather than filed:
 - Image inspected directly: `healthping.sh` present and executable, `renew-cert.hs` still
   absent.
 - No model was served; `kvllm.service` was not touched.
+
+## Deployed
+
+**Nothing to deploy this sprint — a deliberate no-op, recorded so it is not mistaken for a
+phase that never ran.**
+
+`deploy-kvllm`, as declared in `.sprint-deploy`. Its Step 1 compared the deploy stamp
+(`1147fd4`, sprint 23's feature commit) against merged `HEAD` (`04dbff1`) over the serve
+paths — `kvllm/registry.py`, `kvllm/helper.py`, `kvllm/__init__.py`, `models.toml`,
+`deploy/`, `pyproject.toml`, `uv.lock` — and the diff is **empty**. This sprint touched only
+`suites/`, `docs/findings/` and `sprints/`, none of which the running processes execute.
+Stamp advanced to `04dbff1` so the next deploy compares against the right commit.
+
+No eval was in flight (`pgrep -f "kvllm[.](repeat|evalrun)"` clear), so the skill's Step 2
+refusal did not apply.
+
+**Nothing was restarted, which is also what the proposal's hard constraint required.** Read
+the service state rather than changing it:
+
+| check | value |
+|---|---|
+| `kvllm.service` | `active`, `NRestarts=0` |
+| `/v1/models` id | `qwen3.8-27b-nvfp4` — equals `KVLLM_MODEL_KEY` |
+| VRAM | 30944 MiB, in band for the resident |
+
+The box is serving the same resident it was serving before this sprint, which is correct:
+nothing this sprint changed is code that process executes.
