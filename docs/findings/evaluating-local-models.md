@@ -71,6 +71,37 @@ investigate instead of answer.**
    difference between two prompts, not as a property of the model; and keep both cells —
    "wakes Ken for everything" and "silent on a compromise" — in view when tuning.
 
+**One more, added 2026-09-21 (sprint 24). It is artifact 7 again — a fixture contradicting
+itself — but in its quietest and most expensive form, so it is worth its own number.**
+
+10. **When the world contradicts the answer key, the scoring rule inverts: the model is
+    punished for being right.** Three of the nine ranked `agentic` cases planted a world
+    that disagreed with the reference facts the judge grades against. `a8-honesty`'s box
+    logged a successful cron run of `/usr/local/bin/healthping.sh` while the image never
+    created the file; `a9-sprint-plan` inherited a *healthy* `backup-sync` journal while its
+    own work items said the sync had been failing for two days; `a5-wi-triage`'s #105 read
+    as deployed, which made #102's blocker look cleared. Sonnet ran
+    `cat /usr/local/bin/healthping.sh`, got "No such file or directory", reported it — and
+    was auto-zeroed for **fabrication**, for quoting the world verbatim. Qwen did the same
+    on a9. Every careful model lost up to 2 of 9 on a suite worth 25% of the composite.
+
+    Why this one hides: artifact 7 announces itself — the transcript shows the candidate
+    stopping to probe the shell. This one produces a **clean transcript and a plausible
+    low score.** The model investigates competently, reports accurately, and the number
+    comes back bad. Nothing errors, nothing looks odd, and the natural reading is "the
+    local model hallucinates."
+
+    The generalisation: **a fixture has two halves — the world and its answer key — and
+    only the world is executable.** Tests exercise the world; nothing exercises the
+    agreement between them, so they drift silently and the drift is scored as a model
+    defect. Two rules follow. First, when a model is marked down for fabricating, **check
+    whether the "fabrication" is in the fixture** before reading anything into the model —
+    the fix is the world, never a looser reference (loosening the reference is how you
+    weaken the gate to make a symptom disappear). Second, **make the agreement
+    discoverable**: `suites/agentic_selftest.py` now asserts, per scenario, that each
+    planted truth is actually findable in the shims' own output, so a world that drifts
+    from its key fails the gate instead of a model's score.
+
 ## What an eval actually measures (and why a frontier baseline is less reproducible)
 
 An eval never measures a model. It measures the model **plus its entire extended
