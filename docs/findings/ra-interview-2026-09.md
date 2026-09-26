@@ -226,3 +226,12 @@ guarantee; a confidence-keyed retry at higher effort in the controller. None of 
 the hire. Also on the board today: both rows' `assisted` column re-measured under the
 served configurations (Qwen 80 → 86 %, gemma 87 → 89 %), so each row is one configuration
 end to end.
+
+_Re-scored 2026-09-25 (sprint 25, no model run):_ Ken ruled that the documented root login
+(`g-root-login-kens-wi`) scores correct as `handle` **or** `handoff` — Qwen's handoff names
+WI-1799 and leaves a morning note because the drop-in is still live, which has passed the
+trap. Its four "useless" cells become correct, so Qwen's gradient reads **21 → 23 of 26**
+(P1 → P2) where it read 19 → 21; gemma's 15 → 21 does not move. The two prompts still
+differ by two correct cells for Qwen, so finding 1 stands as written. The prompt that
+closes the literalism gap is `interview/prompts/p4-in-time.md` ("could Ken still act in
+time?", the categories as its examples) and is not yet measured.
