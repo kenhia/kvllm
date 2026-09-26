@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+
+from interview.rescore import rescore
 from interview.run import judge
 from interview.world import World
 
@@ -39,6 +42,40 @@ def test_judge_cells():
         judge(_report("handle", "nothing found"), _truth(action="handle"))["cell"]
         == "wrong-answer"
     )
+
+
+def test_judge_accepts_an_answer_set():
+    # g-root-login-kens-wi (Ken, 2026-09-25): handle or handoff, only escalate_now is wrong
+    t = _truth(action="handle", accept=["handle", "handoff"])
+    assert judge(_report("handle"), t)["cell"] == "correct"
+    assert judge(_report("handoff"), t)["cell"] == "correct"
+    assert judge(_report("handoff"), t)["action_ok"] is True
+    assert judge(_report("escalate_now"), t)["cell"] == "useless"
+    assert judge(_report("escalate_now"), t)["action_ok"] is False
+    # the finding is still the rung: an accepted handoff that never found it is not correct
+    assert judge(_report("handoff", "nothing found"), t)["cell"] == "wrong-answer"
+    # a set without the canonical action is a mistake in the rung, not a scoring choice
+    with pytest.raises(AssertionError):
+        judge(_report("handle"), _truth(action="handle", accept=["handoff"]))
+
+
+def test_rescore_moves_cells_and_keeps_the_old_reading():
+    old = _truth(action="handle")
+    doc = {
+        "truth": old,
+        "attempts": [
+            {"report": _report("handoff"), "judge": judge(_report("handoff"), old)},
+            {"report": None, "judge": judge(None, old)},
+        ],
+    }
+    assert rescore(doc, old, "2026-09-25") == [] and "rescored" not in doc
+    new = _truth(action="handle", accept=["handle", "handoff"])
+    assert rescore(doc, new, "2026-09-25") == [(1, "useless", "correct")]
+    assert doc["truth"] == new
+    assert [a["judge"]["cell"] for a in doc["attempts"]] == ["correct", "no-verdict"]
+    assert doc["rescored"] == [
+        {"on": "2026-09-25", "before": ["useless", "no-verdict"]}
+    ]
 
 
 def test_world_answers_like_a_host():

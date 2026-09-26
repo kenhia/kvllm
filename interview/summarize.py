@@ -33,6 +33,12 @@ CELLS = [
 SHORT = {"handle": "H", "escalate_now": "NOW", "handoff": "HO", "-": "·"}
 
 
+def truth_label(truth: dict) -> str:
+    """The truth column: the canonical action, then any other accepted ones (H/HO)."""
+    rest = [x for x in truth.get("accept", []) if x != truth["action"]]
+    return "/".join(SHORT[x] for x in [truth["action"], *rest])
+
+
 def load(root: Path) -> list[dict]:
     """One row per attempt, from the per-scenario files (the source of truth — a re-run
     of one rung replaces that rung's file, and superseded files are moved out)."""
@@ -46,10 +52,13 @@ def load(root: Path) -> list[dict]:
                 continue
             # <scenario>-<prompt>[-<tag>]-<YYYY-MM-DD-HHMMSS>.json ; scenario and prompt are known
             label = f.stem[len(d["scenario"]) + 1 :].rsplit("-", 4)[0]
-            pp = label.split("-")
-            prompts = ("p0", "p1", "p2", "p3")
-            prompt = "-".join(pp[:2]) if pp[0] in prompts else pp[0]
-            tag = "-".join(pp[2:]) if pp[0] in prompts else "-".join(pp[1:])
+            if d.get("prompt") and label.startswith(d["prompt"]):
+                prompt, tag = d["prompt"], label[len(d["prompt"]) + 1 :]
+            else:
+                pp = label.split("-")
+                prompts = ("p0", "p1", "p2", "p3")
+                prompt = "-".join(pp[:2]) if pp[0] in prompts else pp[0]
+                tag = "-".join(pp[2:]) if pp[0] in prompts else "-".join(pp[1:])
             for i, a in enumerate(d["attempts"]):
                 r = a.get("report") or {}
                 runs.append(
@@ -57,7 +66,7 @@ def load(root: Path) -> list[dict]:
                         "scenario": d["scenario"],
                         "attempt": i + 1,
                         "action": r.get("action", "-"),
-                        "truth": d["truth"]["action"],
+                        "truth": truth_label(d["truth"]),
                         **a["judge"],
                         "turns": a["turns"],
                         "tool_calls": a["tool_calls"],
@@ -139,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 or "·"
             )
-        print(f"| {s} | {SHORT[truth[s]]} | " + " | ".join(cells) + " |")
+        print(f"| {s} | {truth[s]} | " + " | ".join(cells) + " |")
 
     fam = {
         (r["family"], r["order"], r["scenario"], r["variant"])
@@ -165,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
                     or "·"
                 )
             print(
-                f"| {family} | {variant} | {s} | {SHORT[truth[s]]} | "
+                f"| {family} | {variant} | {s} | {truth[s]} | "
                 + " | ".join(cells)
                 + " |"
             )

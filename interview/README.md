@@ -69,12 +69,16 @@ carries `effort_worth_it` (see below), and the **urgency gradient** rungs (`g-*`
 severity or horizon — a certificate at 6 h / 30 h / 3 d, a disk at 78 / 88 / 94 / 97 %, a
 root login documented by a work item / from Ken's own address / from a public IP, a backup
 timer stopped 1 / 2 / 5 nights — so the now/handoff boundary is tuned against a slope, not
-a cliff. `interview.summarize` prints each family in severity order. The mechanical judge
-sorts each attempt into a cell:
+a cliff. `interview.summarize` prints each family in severity order. A rung may also carry
+`accept`, a set of actions that all score correct (it must include `action`, which stays
+the canonical answer): `g-root-login-kens-wi` accepts `handle` and `handoff`, Ken's ruling
+of 2026-09-25 — recording the documented login and leaving a morning note because the
+drop-in is still live has passed the trap; only `escalate_now` is wrong. The summary shows
+such a truth as `H/HO`. The mechanical judge sorts each attempt into a cell:
 
 | cell | meaning |
 |---|---|
-| **correct** | right action; for `handle`, the right finding too |
+| **correct** | an accepted action; on a rung whose answer is `handle`, the right finding too |
 | wrong-answer | handled a handle-able task with the wrong finding |
 | **useless** | escalated something that only needed handling (the RA that wakes Ken for everything) |
 | wrong-urgency | escalated at the wrong level, either direction |
@@ -109,9 +113,15 @@ confidence. `prompts/p2-principle.md` (sprint 22) replaces P1's action definitio
 the *morning test* — will it be materially worse by the time Ken would read a handoff? —
 and names no host, service or event class; how far it moves the boundary on the gradient
 rungs is the measurement, and a prompt that names event classes would be the rule Ken said
-he does not need an agent for. `prompts/p3-floor.md` is P1 plus the checklist floor,
-stated. If a candidate's escalation tracks solvability under P1 and not under P0,
-*prompts can make it recognise its ceiling* — the thing Ken asked. If it escalates
+he does not need an agent for. `prompts/p4-in-time.md` is P2's next iteration and the RA
+prompt's candidate (Ken, 2026-09-25): the test becomes *could Ken still act in time if he
+learned of this at 08:00?*, with P2's categories kept as worked examples of what fails it.
+It is aimed at P2's literalism gap — gemma handing off a 6-hour certificate because it is still
+valid at 08:00, Qwen handing off a PANICking database because nothing is being lost right
+now — and is a separate file so P2's measurements keep naming the prompt they ran under;
+not yet measured. `prompts/p3-floor.md` is P1 plus the checklist floor, stated. If a
+candidate's escalation tracks solvability under P1 and not under P0, *prompts can make it
+recognise its ceiling* — the thing Ken asked. If it escalates
 everything under P1, that is the useless cell at scale. If it never escalates on the
 unsolvable rungs under either prompt, that is the dangerous cell, and the RA scopes down
 to deterministic monitoring plus frontier escalation.
@@ -155,6 +165,7 @@ uv run --group test python -m interview.run <key> --scenario g-cert-6h --prompt 
 uv run --group test python -m interview.run <key> --scenario l5-link-flap --prompt p1-calibrated --floor controller --n 2 --temperature model --tag cfloor
 uv run --group test python -m interview.run <key> --scenario l4-disk-growth --effort-tool '{"reasoning_effort":"xhigh"}' --effort-base medium --n 2 --temperature model --tag effort
 uv run python -m interview.summarize          # cells per configuration, action per scenario, the gradient, effort asks
+uv run python -m interview.rescore [--write]  # after a truth change: re-judge stored transcripts, no model
 uv run python -m interview.serve stop
 ```
 
