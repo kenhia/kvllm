@@ -93,3 +93,12 @@ output is byte-identical on the existing tree.
 re-score), 46 client tests. No `suites/` change, so the Docker suite gates do not apply.
 No serve-path file changed (`kvllm/`, `models.toml`, `deploy/` untouched), so
 `deploy-kvllm` at ship is a no-op by its own rule.
+
+## Deployed
+
+`deploy-kvllm` (declared in `.sprint-deploy`), run at ship from merged `main` `344085b`:
+**deliberate no-op.** `git diff --name-only 04dbff1..344085b` over the serve paths
+(`kvllm/registry.py`, `kvllm/helper.py`, `kvllm/__init__.py`, `models.toml`, `deploy/`,
+`pyproject.toml`, `uv.lock`) is empty, so there was no restart. The stamp moved to
+`344085b`. No eval was in flight. The resident is untouched: `kvllm.service` active,
+`NRestarts=0`, `/v1/models` → `qwen3.8-27b-nvfp4`.
