@@ -25,6 +25,8 @@ import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 
+from kvllm.modelstore import ensure_weights
+
 DEFAULT_REGISTRY = Path(__file__).resolve().parent.parent / "models.toml"
 
 # Knobs that are deployment choices, not model properties.
@@ -278,6 +280,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     entry = get_model(args.key)
     argv = build_serve_argv(args.key, entry)
     env = serve_env(args.key, entry)
+    ensure_weights(args.key, entry)  # restore a parked model rather than re-download it
     print("+ " + " ".join(argv), file=sys.stderr)
     os.execvpe(argv[0], argv, env)  # replaces this process; only returns on failure
     return 1
