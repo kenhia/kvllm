@@ -20,6 +20,7 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
+from kvllm.modelstore import ensure_weights
 from kvllm.registry import build_serve_argv, serve_env
 
 SERVICE = "kvllm"
@@ -193,6 +194,7 @@ def serving(key: str, entry: dict, *, port: int):
     log_path = SERVE_LOG_DIR / f"{key.replace('/', '_')}.log"
     argv = build_serve_argv(key, entry, port=str(port))
     env = serve_env(key, entry)  # CUDA toolkit on PATH, or a refusal (sprint 20)
+    ensure_weights(key, entry)  # restore a parked model rather than re-download it
     print(f"[serve] {' '.join(argv)}")
     log = open(log_path, "w")
     proc = subprocess.Popen(

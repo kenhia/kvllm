@@ -46,6 +46,25 @@ changes the model the systemd service serves. The resident is `qwen3.8-27b-nvfp4
 since 2026-09-08 ([why](docs/findings/ra-interview-2026-09.md)); `gemma-4-31b-it-awq` is
 the second opinion.
 
+Weights the homelab has already pulled are listed in
+[`homelab-models.toml`](homelab-models.toml), the homelab model registry. It records each
+model's revision, every place a copy is kept (kai's HF cache, `gratch:/nas/model-archive`,
+kubs0) and a sha256 manifest under [`model-sums/`](model-sums/). Every serve path checks it
+first. A model parked off kai is restored from gratch (`rsync -aH`, verified) rather than
+re-downloaded from Hugging Face:
+
+```sh
+just models-stored                  # every pulled model and where it lives
+just models-where <key|hf-repo>     # one model's copies, and whether this host has it
+just models-unpark <key|hf-repo>    # restore it now (serve does this itself)
+just models-verify <id>             # sha256-check its copies where they sit
+```
+
+A restore that fails refuses the serve. `KVLLM_ALLOW_DOWNLOAD=1` downloads instead, on
+purpose. A restored model whose upstream `main` has since moved (Devstral, as of
+2026-10-28) still makes vLLM fetch the new revision, because serves are not pinned to a
+revision.
+
 ## Quick start — evaluating
 
 ```sh
@@ -74,6 +93,7 @@ the same file. Suite design and scoring math: [`docs/findings/methodology-2026-0
 | [`docs/`](docs/) | usage docs (01–04: backend contract, quantization, deployment, helper app) + [`findings/`](docs/findings/) |
 | [`sprints/`](sprints/) | how this was built, sprint by sprint; [`planning/`](sprints/planning/) has the architecture docs |
 | [`models.toml`](models.toml) | the model registry (serve flags, capabilities, eval verdicts) |
+| [`homelab-models.toml`](homelab-models.toml) | the homelab model registry: every model pulled from HF, its revision, and where each copy lives (manifests in `model-sums/`) |
 | [`eval-config.toml`](eval-config.toml) | weights, judge, pricing, sandbox host |
 | `eval-logs/` | Inspect transcripts (gitignored; open with `inspect view`) |
 

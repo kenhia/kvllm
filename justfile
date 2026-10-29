@@ -20,6 +20,22 @@ models-list:
 models-show key:
     uv run python -m kvllm.registry show {{key}}
 
+# Homelab model registry (homelab-models.toml): every pulled model and where it is parked
+models-stored:
+    uv run python -m kvllm.modelstore list
+
+# Where every copy of one model lives (kvllm key, HF repo, or registry id)
+models-where ref:
+    uv run python -m kvllm.modelstore where {{ref}}
+
+# Restore a parked model into this host's HF cache, verified (serve does this itself)
+models-unpark ref *flags:
+    uv run python -m kvllm.modelstore unpark {{ref}} {{flags}}
+
+# Check a model's copies against its sha256 manifest (model-sums/)
+models-verify ref *flags:
+    uv run python -m kvllm.modelstore verify {{ref}} {{flags}}
+
 # Serve a registered model by key on an OpenAI-compatible /v1 endpoint
 serve key=model_key:
     uv run python -m kvllm.registry serve {{key}}

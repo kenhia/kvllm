@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 
 from kvllm import evalctl
+from kvllm.modelstore import ensure_weights
 from kvllm.registry import build_serve_argv, effective_gpu_util, get_model, serve_env
 
 REPO = Path(__file__).resolve().parent.parent
@@ -127,6 +128,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     argv = build_serve_argv(args.key, entry, port=str(args.port))
     env = serve_env(args.key, entry)
+    ensure_weights(args.key, entry)  # restore a parked model rather than re-download it
     tag = args.tag or time.strftime("%H%M%S")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"interview-{args.key}-{tag}.log"
