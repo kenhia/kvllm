@@ -96,3 +96,11 @@ say so.
 - WI 4174: pin served revisions or not (the decision above).
 - A `park` command, as the proposal deferred it. Parking is rare and done by hand, so this
   was not filed. When it is wanted, it is the inverse of `restore` plus a registry edit.
+
+## Deployed
+
+**Deferred on purpose: `deploy-kvllm` was not run at ship, and `kvllm.service` was not restarted** (overseer ruling, korg:4155 comment 4142). The resident has three snapshots in kai's cache and its serves are not pinned to a revision. So a restart after any upstream push could load different weights under `qwen3.8-27b-nvfp4`, and this sprint's brief forbade changing what kai serves. The new hook does nothing for the resident anyway, since it is already in kai's hub.
+
+Merged as `954149b`. The running unit still executes the previous serve-path code. `just serve`, `just eval` and the interview serve start fresh processes, so they already run the new code.
+
+**To finish:** from merged `main` on kai, run `/deploy-kvllm`. The skill compares against the commit the service was last restarted at, so it picks this sprint up. Run it at Ken's next model change, or once WI 4174 (revision pinning) is decided.
