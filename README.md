@@ -61,9 +61,11 @@ just models-verify <id>             # sha256-check its copies where they sit
 ```
 
 A restore that fails refuses the serve. `KVLLM_ALLOW_DOWNLOAD=1` downloads instead, on
-purpose. A restored model whose upstream `main` has since moved (Devstral, as of
-2026-10-28) still makes vLLM fetch the new revision, because serves are not pinned to a
-revision.
+purpose. Every local model is served pinned (`--revision`) to the snapshot this registry
+records, which `models.toml` repeats and a test holds equal. So a restored model whose
+upstream `main` has since moved (Devstral, as of 2026-10-28) serves the archived weights its
+scores were measured on, and is not re-fetched. To move a model to new weights, bump both
+files together.
 
 ## Quick start — evaluating
 

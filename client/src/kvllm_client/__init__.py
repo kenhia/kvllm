@@ -323,11 +323,11 @@ class TokenUsage:
     ran out. `cached` is the prompt prefix served from vLLM's prefix cache.
 
     Both detail fields are None when the provider did not report them, which is
-    NOT the same as 0 and is the honest answer for `cached` on the local tier
-    today: vLLM only fills it in when served with `--enable-prompt-tokens-details`
-    (off by default, and kvllm does not pass it), so prefix-cache effectiveness is
-    read from the engine log rather than from here. See README, "The reasoning
-    field, and prefix caching".
+    NOT the same as 0. vLLM only fills `cached` in when served with
+    `--enable-prompt-tokens-details` (off by default). kvllm passes it since sprint
+    27, so a server started before that reports None here, and prefix-cache
+    effectiveness is read from the engine log. See README, "The reasoning field,
+    and prefix caching".
     """
 
     prompt: int

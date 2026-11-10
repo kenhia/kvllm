@@ -93,6 +93,22 @@ def test_every_local_kvllm_model_is_in_the_inventory():
     assert missing == []
 
 
+def test_every_local_kvllm_model_is_pinned_to_its_inventory_revision():
+    # korg 4174, option (a): models.toml's `revision` becomes `--revision`, and it must
+    # be the snapshot the inventory recorded — the bytes a restore puts back and the
+    # weights the scores were measured on. Unpinned, vLLM resolves `main` against the
+    # Hub and serves whatever upstream pushed since.
+    inv = load_inventory()
+    disagree = {
+        k: (e.get("revision"), inv.by_repo(e["hf_repo"]).revision)
+        for k, e in load_registry().items()
+        if e.get("hf_repo")
+        and inv.by_repo(e["hf_repo"])
+        and e.get("revision") != inv.by_repo(e["hf_repo"]).revision
+    }
+    assert disagree == {}
+
+
 def test_no_orphan_manifests():
     inv = load_inventory()
     used = {m.sums_path.name for m in inv.models.values()}
