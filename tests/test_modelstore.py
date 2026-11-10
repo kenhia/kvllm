@@ -230,6 +230,36 @@ def test_ensure_weights_is_a_noop_when_present(parked, monkeypatch):
     ensure_weights("k", {"hf_repo": REPO}, hub=hub, inv=inv, env={})
 
 
+def test_ensure_weights_proceeds_when_the_pinned_snapshot_is_present(parked):
+    inv, hub, _ = parked
+    _fake_entry(hub)  # snapshot abc123
+    ensure_weights(
+        "k", {"hf_repo": REPO, "revision": "abc123"}, hub=hub, inv=inv, env={}
+    )
+
+
+def test_ensure_weights_refuses_when_only_other_snapshots_are_present(parked):
+    # korg 4174: the folder being in the cache is not the pinned weights being there.
+    # Falling through would let vLLM fetch the pinned revision from the Hub — the
+    # silent re-download pinning exists to prevent — so refuse, even with the
+    # download escape hatch set, and say what is there instead.
+    inv, hub, _ = parked
+    _fake_entry(hub)  # snapshot abc123 only
+    env = {modelstore.ALLOW_DOWNLOAD_ENV: "1"}
+    with pytest.raises(SystemExit) as e:
+        ensure_weights(
+            "k", {"hf_repo": REPO, "revision": "def456"}, hub=hub, inv=inv, env=env
+        )
+    msg = str(e.value)
+    assert "'k'" in msg and REPO in msg and "def456" in msg and "abc123" in msg
+
+
+def test_ensure_weights_unpinned_entry_keeps_any_snapshot(parked):
+    inv, hub, _ = parked
+    _fake_entry(hub)
+    ensure_weights("k", {"hf_repo": REPO}, hub=hub, inv=inv, env={})
+
+
 def test_ensure_weights_leaves_unregistered_models_to_vllm(tmp_path):
     ensure_weights("k", {"hf_repo": "x/y"}, hub=tmp_path, inv=Inventory({}, {}), env={})
     assert not any(tmp_path.iterdir())

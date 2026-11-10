@@ -111,11 +111,36 @@ What to check after that restart:
   their backups. Fix: `.gitignore` now covers `.env.*.bak` and `deploy/kvllm.env.*.bak`.
   The files themselves are untouched. Proof: `git status --short` no longer lists them.
 
-## Findings for the overseer (not filed)
+## The restore guard checks the pinned snapshot (overseer ruling, same sprint)
 
-- **`ensure_weights` checks only that the repo is present, not the pinned snapshot.** If
-  kai's cache holds a repo at a *different* snapshot from the pinned one, the restore is
-  skipped (`present_in_hub` is true), and vLLM fetches the pinned revision from the Hub.
-  `restore()` also refuses an existing `models--…` dir, so merging a snapshot in would be a
-  design change. No entry is in that state today: kai's three cached models all hold their
-  pinned snapshot.
+The working turn found a gap: `ensure_weights` treated a model as present when *any*
+snapshot of its repo was in the hub. A pinned model whose repo was cached at another
+snapshot would therefore skip the restore, and vLLM would fetch the pinned revision from
+the Hub. That is the silent re-download #4174 exists to prevent. The overseer ruled it
+part of #4174 and asked for the smallest close.
+
+`_require_pinned_snapshot` now runs when the repo is present in the hub. If the entry pins
+a `revision` and `snapshots/<revision>` is missing or empty, the serve is refused. The
+error names the key, the repo, the pinned revision and the snapshots actually present. It
+never falls through to a download, and `KVLLM_ALLOW_DOWNLOAD=1` does not reach past it.
+Unpinned entries keep the old behaviour. Restores are unchanged.
+
+Tests cover three cases: pinned snapshot present → proceeds; only another snapshot →
+refused, even with the escape hatch set; unpinned → any snapshot is fine. Run against
+kai's real hub, all three cached models (qwen3.8-27b-nvfp4, gemma-4-31b-it-awq,
+gemma-4-12b-it) pass.
+
+## Deployed
+
+**The deploy step was skipped by overseer ruling** (hard rule: no kvllm restart, no model
+load). The code is on `main`. The running kvllm.service (up since 2026-10-20) still runs
+the old arguments: unpinned, without prompt-token details, and with the old guard, which
+only applies at serve start anyway. All of it goes live at the next planned restart.
+
+The two post-restart checks, also posted on WI 2992 and WI 4174:
+
+1. The live argv (`tr '\0' ' ' < /proc/$(pgrep -f 'vllm serve')/cmdline`) shows
+   `--revision f0b7c9e722f5565102fff8481c99e4d86ae099c7` and
+   `--enable-prompt-tokens-details`.
+2. Sending the same long prompt twice gives a non-zero
+   `usage.prompt_tokens_details.cached_tokens` on the second reply.
