@@ -280,6 +280,29 @@ def restore(
     return dest
 
 
+def _require_pinned_snapshot(
+    key: str, repo: str, revision: str | None, hub: Path
+) -> None:
+    """Refuse a serve whose pinned snapshot is not in the hub, though the repo is.
+
+    `--revision` would make vLLM fetch the pinned weights from the Hub: the silent
+    download pinning exists to prevent (korg 4174). Not even KVLLM_ALLOW_DOWNLOAD
+    reaches past this; a pin that disagrees with the cache is a registry question.
+    """
+    if not revision:
+        return
+    snaps = hub / hf_cache_dirname(repo) / "snapshots"
+    if (snaps / revision).is_dir() and any((snaps / revision).iterdir()):
+        return
+    present = sorted(p.name for p in snaps.iterdir() if p.is_dir())
+    sys.exit(
+        f"error: '{key}' ({repo}) is pinned to revision {revision}, but {snaps.parent} "
+        f"holds only snapshot(s) {', '.join(present) or '(none)'}. Refusing to let "
+        "vLLM download the pinned revision. Restore that snapshot, or move the pin "
+        "(models.toml and homelab-models.toml together) to weights that are here."
+    )
+
+
 def ensure_weights(
     key: str,
     entry: dict,
@@ -290,7 +313,8 @@ def ensure_weights(
 ) -> None:
     """Before a serve: restore a parked model rather than let vLLM re-download it.
 
-    A no-op when the model is already in this host's hub, or when the registry has no
+    A no-op when the model is already in this host's hub (at its pinned snapshot, when
+    the entry pins a `revision`, or the serve is refused), or when the registry has no
     record of it (vLLM downloads as it always has). When the registry has a copy and
     the restore fails, refuse the serve. The download is still available, but only on
     purpose (`KVLLM_ALLOW_DOWNLOAD=1`).
@@ -301,6 +325,7 @@ def ensure_weights(
     env = os.environ if env is None else env
     hub = hub or local_hub(env)
     if present_in_hub(hub, repo):
+        _require_pinned_snapshot(key, repo, entry.get("revision"), hub)
         return
     if inv is None:
         if not DEFAULT_INVENTORY.is_file():

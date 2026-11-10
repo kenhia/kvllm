@@ -129,21 +129,20 @@ no headroom (1.0× concurrency at 122,880), so two concurrent long requests
 evict each other's prefixes — a caller-side design constraint, not a kvllm
 defect.
 
-**Reading cache effectiveness: not from the response, as kvllm is served today.**
-`TokenUsage.cached` reads `None`, and that is the honest report rather than a
-gap in this library. vLLM 0.28.0 *does* implement the OpenAI
-`usage.prompt_tokens_details.cached_tokens` field, but it is gated behind the
-server flag **`--enable-prompt-tokens-details`**, which defaults to `False`
-(`vllm/entrypoints/openai/cli_args.py`) — and `kvllm/registry.py` does not pass
-it, so the engine omits `prompt_tokens_details` from every reply. That is why a
-run whose engine log showed the prefix-cache hit rate climbing 0.0% → 25.9%
-still logged `cached_tokens: 0` (kmon sprint 10): the consumer was reading a
-field the server was never asked to send.
+**Reading cache effectiveness: `TokenUsage.cached`, once the server is restarted.**
+vLLM 0.28.0 implements the OpenAI `usage.prompt_tokens_details.cached_tokens`
+field, but only behind the server flag **`--enable-prompt-tokens-details`**, which
+defaults to `False` (`vllm/entrypoints/openai/cli_args.py`). Without it the engine
+omits `prompt_tokens_details` from every reply. That is why a run whose engine log
+showed the prefix-cache hit rate climbing 0.0% → 25.9% still logged
+`cached_tokens: 0` (kmon sprint 10): the consumer was reading a field the server
+was never asked to send.
 
-So today, **prefix-cache effectiveness is read from the engine log, not from the
-response** — stop looking for it in `usage`. Turning the flag on is a one-line
-change to the serve arguments plus a restart of the served model, which is a
-serve-path decision rather than a client one (WI-2019).
+`kvllm/registry.py` passes the flag on every serve since sprint 27 (WI-2992). It
+takes effect when `kvllm.service` next starts, so a server started before then
+still reports `TokenUsage.cached` as `None`, and prefix-cache effectiveness is
+read from the engine log. `None` means "the provider said nothing", never zero,
+and this library needs no change either way.
 
 ## Tests
 

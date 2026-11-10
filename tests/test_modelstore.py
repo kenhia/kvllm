@@ -93,6 +93,22 @@ def test_every_local_kvllm_model_is_in_the_inventory():
     assert missing == []
 
 
+def test_every_local_kvllm_model_is_pinned_to_its_inventory_revision():
+    # korg 4174, option (a): models.toml's `revision` becomes `--revision`, and it must
+    # be the snapshot the inventory recorded — the bytes a restore puts back and the
+    # weights the scores were measured on. Unpinned, vLLM resolves `main` against the
+    # Hub and serves whatever upstream pushed since.
+    inv = load_inventory()
+    disagree = {
+        k: (e.get("revision"), inv.by_repo(e["hf_repo"]).revision)
+        for k, e in load_registry().items()
+        if e.get("hf_repo")
+        and inv.by_repo(e["hf_repo"])
+        and e.get("revision") != inv.by_repo(e["hf_repo"]).revision
+    }
+    assert disagree == {}
+
+
 def test_no_orphan_manifests():
     inv = load_inventory()
     used = {m.sums_path.name for m in inv.models.values()}
@@ -211,6 +227,36 @@ def test_ensure_weights_is_a_noop_when_present(parked, monkeypatch):
         raise AssertionError("restore must not run")
 
     monkeypatch.setattr(modelstore, "restore", never)
+    ensure_weights("k", {"hf_repo": REPO}, hub=hub, inv=inv, env={})
+
+
+def test_ensure_weights_proceeds_when_the_pinned_snapshot_is_present(parked):
+    inv, hub, _ = parked
+    _fake_entry(hub)  # snapshot abc123
+    ensure_weights(
+        "k", {"hf_repo": REPO, "revision": "abc123"}, hub=hub, inv=inv, env={}
+    )
+
+
+def test_ensure_weights_refuses_when_only_other_snapshots_are_present(parked):
+    # korg 4174: the folder being in the cache is not the pinned weights being there.
+    # Falling through would let vLLM fetch the pinned revision from the Hub — the
+    # silent re-download pinning exists to prevent — so refuse, even with the
+    # download escape hatch set, and say what is there instead.
+    inv, hub, _ = parked
+    _fake_entry(hub)  # snapshot abc123 only
+    env = {modelstore.ALLOW_DOWNLOAD_ENV: "1"}
+    with pytest.raises(SystemExit) as e:
+        ensure_weights(
+            "k", {"hf_repo": REPO, "revision": "def456"}, hub=hub, inv=inv, env=env
+        )
+    msg = str(e.value)
+    assert "'k'" in msg and REPO in msg and "def456" in msg and "abc123" in msg
+
+
+def test_ensure_weights_unpinned_entry_keeps_any_snapshot(parked):
+    inv, hub, _ = parked
+    _fake_entry(hub)
     ensure_weights("k", {"hf_repo": REPO}, hub=hub, inv=inv, env={})
 
 

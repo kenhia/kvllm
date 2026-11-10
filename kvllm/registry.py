@@ -147,7 +147,16 @@ def build_serve_argv(
         str(port),
         "--gpu-memory-utilization",
         effective_gpu_util(entry, gpu_util),
+        # vLLM omits usage.prompt_tokens_details — so cached_tokens, the consumer's
+        # view of prefix-cache hits — unless asked; it defaults off (korg 2992).
+        "--enable-prompt-tokens-details",
     ]
+    revision = entry.get("revision")
+    if revision:
+        # Serve the snapshot homelab-models.toml recorded, not whatever upstream `main`
+        # points at today: a restored or resident model must not re-download under an
+        # existing score (korg 4174). tests/test_modelstore.py holds the two equal.
+        argv += ["--revision", revision]
     if "max_model_len" in entry:
         argv += ["--max-model-len", str(entry["max_model_len"])]
     if entry.get("tool_parser"):
@@ -185,9 +194,15 @@ def build_serve_argv(
         # model_mtp.safetensors); an inline TOML table here becomes vLLM's JSON,
         # e.g. { method = "mtp", num_speculative_tokens = 3 }. It costs KV pool
         # (~1.3 GiB on Qwen3.8), so it trades against max_model_len — sprint 18.
+        spec = dict(entry["speculative_config"])
+        if revision and "model" not in spec:
+            # vLLM 0.28 builds a same-model drafter (mtp) from this JSON's own
+            # `revision`, defaulting to `main` rather than --revision, so the pin has
+            # to be repeated here or the draft head still tracks upstream.
+            spec.setdefault("revision", revision)
         argv += [
             "--speculative-config",
-            json.dumps(entry["speculative_config"], separators=(",", ":")),
+            json.dumps(spec, separators=(",", ":")),
         ]
     if entry.get("chat_template_kwargs"):
         # Server-side defaults the chat template reads on every request unless the
@@ -249,6 +264,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     print(f"# {args.key}")
     for field in (
         "hf_repo",
+        "revision",
         "tool_parser",
         "reasoning_parser",
         "quantization",

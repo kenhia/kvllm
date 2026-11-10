@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from kvllm.registry import (
@@ -111,6 +113,58 @@ def test_chat_template_kwargs_precede_extra_args():
         ),
     )
     assert argv[-2:] == ["--default-chat-template-kwargs", "{}"]
+
+
+def test_prompt_tokens_details_always_enabled():
+    # korg 2992: vLLM omits usage.prompt_tokens_details (and so cached_tokens)
+    # unless the server is started with this flag; it defaults off.
+    assert "--enable-prompt-tokens-details" in build_serve_argv("m", _entry())
+
+
+SHA = "f0b7c9e722f5565102fff8481c99e4d86ae099c7"
+
+
+def test_revision_absent_when_unpinned():
+    assert "--revision" not in build_serve_argv("m", _entry())
+
+
+def test_revision_emitted_when_pinned():
+    argv = build_serve_argv("m", _entry(revision=SHA))
+    assert argv[argv.index("--revision") + 1] == SHA
+
+
+def test_revision_reaches_a_same_model_draft_head():
+    # vLLM 0.28 builds an MTP drafter's ModelConfig with the speculative config's own
+    # `revision` (default None → `main`), not --revision, so the draft head would
+    # still track upstream unless the pin is carried into the JSON too.
+    argv = build_serve_argv(
+        "m",
+        _entry(
+            revision=SHA,
+            speculative_config={"method": "mtp", "num_speculative_tokens": 3},
+        ),
+    )
+    spec = json.loads(argv[argv.index("--speculative-config") + 1])
+    assert spec == {"method": "mtp", "num_speculative_tokens": 3, "revision": SHA}
+
+
+def test_separate_draft_model_keeps_its_own_revision():
+    # A drafter from another repo is not pinned by the target's sha.
+    spec_in = {"model": "org/draft", "num_speculative_tokens": 3}
+    argv = build_serve_argv("m", _entry(revision=SHA, speculative_config=spec_in))
+    spec = json.loads(argv[argv.index("--speculative-config") + 1])
+    assert "revision" not in spec
+
+
+def test_the_resident_serves_pinned_with_prompt_token_details():
+    # The argv the unit will run at kvllm's next restart (proposal korg:4423).
+    from kvllm.registry import get_model
+
+    argv = build_serve_argv("qwen3.8-27b-nvfp4", get_model("qwen3.8-27b-nvfp4"))
+    assert argv[argv.index("--revision") + 1] == SHA
+    assert "--enable-prompt-tokens-details" in argv
+    spec = json.loads(argv[argv.index("--speculative-config") + 1])
+    assert spec["revision"] == SHA
 
 
 def _gpu(argv):
